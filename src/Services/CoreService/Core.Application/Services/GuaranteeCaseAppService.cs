@@ -159,7 +159,7 @@ public sealed class GuaranteeCaseAppService(
             .ToList();
 
         return Result<PagedResult<GuaranteeCaseDto>>.Ok(
-            new PagedResult<GuaranteeCaseDto>(items, page.Page, page.PageSize, page.TotalCount));
+            new PagedResult<GuaranteeCaseDto>(items, page.Skip, page.Take, page.TotalCount));
     }
 
     public async Task<Result<IEnumerable<GuaranteeWorkflowHistoryDto>>> GetHistoryAsync(Guid caseId,

@@ -284,8 +284,8 @@ public sealed class LoanCaseRepository(CoreDbContext dbContext) : ILoanCaseRepos
             x.ApprovalDetail != null ? x.ApprovalDetail.RepaymentCheckAmount : null));
 
         return await projected.ToPagedResultAsync(
-            request.NormalizedPageNumber,
-            request.NormalizedPageSize,
+            request.NormalizedSkip,
+            request.NormalizedTake,
             cancellationToken);
     }
 

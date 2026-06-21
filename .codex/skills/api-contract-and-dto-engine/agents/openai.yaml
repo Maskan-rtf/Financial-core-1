@@ -1,0 +1,4 @@
+interface:
+  display_name: "API Contract and DTO Engine"
+  short_description: "Design API contracts and typed DTOs"
+  default_prompt: "Use $api-contract-and-dto-engine to design API contracts, DTOs, and mapping boundaries."

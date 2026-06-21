@@ -124,7 +124,7 @@
     qs("#casesListLoading")?.classList.remove("hidden");
     try {
       const session = state.panel.getActiveSession();
-      const query = new URLSearchParams({ page: "1", pageSize: "50" });
+      const query = new URLSearchParams({ skip: "0", take: "50" });
       if (isApplicant() && session.userId) query.set("applicantUserId", session.userId);
       const res = await state.panel.apiRequest({
         method: "GET",

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Performance Investigator"
+  short_description: "Find backend, DB, and frontend bottlenecks"
+  default_prompt: "Use $performance-investigator to trace and optimize performance across backend, database, and frontend layers."

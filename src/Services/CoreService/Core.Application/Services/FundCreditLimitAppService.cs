@@ -144,7 +144,7 @@ public sealed class FundCreditLimitAppService(
             .AsNoTracking()
             .OrderByDescending(x => x.ModuleType)
             .ThenByDescending(x => x.PeriodStart)
-            .ToPagedResultAsync(request.NormalizedPageNumber, request.NormalizedPageSize, ct);
+            .ToPagedResultAsync(request.NormalizedSkip, request.NormalizedTake, ct);
 
         var userLookup = await userDisplayLookup.GetByIdsAsync(
             page.Items.Select(x => x.LastSetByUserId).Where(id => !string.IsNullOrWhiteSpace(id)).Select(id => id!),
@@ -154,7 +154,7 @@ public sealed class FundCreditLimitAppService(
             items.Add(await MapDtoAsync(row, userLookup, ct));
 
         return Result<PagedResult<FundCreditLimitDto>>.Ok(
-            new PagedResult<FundCreditLimitDto>(items, page.Page, page.PageSize, page.TotalCount));
+            new PagedResult<FundCreditLimitDto>(items, page.Skip, page.Take, page.TotalCount));
     }
 
     public async Task<Result<FundCreditLimitDashboardSectionDto>> GetDashboardSectionAsync(CancellationToken ct)

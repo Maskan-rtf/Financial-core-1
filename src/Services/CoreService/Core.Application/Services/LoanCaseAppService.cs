@@ -168,7 +168,7 @@ public sealed class LoanCaseAppService(
             .ToList();
 
         return Result<PagedResult<LoanCaseDto>>.Ok(
-            new PagedResult<LoanCaseDto>(items, page.Page, page.PageSize, page.TotalCount));
+            new PagedResult<LoanCaseDto>(items, page.Skip, page.Take, page.TotalCount));
     }
 
     public async Task<Result<IEnumerable<LoanWorkflowHistoryDto>>> GetHistoryAsync(Guid caseId, CancellationToken ct)

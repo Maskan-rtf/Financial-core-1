@@ -984,12 +984,12 @@
         const query = buildQuery({
           caseNumber: qs("#searchCaseNumber").value.trim(),
           applicantUserId: qs("#searchApplicantUserId").value.trim(),
-          phase: qs("#searchPhase").value,
-          status: qs("#searchStatus").value,
-          fromDate: qs("#searchFrom").value.trim(),
-          toDate: qs("#searchTo").value.trim(),
-          page: qs("#searchPage").value.trim(),
-          pageSize: qs("#searchPageSize").value.trim(),
+          currentPhase: qs("#searchPhase").value,
+          currentStatus: qs("#searchStatus").value,
+          createdAtFrom: qs("#searchFrom").value.trim(),
+          createdAtTo: qs("#searchTo").value.trim(),
+          skip: String(Math.max(0, ((Number(qs("#searchPage").value.trim()) || 1) - 1) * (Number(qs("#searchPageSize").value.trim()) || 25))),
+          take: qs("#searchPageSize").value.trim(),
         });
         await apiRequest({ method: "GET", path: casesBasePath() + query });
       })

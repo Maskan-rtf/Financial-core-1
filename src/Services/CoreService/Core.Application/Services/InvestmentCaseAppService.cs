@@ -1368,15 +1368,15 @@ public sealed class InvestmentCaseAppService(
             .ToList();
 
         ApplicationLog.Completed(logger,
-            "User {UserId} listed investment cases — page {PageNumber}, size {PageSize}, returned {Count} of {Total}",
+            "User {UserId} listed investment cases with skip {Skip}, take {Take}, returned {Count} of {Total}",
             authResult.Value,
-            page.PageNumber,
-            page.PageSize,
+            page.Skip,
+            page.Take,
             items.Count,
             page.TotalCount);
 
         return Result<PagedResult<InvestmentCaseDto>>.Ok(
-            new PagedResult<InvestmentCaseDto>(items, page.Page, page.PageSize, page.TotalCount));
+            new PagedResult<InvestmentCaseDto>(items, page.Skip, page.Take, page.TotalCount));
     }
 
     public async Task<Result<PresignUploadResponse>> PresignDocumentUploadAsync(Guid caseId, PresignUploadRequest request, CancellationToken cancellationToken)

@@ -23,6 +23,15 @@
     return state.panel.unwrapEnvelope(body).payload;
   }
 
+  function unwrapPaged(body) {
+    const payload = unwrap(body);
+    if (Array.isArray(payload)) return { items: payload, total: payload.length };
+
+    const items = pick(payload, "items", "Items") || [];
+    const total = pick(payload, "totalCount", "TotalCount") ?? items.length;
+    return { items, total };
+  }
+
   function pretty(obj) {
     if (obj == null) return "";
     try {
@@ -218,19 +227,21 @@
     qs("#registryListEmpty")?.classList.add("hidden");
 
     try {
+      const page = Number(qs("#registryPage")?.value) || 1;
+      const take = Number(qs("#registryPageSize")?.value) || 25;
       const query = buildQuery({
         caseNumber: (qs("#registryCaseNumber")?.value || "").trim(),
         applicantUserId: (qs("#registryApplicantUserId")?.value || "").trim(),
-        status: qs("#registryStatus")?.value,
-        phase: qs("#registryPhase")?.value,
-        fromDate: (qs("#registryFrom")?.value || "").trim(),
-        toDate: (qs("#registryTo")?.value || "").trim(),
-        page: qs("#registryPage")?.value || "1",
-        pageSize: qs("#registryPageSize")?.value || "25",
+        currentStatus: qs("#registryStatus")?.value,
+        currentPhase: qs("#registryPhase")?.value,
+        createdAtFrom: (qs("#registryFrom")?.value || "").trim(),
+        createdAtTo: (qs("#registryTo")?.value || "").trim(),
+        skip: Math.max(0, (page - 1) * take),
+        take,
       });
       const res = await state.panel.apiRequest({ method: "GET", path: apiBase() + query });
-      const list = unwrap(res.body);
-      state.cases = Array.isArray(list) ? list : [];
+      const { items, total } = unwrapPaged(res.body);
+      state.cases = items;
       qs("#registryListMeta").textContent = state.cases.length + " پرونده در این صفحه";
       renderTable();
       if (!state.cases.length) qs("#registryListEmpty")?.classList.remove("hidden");

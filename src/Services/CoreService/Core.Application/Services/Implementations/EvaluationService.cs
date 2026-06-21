@@ -76,8 +76,8 @@ public sealed class EvaluationService : IEvaluationService
         var query = _db.CaseEvaluations.AsNoTracking().Where(x => x.CaseId == caseId).OrderByDescending(x => x.CreatedAt);
         var total = await query.LongCountAsync(ct);
         var items = await query
-            .Skip((request.Page - 1) * request.PageSize)
-            .Take(request.PageSize)
+            .Skip(request.NormalizedSkip)
+            .Take(request.NormalizedTake)
             .Include(x => x.Items)
             .ToListAsync(ct);
 
@@ -88,6 +88,6 @@ public sealed class EvaluationService : IEvaluationService
                 e.Items.Select(i => new CaseEvaluationItemRequest(i.Title, i.IsApproved, i.Comment)).ToList()))
             .ToList();
 
-        return Result<PagedResult<CaseEvaluationUpsertRequest>>.Ok(new PagedResult<CaseEvaluationUpsertRequest>(dtos, request.Page, request.PageSize, total));
+        return Result<PagedResult<CaseEvaluationUpsertRequest>>.Ok(new PagedResult<CaseEvaluationUpsertRequest>(dtos, request.NormalizedSkip, request.NormalizedTake, total));
     }
 }

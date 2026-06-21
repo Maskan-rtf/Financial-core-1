@@ -3,8 +3,8 @@
     panel: null,
     rows: [],
     total: 0,
-    pageNumber: 1,
-    pageSize: 20,
+    skip: 0,
+    take: 20,
     busy: false,
     editingId: null,
   };
@@ -32,27 +32,28 @@
   function unwrapPaged(body) {
     const payload = unwrap(body);
     if (Array.isArray(payload)) {
-      return { list: payload, total: payload.length, page: 1, pageSize: payload.length };
+      return { list: payload, total: payload.length, skip: 0, take: payload.length };
     }
     const list = pick(payload, "items", "Items") || [];
     const total = pick(payload, "totalCount", "TotalCount") ?? list.length;
-    const page = pick(payload, "page", "Page") ?? pick(payload, "pageNumber", "PageNumber") ?? 1;
-    const pageSize = pick(payload, "pageSize", "PageSize") ?? state.pageSize;
-    return { list, total, page, pageSize };
+    const skip = pick(payload, "skip", "Skip") ?? 0;
+    const take = pick(payload, "take", "Take") ?? pick(payload, "pageSize", "PageSize") ?? state.take;
+    return { list, total, skip, take };
   }
 
-  function readPageSize() {
-    const raw = Number(qs("#fundCreditPageSize")?.value || state.pageSize);
+  function readTake() {
+    const raw = Number(qs("#fundCreditPageSize")?.value || state.take);
     return Number.isFinite(raw) && raw > 0 ? raw : 20;
   }
 
   function updatePagerMeta() {
     const meta = qs("#fundCreditLimitsMeta");
     if (!meta) return;
-    const totalPages = state.pageSize > 0 ? Math.max(1, Math.ceil(state.total / state.pageSize)) : 1;
+    const currentPage = state.take > 0 ? Math.floor(state.skip / state.take) + 1 : 1;
+    const totalPages = state.take > 0 ? Math.max(1, Math.ceil(state.total / state.take)) : 1;
     meta.textContent =
       "صفحه " +
-      state.pageNumber +
+      currentPage +
       " از " +
       totalPages +
       " — نمایش " +
@@ -252,19 +253,19 @@
     updatePagerMeta();
   }
 
-  async function loadList(pageNumber) {
+  async function loadList(skip) {
     setError("");
-    state.pageSize = readPageSize();
-    state.pageNumber = Number(pageNumber) > 0 ? Number(pageNumber) : state.pageNumber;
+    state.take = readTake();
+    state.skip = Number.isFinite(Number(skip)) && Number(skip) >= 0 ? Number(skip) : state.skip;
     const res = await state.panel.apiRequest({
       method: "GET",
-      path: apiPath("?pageNumber=" + state.pageNumber + "&pageSize=" + state.pageSize),
+      path: apiPath("?skip=" + state.skip + "&take=" + state.take),
     });
-    const { list, total, page, pageSize } = unwrapPaged(res.body);
+    const { list, total, skip: resolvedSkip, take: resolvedTake } = unwrapPaged(res.body);
     state.rows = list;
     state.total = total;
-    state.pageNumber = page;
-    state.pageSize = pageSize;
+    state.skip = resolvedSkip;
+    state.take = resolvedTake;
     renderGrid();
     setInfo("فهرست سقف‌های دوره‌ای بارگذاری شد.");
   }
@@ -304,7 +305,7 @@
         },
       });
       clearForm();
-      await loadList(state.pageNumber);
+      await loadList(state.skip);
       setInfo("سقف اعتبار دوره‌ای جدید ثبت شد.");
     } finally {
       state.busy = false;
@@ -329,7 +330,7 @@
         },
       });
       clearForm();
-      await loadList(state.pageNumber);
+      await loadList(state.skip);
       setInfo("سقف اعتبار دوره‌ای به‌روزرسانی شد.");
     } finally {
       state.busy = false;
@@ -360,9 +361,9 @@
         path: apiPath("/" + id),
       });
       if (state.editingId === id) clearForm();
-      const totalPages = state.pageSize > 0 ? Math.ceil((state.total - 1) / state.pageSize) : 1;
-      const nextPage = state.pageNumber > totalPages ? Math.max(1, totalPages) : state.pageNumber;
-      await loadList(nextPage);
+      const maxSkip = Math.max(0, state.total - state.take);
+      const nextSkip = state.skip > maxSkip ? Math.max(0, Math.floor(maxSkip / state.take) * state.take) : state.skip;
+      await loadList(nextSkip);
       setInfo("سقف اعتبار دوره‌ای حذف شد.");
     } finally {
       state.busy = false;
@@ -371,24 +372,23 @@
 
   function wire() {
     qs("#fundCreditLoadList")?.addEventListener("click", () => {
-      state.pageNumber = 1;
-      void loadList(1).catch((e) => setError(e.message || String(e)));
+      state.skip = 0;
+      void loadList(0).catch((e) => setError(e.message || String(e)));
     });
 
     qs("#fundCreditPrevPage")?.addEventListener("click", () => {
-      if (state.pageNumber <= 1) return;
-      void loadList(state.pageNumber - 1).catch((e) => setError(e.message || String(e)));
+      if (state.skip <= 0) return;
+      void loadList(Math.max(0, state.skip - state.take)).catch((e) => setError(e.message || String(e)));
     });
 
     qs("#fundCreditNextPage")?.addEventListener("click", () => {
-      const totalPages = state.pageSize > 0 ? Math.ceil(state.total / state.pageSize) : 1;
-      if (state.pageNumber >= totalPages) return;
-      void loadList(state.pageNumber + 1).catch((e) => setError(e.message || String(e)));
+      if (state.skip + state.take >= state.total) return;
+      void loadList(state.skip + state.take).catch((e) => setError(e.message || String(e)));
     });
 
     qs("#fundCreditPageSize")?.addEventListener("change", () => {
-      state.pageNumber = 1;
-      void loadList(1).catch((e) => setError(e.message || String(e)));
+      state.skip = 0;
+      void loadList(0).catch((e) => setError(e.message || String(e)));
     });
 
     qs("#fundCreditSaveNew")?.addEventListener("click", () => {
@@ -406,7 +406,7 @@
       if (!canManageFundCreditLimits()) {
         state.rows = [];
         state.total = 0;
-        state.pageNumber = 1;
+        state.skip = 0;
         clearForm();
         renderGrid();
       }
@@ -415,7 +415,7 @@
     document.querySelector('[data-tab="tabDashboard"]')?.addEventListener("click", () => {
       updateAccessUi();
       if (canManageFundCreditLimits() && !state.rows.length) {
-        void loadList(1).catch((e) => setError(e.message || String(e)));
+        void loadList(0).catch((e) => setError(e.message || String(e)));
       }
     });
   }

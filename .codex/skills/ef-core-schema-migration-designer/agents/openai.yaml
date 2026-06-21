@@ -1,0 +1,4 @@
+interface:
+  display_name: "EF Core Schema Migration Designer"
+  short_description: "Design safe EF Core schema changes"
+  default_prompt: "Use $ef-core-schema-migration-designer to design a production-safe EF Core schema change and migration plan."

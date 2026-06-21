@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fullstack Feature Delivery"
+  short_description: "Build ASP.NET Core + Next.js features"
+  default_prompt: "Use $fullstack-feature-delivery to implement an end-to-end feature across ASP.NET Core, EF Core, and Next.js."

@@ -118,7 +118,7 @@ await panel.apiRequest({
 **Search / list:**
 
 ```javascript
-const q = new URLSearchParams({ page: "1", pageSize: "50", applicantUserId });
+const q = new URLSearchParams({ skip: "0", take: "50", applicantUserId });
 await panel.apiRequest({ method: "GET", path: apiBase() + "?" + q });
 ```
 

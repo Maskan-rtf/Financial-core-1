@@ -7,16 +7,16 @@ public static class QueryablePagingExtensions
 {
     public static async Task<PagedResult<T>> ToPagedResultAsync<T>(
         this IQueryable<T> query,
-        int pageNumber,
-        int pageSize,
+        int skip,
+        int take,
         CancellationToken cancellationToken = default)
     {
         var total = await query.LongCountAsync(cancellationToken);
         var items = await query
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
+            .Skip(skip)
+            .Take(take)
             .ToListAsync(cancellationToken);
 
-        return new PagedResult<T>(items, pageNumber, pageSize, total);
+        return new PagedResult<T>(items, skip, take, total);
     }
 }

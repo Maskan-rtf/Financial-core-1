@@ -204,8 +204,8 @@ public sealed class InvestmentCaseRepository(CoreDbContext dbContext) : IInvestm
             x.AttractionBasis != null ? x.AttractionBasis.InvestmentAttractionBasis : null));
 
         return await projected.ToPagedResultAsync(
-            request.NormalizedPageNumber,
-            request.NormalizedPageSize,
+            request.NormalizedSkip,
+            request.NormalizedTake,
             cancellationToken);
     }
 

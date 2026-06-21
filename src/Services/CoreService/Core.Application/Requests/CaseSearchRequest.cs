@@ -9,5 +9,5 @@ public sealed record CaseSearchRequest(
     CaseStatus? Status,
     DateTimeOffset? FromDate,
     DateTimeOffset? ToDate,
-    int Page = 1,
-    int PageSize = 10);
+    int Skip = 0,
+    int Take = 10);

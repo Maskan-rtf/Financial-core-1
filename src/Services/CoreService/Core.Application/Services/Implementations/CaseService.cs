@@ -97,12 +97,12 @@ public sealed class CaseService : ICaseService
 
         var total = await query.LongCountAsync(ct);
         var items = await query
-            .Skip((request.Page - 1) * request.PageSize)
-            .Take(request.PageSize)
+            .Skip(request.NormalizedSkip)
+            .Take(request.NormalizedTake)
             .ProjectToType<CaseDto>()
             .ToListAsync(ct);
 
-        return Result<PagedResult<CaseDto>>.Ok(new PagedResult<CaseDto>(items, request.Page, request.PageSize, total));
+        return Result<PagedResult<CaseDto>>.Ok(new PagedResult<CaseDto>(items, request.NormalizedSkip, request.NormalizedTake, total));
     }
 
     public async Task<Result> SubmitAsync(Guid caseId, SubmitCaseRequest request, CancellationToken ct)

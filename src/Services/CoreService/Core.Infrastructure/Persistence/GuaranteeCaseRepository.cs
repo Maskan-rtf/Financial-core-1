@@ -230,8 +230,8 @@ public sealed class GuaranteeCaseRepository(CoreDbContext dbContext) : IGuarante
             x.Application != null ? x.Application.FacilitySubject : null));
 
         return await projected.ToPagedResultAsync(
-            request.NormalizedPageNumber,
-            request.NormalizedPageSize,
+            request.NormalizedSkip,
+            request.NormalizedTake,
             cancellationToken);
     }
 

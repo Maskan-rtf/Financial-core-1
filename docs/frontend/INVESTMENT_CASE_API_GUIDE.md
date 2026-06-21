@@ -684,7 +684,7 @@ FinancialExpert: `approve` / `revision-request` on worksheet → تأیید **20
 
 ### جستجو
 
-`GET /investmentcases?caseNumber=&phase=&status=&page=&pageSize=`
+`GET /investmentcases?caseNumber=&currentPhase=&currentStatus=&skip=&take=`
 
 ---
 

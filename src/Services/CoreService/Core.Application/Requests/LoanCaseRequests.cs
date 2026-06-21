@@ -48,8 +48,8 @@ public sealed record LoanCaseSearchRequest(
     LoanCaseStatus? Status,
     DateTimeOffset? FromDate,
     DateTimeOffset? ToDate,
-    int Page = 1,
-    int PageSize = 20);
+    int Skip = 0,
+    int Take = 20);
 
 public sealed record UpsertLoanInstallmentItemRequest(
     int RowNumber,

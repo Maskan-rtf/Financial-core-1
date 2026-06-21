@@ -60,8 +60,8 @@ public sealed record GuaranteeCaseSearchRequest(
     GuaranteeCaseStatus? Status,
     DateTimeOffset? FromDate,
     DateTimeOffset? ToDate,
-    int Page = 1,
-    int PageSize = 20);
+    int Skip = 0,
+    int Take = 20);
 
 public sealed record CreateGuaranteeRenewalRequest(
     Guid ParentGuaranteeCaseId,

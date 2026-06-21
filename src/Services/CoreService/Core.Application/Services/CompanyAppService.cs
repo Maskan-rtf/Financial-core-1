@@ -63,9 +63,9 @@ public sealed class CompanyAppService(
         ApplicationLog.Started(logger, "GetAllCompanies", userId.ToString());
 
         var pageSize = Math.Clamp(take, 1, 200);
-        var companies = await unitOfWork.Companies.GetPagedListAsync(pageSize, Math.Max(0, skip), cancellationToken);
+        var normalizedSkip = Math.Max(0, skip);
+        var companies = await unitOfWork.Companies.GetPagedListAsync(pageSize, normalizedSkip, cancellationToken);
         var total = await unitOfWork.Companies.CountAllAsync(cancellationToken);
-        var page = skip / pageSize + 1;
 
         var items = companies.Select(c => new CompanyAdminDto(
             c.Id,
@@ -86,7 +86,7 @@ public sealed class CompanyAppService(
             "User {UserId} listed {Count} of {Total} companies",
             userId, items.Length, total);
 
-        return Result<PagedResult<CompanyAdminDto>>.Ok(new PagedResult<CompanyAdminDto>(items, page, pageSize, total));
+        return Result<PagedResult<CompanyAdminDto>>.Ok(new PagedResult<CompanyAdminDto>(items, normalizedSkip, pageSize, total));
     }
 
     public async Task<Result<CompanyDto>> CreateAsync(SaveCompanyRequest request, CancellationToken cancellationToken)
