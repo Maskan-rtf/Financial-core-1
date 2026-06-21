@@ -467,9 +467,9 @@
     });
     if (!putRes.ok) throw new Error("بارگذاری فایل با کد " + putRes.status + " ناموفق بود.");
 
-    await state.panel.apiRequest({
-      method: "POST",
-      path: lPath("/" + state.caseId + "/documents/confirm?s3Key=" + encodeURIComponent(s3Key)),
+   await state.panel.apiRequest({
+     method: "POST",
+      path: lPath("/" + state.caseId + "/documents/confirm?s3Key=" + encodeURIComponent(s3Key) + "&originalFileName=" + encodeURIComponent(file.name)),
       body: null,
       json: false,
     });
@@ -486,6 +486,12 @@
     qs("#lPortalEmpty").classList.add("hidden");
     qs("#lPortalHeader").classList.remove("hidden");
     qs("#lCaseNumber").textContent = pick(state.caseData, "caseNumber", "CaseNumber") || "—";
+    const title = pick(state.caseData, "title", "Title") || "—";
+    if (qs("#lCaseTitle")) qs("#lCaseTitle").textContent = title;
+    const titleInput = qs("#lCaseTitleInput");
+    if (titleInput && document.activeElement !== titleInput) {
+      titleInput.value = pick(state.caseData, "title", "Title") || "";
+    }
     const lCaseIdEl = qs("#lCaseId");
     if (lCaseIdEl) lCaseIdEl.textContent = state.caseId;
     qs("#lCaseStatus").textContent = step.title + " (" + status + ")";
@@ -1524,6 +1530,29 @@
     setInfo("عملیات انجام شد.");
   }
 
+  function wirePortalHeader() {
+    qs("#lPortalRefreshCase")?.addEventListener("click", () => {
+      void refreshCase().catch((e) => setError(e.message));
+    });
+    qs("#lCaseTitleSave")?.addEventListener("click", () => {
+      void (async () => {
+        if (!state.caseId) {
+          setError("شناسه پرونده مشخص نیست.");
+          return;
+        }
+        setError("");
+        const title = qs("#lCaseTitleInput")?.value?.trim() || null;
+        await state.panel.apiRequest({
+          method: "PUT",
+          path: lPath("/" + state.caseId + "/title"),
+          body: { title },
+        });
+        await refreshCase();
+        setInfo("عنوان ذخیره شد.");
+      })().catch((e) => setError(e.message || String(e)));
+    });
+  }
+
   function wireCreateCase() {
     qs("#lApplicantType").addEventListener("change", () => {
       qs("#lCompanyRow").style.display = qs("#lApplicantType").value === "2" ? "" : "none";
@@ -1547,10 +1576,11 @@
         setError("");
         const applicantType = Number(qs("#lApplicantType").value);
         const companyId = qs("#lCompanyId").value || null;
+        const title = qs("#lCaseTitleHub")?.value?.trim() || qs("#lCaseTitleInput")?.value?.trim() || null;
         const res = await state.panel.apiRequest({
           method: "POST",
           path: lPath(""),
-          body: { applicantType, companyId: companyId || null },
+          body: { applicantType, companyId: companyId || null, title },
         });
         const data = unwrap(res.body);
         state.caseId = pick(data, "id", "Id");
@@ -1564,14 +1594,12 @@
       if (!state.caseId) return;
       void refreshCase().catch((e) => setError(e.message));
     });
-    qs("#lPortalRefreshCase").addEventListener("click", () => {
-      void refreshCase().catch((e) => setError(e.message));
-    });
   }
 
   window.initLoanPortal = function initLoanPortal(panel) {
     state.panel = panel;
     wireInstallmentModal();
+    wirePortalHeader();
     if (qs("#lCreateCase")) wireCreateCase();
     const id = panel.getLoanCaseId && panel.getLoanCaseId();
     if (id) {

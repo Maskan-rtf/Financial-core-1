@@ -9,6 +9,7 @@ public interface IGuaranteeCaseAppService
 {
     Task<Result<GuaranteeCaseDto>> CreateAsync(CreateGuaranteeCaseRequest request, CancellationToken ct);
     Task<Result<GuaranteeCaseDto>> GetAsync(Guid caseId, CancellationToken ct);
+    Task<Result<GuaranteeCaseDto>> UpdateTitleAsync(Guid caseId, UpdateCaseTitleRequest request, CancellationToken ct);
     Task<Result<PagedResult<GuaranteeCaseDto>>> GetPagedAsync(GetGuaranteeCasesRequest request, CancellationToken ct);
     Task<Result<IEnumerable<GuaranteeWorkflowHistoryDto>>> GetHistoryAsync(Guid caseId, CancellationToken ct);
     Task<Result> UpdateApplicationAsync(Guid caseId, UpdateGuaranteeApplicationRequest request, CancellationToken ct);
@@ -44,7 +45,7 @@ public interface IGuaranteeCaseAppService
     Task<Result> CeoRejectOrCancelFinalAsync(Guid caseId, string reason, bool cancel, CancellationToken ct);
     Task<Result> ConfirmIssuanceDocumentsUploadedAsync(Guid caseId, CancellationToken ct);
     Task<Result<PresignGuaranteeUploadResponse>> PresignDocumentUploadAsync(Guid caseId, PresignGuaranteeUploadRequest request, CancellationToken ct);
-    Task<Result<GuaranteeCaseDocumentDto>> ConfirmDocumentUploadedAsync(Guid caseId, string s3Key, CancellationToken ct);
+    Task<Result<GuaranteeCaseDocumentDto>> ConfirmDocumentUploadedAsync(Guid caseId, string s3Key, string? originalFileName, CancellationToken ct);
     Task<Result<IEnumerable<GuaranteeCaseDocumentDto>>> ListDocumentsAsync(Guid caseId, CancellationToken ct);
     Task<Result<DocumentDownloadFileResult>> DownloadDocumentFileAsync(Guid caseId, Guid documentId, CancellationToken ct);
     Task<Result<IEnumerable<GuaranteeCaseCommentDto>>> ListCommentsAsync(Guid caseId, bool includeInternal, CancellationToken ct);

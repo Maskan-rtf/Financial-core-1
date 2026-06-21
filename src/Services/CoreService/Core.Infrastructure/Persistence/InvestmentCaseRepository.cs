@@ -76,6 +76,7 @@ public sealed class InvestmentCaseRepository(CoreDbContext dbContext) : IInvestm
             .Select(x => new InvestmentCaseListProjection(
                 x.Id,
                 x.CaseNumber,
+                x.Title,
                 x.ApplicantUserId,
                 x.ApplicantType,
                 x.CurrentPhase,
@@ -169,6 +170,7 @@ public sealed class InvestmentCaseRepository(CoreDbContext dbContext) : IInvestm
         var projected = query.Select(x => new InvestmentCaseListProjection(
             x.Id,
             x.CaseNumber,
+            x.Title,
             x.ApplicantUserId,
             x.ApplicantType,
             x.CurrentPhase,

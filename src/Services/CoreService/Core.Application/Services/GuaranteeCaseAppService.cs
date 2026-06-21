@@ -72,13 +72,16 @@ public sealed class GuaranteeCaseAppService(
             entity.AssignCompany(linkedCompany.Id);
         }
 
+        entity.SetTitle(request.Title);
+
         var workflowInstanceId = await workflowOrchestrator.StartGuaranteeCaseAsync(entity.Id, ct);
         entity.AttachWorkflowInstance(workflowInstanceId);
 
         await unitOfWork.GuaranteeCases.AddAsync(entity, ct);
         await unitOfWork.SaveChangesAsync(ct);
 
-        return Result<GuaranteeCaseDto>.Ok(dtoMapper.MapCase(entity, authorizationService.IsInternalUser, linkedCompany));
+        return Result<GuaranteeCaseDto>.Ok(
+            dtoMapper.MapCase(entity, authorizationService.IsInternalUser, linkedCompany));
     }
 
     public async Task<Result<GuaranteeCaseDto>> GetAsync(Guid caseId, CancellationToken ct)
@@ -97,7 +100,8 @@ public sealed class GuaranteeCaseAppService(
         var fundCreditCapacity = await ResolveFundCreditCapacityForCaseAsync(detail.CurrentStatus, ct);
 
         if (authorizationService.IsInternalUser
-            && (string.IsNullOrWhiteSpace(detail.ApplicantFullName) || string.IsNullOrWhiteSpace(detail.ApplicantPhoneNumber)))
+            && (string.IsNullOrWhiteSpace(detail.ApplicantFullName) ||
+                string.IsNullOrWhiteSpace(detail.ApplicantPhoneNumber)))
         {
             var applicantDisplay = await ResolveApplicantDisplayAsync(detail.ApplicantUserId, ct);
             detail = detail with
@@ -115,7 +119,31 @@ public sealed class GuaranteeCaseAppService(
                 fundCreditCapacity));
     }
 
-    public async Task<Result<PagedResult<GuaranteeCaseDto>>> GetPagedAsync(GetGuaranteeCasesRequest request, CancellationToken ct)
+    public async Task<Result<GuaranteeCaseDto>> UpdateTitleAsync(Guid caseId, UpdateCaseTitleRequest request,
+        CancellationToken ct)
+    {
+        var auth = RequireUser();
+        if (auth.IsFailure) return Result<GuaranteeCaseDto>.Fail(auth.Error!);
+
+        var isInternal = authorizationService.IsInternalUser;
+        var exists = await dbContext.GuaranteeCases
+            .AsNoTracking()
+            .AnyAsync(x => x.Id == caseId && (isInternal || x.ApplicantUserId == auth.Value), ct);
+
+        if (!exists)
+            return Result<GuaranteeCaseDto>.Fail(Error.NotFound(ApiMessages.GuaranteeCaseNotFound));
+
+        var title = string.IsNullOrWhiteSpace(request.Title) ? null : request.Title.Trim();
+        var rows = await dbContext.GuaranteeCases.SetTitleAsync(caseId, title, clock.UtcNow, ct);
+
+        if (rows == 0)
+            return Result<GuaranteeCaseDto>.Fail(Error.NotFound(ApiMessages.GuaranteeCaseNotFound));
+
+        return await GetAsync(caseId, ct);
+    }
+
+    public async Task<Result<PagedResult<GuaranteeCaseDto>>> GetPagedAsync(GetGuaranteeCasesRequest request,
+        CancellationToken ct)
     {
         var auth = RequireUser();
         if (auth.IsFailure) return Result<PagedResult<GuaranteeCaseDto>>.Fail(auth.Error!);
@@ -134,7 +162,8 @@ public sealed class GuaranteeCaseAppService(
             new PagedResult<GuaranteeCaseDto>(items, page.Page, page.PageSize, page.TotalCount));
     }
 
-    public async Task<Result<IEnumerable<GuaranteeWorkflowHistoryDto>>> GetHistoryAsync(Guid caseId, CancellationToken ct)
+    public async Task<Result<IEnumerable<GuaranteeWorkflowHistoryDto>>> GetHistoryAsync(Guid caseId,
+        CancellationToken ct)
     {
         var auth = RequireUser();
         if (auth.IsFailure) return Result<IEnumerable<GuaranteeWorkflowHistoryDto>>.Fail(auth.Error!);
@@ -152,13 +181,15 @@ public sealed class GuaranteeCaseAppService(
                     ct);
 
             if (!exists)
-                return Result<IEnumerable<GuaranteeWorkflowHistoryDto>>.Fail(Error.NotFound(ApiMessages.GuaranteeCaseNotFound));
+                return Result<IEnumerable<GuaranteeWorkflowHistoryDto>>.Fail(
+                    Error.NotFound(ApiMessages.GuaranteeCaseNotFound));
         }
 
         return Result<IEnumerable<GuaranteeWorkflowHistoryDto>>.Ok(history.Select(dtoMapper.MapHistory));
     }
 
-    public async Task<Result> UpdateApplicationAsync(Guid caseId, UpdateGuaranteeApplicationRequest request, CancellationToken ct)
+    public async Task<Result> UpdateApplicationAsync(Guid caseId, UpdateGuaranteeApplicationRequest request,
+        CancellationToken ct)
     {
         var auth = RequireUser();
         if (auth.IsFailure) return Result.Fail(auth.Error!);
@@ -203,7 +234,8 @@ public sealed class GuaranteeCaseAppService(
         const decimal maxMoney = 9999999999999999.99m;
 
         if (request.PriceAdjustmentRatePercent is < 0 or > maxPercent)
-            return Result.Fail(Error.Validation("نرخ تعدیل مبلغ قرارداد باید عددی بین ۰ تا ۹۹۹٫۹۹ (درصد) باشد، نه مبلغ ریالی."));
+            return Result.Fail(
+                Error.Validation("نرخ تعدیل مبلغ قرارداد باید عددی بین ۰ تا ۹۹۹٫۹۹ (درصد) باشد، نه مبلغ ریالی."));
 
         if (request.BaseContractAmount is < 0 or > maxMoney)
             return Result.Fail(Error.Validation("مبلغ قرارداد پایه خارج از محدوده مجاز است."));
@@ -223,13 +255,15 @@ public sealed class GuaranteeCaseAppService(
     public Task<Result> SubmitApplicationAsync(Guid caseId, string? comment, CancellationToken ct)
         => ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.Submit, comment, ct);
 
-    public Task<Result> ApproveCreditReviewAsync(Guid caseId, string? comment, string? internalComment, CancellationToken ct)
+    public Task<Result> ApproveCreditReviewAsync(Guid caseId, string? comment, string? internalComment,
+        CancellationToken ct)
         => ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.Approve, comment, ct, internalComment);
 
     public Task<Result> RequestCreditRevisionAsync(Guid caseId, string message, CancellationToken ct)
         => ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.RequestRevision, message, ct);
 
-    public Task<Result> UpdateApprovalFormAsync(Guid caseId, UpdateGuaranteeApprovalFormRequest request, CancellationToken ct)
+    public Task<Result> UpdateApprovalFormAsync(Guid caseId, UpdateGuaranteeApprovalFormRequest request,
+        CancellationToken ct)
     {
         return UpdateApprovalFormCoreAsync(caseId, request, ct);
     }
@@ -273,7 +307,8 @@ public sealed class GuaranteeCaseAppService(
     public Task<Result> SubmitSignedPackageAsync(Guid caseId, CancellationToken ct)
         => ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.SubmitSignedPackage, null, ct);
 
-    public Task<Result> ApproveAttachmentsAsync(Guid caseId, string? comment, string? internalComment, CancellationToken ct)
+    public Task<Result> ApproveAttachmentsAsync(Guid caseId, string? comment, string? internalComment,
+        CancellationToken ct)
         => ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.ApproveAttachments, comment, ct, internalComment);
 
     public Task<Result> RequestAttachmentRevisionAsync(Guid caseId, string message, CancellationToken ct)
@@ -322,11 +357,14 @@ public sealed class GuaranteeCaseAppService(
         if (string.IsNullOrWhiteSpace(ext)) ext = ".bin";
         var s3Key = $"guarantee-cases/{entity.CaseNumber}/{(int)request.DocumentType}/{version}{ext}";
 
-        var (url, expiresAt) = await documentStorage.PresignUploadAsync(s3Key, request.MimeType, TimeSpan.FromMinutes(15), ct);
-        return Result<PresignGuaranteeUploadResponse>.Ok(new PresignGuaranteeUploadResponse(s3Key, url, expiresAt, version));
+        var (url, expiresAt) =
+            await documentStorage.PresignUploadAsync(s3Key, request.MimeType, TimeSpan.FromMinutes(15), ct);
+        return Result<PresignGuaranteeUploadResponse>.Ok(
+            new PresignGuaranteeUploadResponse(s3Key, url, expiresAt, version));
     }
 
-    public async Task<Result<GuaranteeCaseDocumentDto>> ConfirmDocumentUploadedAsync(Guid caseId, string s3Key, CancellationToken ct)
+    public async Task<Result<GuaranteeCaseDocumentDto>> ConfirmDocumentUploadedAsync(Guid caseId, string s3Key,
+        string? originalFileName, CancellationToken ct)
     {
         var auth = RequireUser();
         if (auth.IsFailure) return Result<GuaranteeCaseDocumentDto>.Fail(auth.Error!);
@@ -353,11 +391,18 @@ public sealed class GuaranteeCaseAppService(
 
         var docType = ExtractGuaranteeDocumentTypeFromKey(s3Key);
         var version = ExtractGuaranteeDocumentVersionFromKey(s3Key);
-        var mimeType = string.IsNullOrWhiteSpace(metadata.ContentType) ? "application/octet-stream" : metadata.ContentType;
+        var mimeType = string.IsNullOrWhiteSpace(metadata.ContentType)
+            ? "application/octet-stream"
+            : metadata.ContentType;
+
+        // Use original filename if provided, otherwise fall back to s3Key basename
+        var fileName = string.IsNullOrWhiteSpace(originalFileName)
+            ? Path.GetFileName(s3Key)
+            : originalFileName;
 
         var document = entity.AddDocument(
             s3Key,
-            Path.GetFileName(s3Key),
+            fileName,
             mimeType,
             metadata.ContentLength,
             version,
@@ -372,7 +417,8 @@ public sealed class GuaranteeCaseAppService(
         return Result<GuaranteeCaseDocumentDto>.Ok(dtoMapper.MapDocument(document));
     }
 
-    public async Task<Result<IEnumerable<GuaranteeCaseDocumentDto>>> ListDocumentsAsync(Guid caseId, CancellationToken ct)
+    public async Task<Result<IEnumerable<GuaranteeCaseDocumentDto>>> ListDocumentsAsync(Guid caseId,
+        CancellationToken ct)
     {
         var auth = RequireUser();
         if (auth.IsFailure) return Result<IEnumerable<GuaranteeCaseDocumentDto>>.Fail(auth.Error!);
@@ -381,7 +427,8 @@ public sealed class GuaranteeCaseAppService(
             caseId, auth.Value!, authorizationService.IsInternalUser, ct);
 
         if (entity is null)
-            return Result<IEnumerable<GuaranteeCaseDocumentDto>>.Fail(Error.NotFound(ApiMessages.GuaranteeCaseNotFound));
+            return Result<IEnumerable<GuaranteeCaseDocumentDto>>.Fail(
+                Error.NotFound(ApiMessages.GuaranteeCaseNotFound));
 
         return Result<IEnumerable<GuaranteeCaseDocumentDto>>.Ok(
             entity.Documents.Where(x => !x.IsDeleted).Select(dtoMapper.MapDocument));
@@ -443,7 +490,8 @@ public sealed class GuaranteeCaseAppService(
                     ct);
 
             if (!exists)
-                return Result<IEnumerable<GuaranteeCaseCommentDto>>.Fail(Error.NotFound(ApiMessages.GuaranteeCaseNotFound));
+                return Result<IEnumerable<GuaranteeCaseCommentDto>>.Fail(
+                    Error.NotFound(ApiMessages.GuaranteeCaseNotFound));
         }
 
         var canViewInternal = authorizationService.HasPermission(GuaranteePermissions.ViewInternalComments);
@@ -537,7 +585,8 @@ public sealed class GuaranteeCaseAppService(
         return Result<GuaranteeFundCreditLimitDto>.Ok(await BuildFundCreditLimitDtoAsync(ct));
     }
 
-    public async Task<Result<GuaranteeFundCreditLimitDto>> GetApplicantCreditLimitAsync(Guid caseId, CancellationToken ct)
+    public async Task<Result<GuaranteeFundCreditLimitDto>> GetApplicantCreditLimitAsync(Guid caseId,
+        CancellationToken ct)
     {
         var auth = RequireUser();
         if (auth.IsFailure)
@@ -697,7 +746,7 @@ public sealed class GuaranteeCaseAppService(
         }
 
         var application = entity.Application
-            ?? await GuaranteeCaseApplicationPersistence.GetByCaseIdAsync(dbContext, caseId, ct);
+                          ?? await GuaranteeCaseApplicationPersistence.GetByCaseIdAsync(dbContext, caseId, ct);
 
         var creditSnapshot = await GuaranteeApplicantCreditSnapshotCalculator.ComputeAsync(dbContext, entity, ct);
 
@@ -770,7 +819,8 @@ public sealed class GuaranteeCaseAppService(
         return Enum.TryParse(segment, ignoreCase: true, out docType);
     }
 
-    private async Task TryAutoAdvanceAfterDocumentAsync(Guid caseId, GuaranteeDocumentType docType, CancellationToken ct)
+    private async Task TryAutoAdvanceAfterDocumentAsync(Guid caseId, GuaranteeDocumentType docType,
+        CancellationToken ct)
     {
         if (docType == GuaranteeDocumentType.DraftContract)
             await ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.UploadDraftContract, null, ct);
@@ -853,7 +903,7 @@ public sealed class GuaranteeCaseAppService(
             return Result.Ok();
 
         var application = entity.Application
-            ?? await GuaranteeCaseApplicationPersistence.GetByCaseIdAsync(dbContext, entity.Id, ct);
+                          ?? await GuaranteeCaseApplicationPersistence.GetByCaseIdAsync(dbContext, entity.Id, ct);
 
         if (application is null)
             return Result.Ok();

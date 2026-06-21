@@ -9,6 +9,7 @@ namespace Core.Application.DTOs;
 public abstract record GuaranteeCaseDto(
     Guid Id,
     string CaseNumber,
+    string? Title,
     ApplicantType ApplicantType,
     GuaranteeCasePhase CurrentPhase,
     GuaranteeCaseStatus CurrentStatus,
@@ -19,6 +20,7 @@ public abstract record GuaranteeCaseDto(
 public sealed record GuaranteeCaseApplicantDto(
     Guid Id,
     string CaseNumber,
+    string? Title,
     ApplicantType ApplicantType,
     GuaranteeCasePhase CurrentPhase,
     GuaranteeCaseStatus CurrentStatus,
@@ -30,11 +32,12 @@ public sealed record GuaranteeCaseApplicantDto(
     GuaranteeApprovalFormDto? ApprovalForm = null,
     GuaranteeApplicantCreditSnapshotDto? ApplicantCreditSnapshot = null,
     FundCreditCapacitySnapshotDto? FundCreditCapacity = null)
-    : GuaranteeCaseDto(Id, CaseNumber, ApplicantType, CurrentPhase, CurrentStatus, CreatedAt, UpdatedAt, CompletedAt);
+    : GuaranteeCaseDto(Id, CaseNumber, Title, ApplicantType, CurrentPhase, CurrentStatus, CreatedAt, UpdatedAt, CompletedAt);
 
 public sealed record GuaranteeCaseInternalDto(
     Guid Id,
     string CaseNumber,
+    string? Title,
     string ApplicantUserId,
     string? ApplicantFullName,
     string? ApplicantPhoneNumber,
@@ -50,7 +53,7 @@ public sealed record GuaranteeCaseInternalDto(
     GuaranteeApprovalFormDto? ApprovalForm = null,
     GuaranteeApplicantCreditSnapshotDto? ApplicantCreditSnapshot = null,
     FundCreditCapacitySnapshotDto? FundCreditCapacity = null)
-    : GuaranteeCaseDto(Id, CaseNumber, ApplicantType, CurrentPhase, CurrentStatus, CreatedAt, UpdatedAt, CompletedAt);
+    : GuaranteeCaseDto(Id, CaseNumber, Title, ApplicantType, CurrentPhase, CurrentStatus, CreatedAt, UpdatedAt, CompletedAt);
 
 /// <summary>جدول ۱ فرم تصویب — وضعیت اعتباری کل صندوق در بازه سقف فعال.</summary>
 public sealed record GuaranteeApplicantCreditSnapshotDto(

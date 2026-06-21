@@ -11,6 +11,7 @@ public interface IInvestmentCaseAppService
 {
     Task<Result<InvestmentCaseDto>> CreateAsync(CreateInvestmentCaseRequest request, CancellationToken cancellationToken);
     Task<Result<InvestmentCaseDto>> GetAsync(Guid caseId, CancellationToken cancellationToken);
+    Task<Result<InvestmentCaseDto>> UpdateTitleAsync(Guid caseId, UpdateCaseTitleRequest request, CancellationToken cancellationToken);
 
     Task<Result> UpdateDataEntry1Async(Guid caseId, UpdateDataEntry1Request request, CancellationToken cancellationToken);
     Task<Result> UpdateDataEntry2Async(Guid caseId, UpdateDataEntry2Request request, CancellationToken cancellationToken);
@@ -65,7 +66,7 @@ public interface IInvestmentCaseAppService
 
     Task<Result<PresignUploadResponse>> PresignDocumentUploadAsync(Guid caseId, PresignUploadRequest request, CancellationToken cancellationToken);
     Task<Result<CaseDocumentDto>> UploadDocumentAsync(Guid caseId, PresignUploadRequest request, Stream content, CancellationToken cancellationToken);
-    Task<Result<CaseDocumentDto>> ConfirmDocumentUploadedAsync(Guid caseId, string s3Key, CancellationToken cancellationToken);
+    Task<Result<CaseDocumentDto>> ConfirmDocumentUploadedAsync(Guid caseId, string s3Key, string? originalFileName, CancellationToken cancellationToken);
     Task<Result<PresignDownloadResponse>> PresignDocumentDownloadAsync(Guid caseId, Guid documentId, CancellationToken cancellationToken);
     Task<Result<DocumentDownloadFileResult>> DownloadDocumentFileAsync(Guid caseId, Guid documentId, CancellationToken cancellationToken);
 

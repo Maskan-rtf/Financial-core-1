@@ -30,6 +30,7 @@ public static class GuaranteeSuccessMessages
     public const string DocumentsRetrieved = "مدارک دریافت شد.";
     public const string CommentsRetrieved = "نظرات دریافت شد.";
     public const string CommentAdded = "نظر ثبت شد.";
+    public const string CaseTitleUpdated = "عنوان پرونده به‌روزرسانی شد.";
     public const string RenewalCreated = "درخواست تمدید ایجاد شد.";
     public const string RenewalSubmitted = "درخواست تمدید ارسال شد.";
     public const string RenewalCeoApproved = "تمدید توسط مدیرعامل تأیید شد.";

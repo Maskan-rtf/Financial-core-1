@@ -9,6 +9,7 @@ namespace Core.Application.DTOs;
 public abstract record LoanCaseDto(
     Guid Id,
     string CaseNumber,
+    string? Title,
     ApplicantType ApplicantType,
     LoanCasePhase CurrentPhase,
     LoanCaseStatus CurrentStatus,
@@ -19,6 +20,7 @@ public abstract record LoanCaseDto(
 public sealed record LoanCaseApplicantDto(
     Guid Id,
     string CaseNumber,
+    string? Title,
     ApplicantType ApplicantType,
     LoanCasePhase CurrentPhase,
     LoanCaseStatus CurrentStatus,
@@ -31,11 +33,12 @@ public sealed record LoanCaseApplicantDto(
     IReadOnlyList<LoanInstallmentDto>? Installments = null,
     IReadOnlyList<LoanPaymentDto>? Payments = null,
     FundCreditCapacitySnapshotDto? FundCreditCapacity = null)
-    : LoanCaseDto(Id, CaseNumber, ApplicantType, CurrentPhase, CurrentStatus, CreatedAt, UpdatedAt, CompletedAt);
+    : LoanCaseDto(Id, CaseNumber, Title, ApplicantType, CurrentPhase, CurrentStatus, CreatedAt, UpdatedAt, CompletedAt);
 
 public sealed record LoanCaseInternalDto(
     Guid Id,
     string CaseNumber,
+    string? Title,
     string ApplicantUserId,
     string? ApplicantFullName,
     string? ApplicantPhoneNumber,
@@ -52,7 +55,7 @@ public sealed record LoanCaseInternalDto(
     IReadOnlyList<LoanInstallmentDto>? Installments = null,
     IReadOnlyList<LoanPaymentDto>? Payments = null,
     FundCreditCapacitySnapshotDto? FundCreditCapacity = null)
-    : LoanCaseDto(Id, CaseNumber, ApplicantType, CurrentPhase, CurrentStatus, CreatedAt, UpdatedAt, CompletedAt);
+    : LoanCaseDto(Id, CaseNumber, Title, ApplicantType, CurrentPhase, CurrentStatus, CreatedAt, UpdatedAt, CompletedAt);
 
 public sealed record LoanApplicationDto(
     decimal? RequestedAmount,

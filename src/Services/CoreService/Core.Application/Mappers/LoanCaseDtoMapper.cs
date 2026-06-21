@@ -39,6 +39,7 @@ public sealed class LoanCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) : ILoa
             return new LoanCaseInternalDto(
                 entity.Id,
                 entity.CaseNumber,
+                entity.Title,
                 entity.ApplicantUserId,
                 applicantFullName,
                 applicantPhoneNumber,
@@ -60,6 +61,7 @@ public sealed class LoanCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) : ILoa
         return new LoanCaseApplicantDto(
             entity.Id,
             entity.CaseNumber,
+            entity.Title,
             entity.ApplicantType,
             entity.CurrentPhase,
             entity.CurrentStatus,
@@ -166,6 +168,7 @@ public sealed class LoanCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) : ILoa
             return new LoanCaseInternalDto(
                 projection.Id,
                 projection.CaseNumber,
+                projection.Title,
                 projection.ApplicantUserId,
                 projection.ApplicantFullName,
                 projection.ApplicantPhoneNumber,
@@ -184,6 +187,7 @@ public sealed class LoanCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) : ILoa
         return new LoanCaseApplicantDto(
             projection.Id,
             projection.CaseNumber,
+            projection.Title,
             projection.ApplicantType,
             projection.CurrentPhase,
             projection.CurrentStatus,

@@ -14,6 +14,8 @@ public sealed class GuaranteeCaseConfiguration : IEntityTypeConfiguration<Guaran
         builder.Property(x => x.CaseNumber).HasMaxLength(64).IsRequired();
         builder.HasIndex(x => x.CaseNumber).IsUnique();
 
+        builder.Property(x => x.Title).HasMaxLength(256);
+
         builder.Property(x => x.ApplicantUserId).HasMaxLength(64).IsRequired();
         builder.HasIndex(x => x.ApplicantUserId);
 

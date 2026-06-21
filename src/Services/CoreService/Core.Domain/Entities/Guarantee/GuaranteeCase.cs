@@ -26,6 +26,7 @@ public sealed class GuaranteeCase : AggregateRoot<Guid>, IAuditableEntity, ISoft
     }
 
     public string CaseNumber { get; private set; }
+    public string? Title { get; private set; }
     public string ApplicantUserId { get; private set; }
     public ApplicantType ApplicantType { get; private set; }
     public Guid? CompanyId { get; private set; }
@@ -96,6 +97,12 @@ public sealed class GuaranteeCase : AggregateRoot<Guid>, IAuditableEntity, ISoft
     public void AttachWorkflowInstance(string workflowInstanceId)
     {
         WorkflowInstanceId = workflowInstanceId;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    public void SetTitle(string? title)
+    {
+        Title = string.IsNullOrWhiteSpace(title) ? null : title.Trim();
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 

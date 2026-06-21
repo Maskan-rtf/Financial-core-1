@@ -2,7 +2,7 @@ using Core.Domain.Enums;
 
 namespace Core.Application.Requests;
 
-public sealed record CreateLoanCaseRequest(ApplicantType ApplicantType, Guid? CompanyId);
+public sealed record CreateLoanCaseRequest(ApplicantType ApplicantType, Guid? CompanyId, string? Title = null);
 
 public sealed record UpdateLoanApplicationRequest(
     decimal? RequestedAmount,

@@ -70,6 +70,7 @@ public sealed class LoanCaseRepository(CoreDbContext dbContext) : ILoanCaseRepos
             .Select(x => new LoanCaseListProjection(
                 x.Id,
                 x.CaseNumber,
+                x.Title,
                 x.ApplicantUserId,
                 x.ApplicantType,
                 x.CurrentPhase,
@@ -227,6 +228,7 @@ public sealed class LoanCaseRepository(CoreDbContext dbContext) : ILoanCaseRepos
         var projected = query.Select(x => new LoanCaseListProjection(
             x.Id,
             x.CaseNumber,
+            x.Title,
             x.ApplicantUserId,
             x.ApplicantType,
             x.CurrentPhase,

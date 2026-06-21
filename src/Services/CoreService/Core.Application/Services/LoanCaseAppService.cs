@@ -71,6 +71,8 @@ public sealed class LoanCaseAppService(
             entity.AssignCompany(linkedCompany.Id);
         }
 
+        entity.SetTitle(request.Title);
+
         var workflowInstanceId = await workflowOrchestrator.StartLoanCaseAsync(entity.Id, ct);
         entity.AttachWorkflowInstance(workflowInstanceId);
 
@@ -126,6 +128,28 @@ public sealed class LoanCaseAppService(
                 installments,
                 payments,
                 userLookup));
+    }
+
+    public async Task<Result<LoanCaseDto>> UpdateTitleAsync(Guid caseId, UpdateCaseTitleRequest request, CancellationToken ct)
+    {
+        var auth = RequireUser();
+        if (auth.IsFailure) return Result<LoanCaseDto>.Fail(auth.Error!);
+
+        var isInternal = authorizationService.IsInternalUser;
+        var exists = await dbContext.LoanCases
+            .AsNoTracking()
+            .AnyAsync(x => x.Id == caseId && (isInternal || x.ApplicantUserId == auth.Value), ct);
+
+        if (!exists)
+            return Result<LoanCaseDto>.Fail(Error.NotFound(ApiMessages.LoanCaseNotFound));
+
+        var title = string.IsNullOrWhiteSpace(request.Title) ? null : request.Title.Trim();
+        var rows = await dbContext.LoanCases.SetTitleAsync(caseId, title, clock.UtcNow, ct);
+
+        if (rows == 0)
+            return Result<LoanCaseDto>.Fail(Error.NotFound(ApiMessages.LoanCaseNotFound));
+
+        return await GetAsync(caseId, ct);
     }
 
     public async Task<Result<PagedResult<LoanCaseDto>>> GetPagedAsync(GetLoanCasesRequest request, CancellationToken ct)
@@ -527,7 +551,7 @@ public sealed class LoanCaseAppService(
         return Result<PresignLoanUploadResponse>.Ok(new PresignLoanUploadResponse(s3Key, url, expiresAt, version));
     }
 
-    public async Task<Result<LoanCaseDocumentDto>> ConfirmDocumentUploadedAsync(Guid caseId, string s3Key, CancellationToken ct)
+    public async Task<Result<LoanCaseDocumentDto>> ConfirmDocumentUploadedAsync(Guid caseId, string s3Key, string? originalFileName, CancellationToken ct)
     {
         var auth = RequireUser();
         if (auth.IsFailure) return Result<LoanCaseDocumentDto>.Fail(auth.Error!);
@@ -555,10 +579,15 @@ public sealed class LoanCaseAppService(
         var docType = ExtractLoanDocumentTypeFromKey(s3Key);
         var version = ExtractLoanDocumentVersionFromKey(s3Key);
         var mimeType = string.IsNullOrWhiteSpace(metadata.ContentType) ? "application/octet-stream" : metadata.ContentType;
+        
+        // Use original filename if provided, otherwise fall back to s3Key basename
+        var fileName = string.IsNullOrWhiteSpace(originalFileName)
+            ? Path.GetFileName(s3Key)
+            : originalFileName;
 
         var document = entity.AddDocument(
             s3Key,
-            Path.GetFileName(s3Key),
+            fileName,
             mimeType,
             metadata.ContentLength,
             version,

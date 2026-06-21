@@ -2,7 +2,7 @@ using Core.Domain.Enums;
 
 namespace Core.Application.Requests;
 
-public sealed record CreateGuaranteeCaseRequest(ApplicantType ApplicantType, Guid? CompanyId);
+public sealed record CreateGuaranteeCaseRequest(ApplicantType ApplicantType, Guid? CompanyId, string? Title = null);
 
 public sealed record UpdateGuaranteeApplicationRequest(
     GuaranteeType? GuaranteeType,

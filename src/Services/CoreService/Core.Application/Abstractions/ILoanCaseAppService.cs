@@ -9,6 +9,7 @@ public interface ILoanCaseAppService
 {
     Task<Result<LoanCaseDto>> CreateAsync(CreateLoanCaseRequest request, CancellationToken ct);
     Task<Result<LoanCaseDto>> GetAsync(Guid caseId, CancellationToken ct);
+    Task<Result<LoanCaseDto>> UpdateTitleAsync(Guid caseId, UpdateCaseTitleRequest request, CancellationToken ct);
     Task<Result<PagedResult<LoanCaseDto>>> GetPagedAsync(GetLoanCasesRequest request, CancellationToken ct);
     Task<Result<IEnumerable<LoanWorkflowHistoryDto>>> GetHistoryAsync(Guid caseId, CancellationToken ct);
     Task<Result> UpdateApplicationAsync(Guid caseId, UpdateLoanApplicationRequest request, CancellationToken ct);
@@ -35,7 +36,7 @@ public interface ILoanCaseAppService
     Task<Result> MarkInstallmentPaidAsync(Guid caseId, Guid installmentId, MarkLoanInstallmentPaidRequest request, CancellationToken ct);
     Task<Result> CompleteRepaymentAsync(Guid caseId, CancellationToken ct);
     Task<Result<PresignLoanUploadResponse>> PresignDocumentUploadAsync(Guid caseId, PresignLoanUploadRequest request, CancellationToken ct);
-    Task<Result<LoanCaseDocumentDto>> ConfirmDocumentUploadedAsync(Guid caseId, string s3Key, CancellationToken ct);
+    Task<Result<LoanCaseDocumentDto>> ConfirmDocumentUploadedAsync(Guid caseId, string s3Key, string? originalFileName, CancellationToken ct);
     Task<Result<IEnumerable<LoanCaseDocumentDto>>> ListDocumentsAsync(Guid caseId, CancellationToken ct);
     Task<Result<DocumentDownloadFileResult>> DownloadDocumentFileAsync(Guid caseId, Guid documentId, CancellationToken ct);
     Task<Result<IEnumerable<LoanCaseCommentDto>>> ListCommentsAsync(Guid caseId, bool includeInternal, CancellationToken ct);

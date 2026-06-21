@@ -17,6 +17,20 @@ public static class GuaranteeCaseWriteExtensions
                 setters => setters.SetProperty(c => c.UpdatedAt, updatedAt),
                 cancellationToken);
 
+    public static Task<int> SetTitleAsync(
+        this DbSet<GuaranteeCase> cases,
+        Guid caseId,
+        string? title,
+        DateTimeOffset updatedAt,
+        CancellationToken cancellationToken = default)
+        => cases
+            .Where(c => c.Id == caseId)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(c => c.Title, title)
+                    .SetProperty(c => c.UpdatedAt, updatedAt),
+                cancellationToken);
+
     public static Task<int> ApplyStateAsync(
         this DbSet<GuaranteeCase> cases,
         Guid caseId,

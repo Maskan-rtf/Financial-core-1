@@ -2,35 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import importlib
-import json
 import queue
 import threading
 import time
-from pathlib import Path
 
 import streamlit as st
-
-# #region agent log
-_DEBUG_LOG = Path(__file__).resolve().parents[2] / "debug-c8375b.log"
-
-
-def _dbg(hypothesis_id: str, location: str, message: str, data: dict | None = None) -> None:
-    try:
-        payload = {
-            "sessionId": "c8375b",
-            "hypothesisId": hypothesis_id,
-            "location": location,
-            "message": message,
-            "data": data or {},
-            "timestamp": int(time.time() * 1000),
-        }
-        with _DEBUG_LOG.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
-    except Exception:
-        pass
-
-
-# #endregion
 
 import e2e_simulator.config as config_module
 importlib.reload(config_module)
@@ -148,9 +124,6 @@ def ui_progress(pct: float, message: str) -> None:
 
 
 async def execute_batch() -> None:
-    # #region agent log
-    _dbg("D", "app.py:execute_batch:entry", "execute_batch started", {"base_url": base_url})
-    # #endregion
     runtime_config = load_config()
     runtime_config.base_url = base_url.rstrip("/")
     runtime_config.dev_otp = dev_otp
@@ -198,24 +171,12 @@ async def execute_batch() -> None:
 
 
 def _run_batch_in_thread() -> None:
-    # #region agent log
-    _dbg("C", "app.py:_run_batch_in_thread:entry", "background thread started")
-    # #endregion
     try:
         asyncio.run(execute_batch())
-        # #region agent log
-        _dbg("C", "app.py:_run_batch_in_thread:ok", "execute_batch completed")
-        # #endregion
     except Exception as exc:
-        # #region agent log
-        _dbg("C", "app.py:_run_batch_in_thread:error", "thread crashed", {"error": str(exc), "type": type(exc).__name__})
-        # #endregion
         st.session_state.batch_error = str(exc)
     finally:
         st.session_state.running = False
-        # #region agent log
-        _dbg("B", "app.py:_run_batch_in_thread:finally", "running set False from thread")
-        # #endregion
 
 
 if stop_clicked:
@@ -223,9 +184,6 @@ if stop_clicked:
     append_log("Stop requested.")
 
 if start_clicked and not st.session_state.running:
-    # #region agent log
-    _dbg("A", "app.py:start_clicked", "run button clicked")
-    # #endregion
     st.session_state.running = True
     st.session_state.stop_flag = False
     st.session_state.batch_error = None
@@ -237,28 +195,14 @@ if start_clicked and not st.session_state.running:
     thread = threading.Thread(target=_run_batch_in_thread, daemon=True)
     st.session_state.batch_thread = thread
     thread.start()
-    # #region agent log
-    _dbg("C", "app.py:thread_start", "thread.start() called", {"thread_alive": thread.is_alive()})
-    # #endregion
 
 if st.session_state.running:
-    drained = drain_log_queue()
-    # #region agent log
-    _dbg("E", "app.py:running_loop", "running loop tick", {
-        "logs_len": len(st.session_state.logs),
-        "queue_drained": drained,
-        "progress_msg": st.session_state.progress_message,
-        "thread_alive": st.session_state.batch_thread.is_alive() if st.session_state.batch_thread else None,
-    })
-    # #endregion
+    drain_log_queue()
     pct = float(st.session_state.progress_pct)
     msg = st.session_state.progress_message
     progress_bar.progress(min(max(pct, 0.0), 1.0), text=msg)
     status_box.info(msg)
     time.sleep(0.8)
-    # #region agent log
-    _dbg("A", "app.py:before_rerun", "about to st.rerun while running", {"logs_len": len(st.session_state.logs)})
-    # #endregion
     st.rerun()
 else:
     drain_log_queue()
@@ -271,9 +215,6 @@ else:
 
 with log_area:
     st.subheader("Live log")
-    # #region agent log
-    _dbg("A", "app.py:render_logs", "rendering log panel", {"logs_len": len(st.session_state.logs), "running": st.session_state.running})
-    # #endregion
     st.code("\n".join(st.session_state.logs[-200:]) or "No activity yet.", language="text")
 
 report = st.session_state.report

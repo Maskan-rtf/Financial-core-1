@@ -949,6 +949,8 @@
       withUiError(async () => {
         const applicantType = Number(qs("#caseApplicantType").value);
         const payload = { applicantType };
+        const title = qs("#caseTitle")?.value?.trim() || qs("#caseTitleHub")?.value?.trim();
+        if (title) payload.title = title;
 
         if (applicantType === 2) {
           const companyId = qs("#caseCompanyId").value.trim();
@@ -1267,9 +1269,10 @@
   }
 
   function wireDocuments() {
-    let lastPresign = null;
+   let lastPresign = null;
+    let lastFileName = null;
 
-    const fileInput = qs("#docFile");
+   const fileInput = qs("#docFile");
     const mimeInput = qs("#docMime");
     fileInput.addEventListener("change", () => pickFileMime(fileInput, mimeInput));
 
@@ -1291,13 +1294,14 @@
           body: payload,
         });
 
-        lastPresign = res.body && (res.body.s3Key ? res.body : res.body.Value || res.body.value || res.body.data || res.body.Data);
-        if (!lastPresign || !lastPresign.Url && !lastPresign.url) {
-          // Core service returns {s3Key,url,expiresAtUtc,version}
-          lastPresign = res.body;
-        }
+       lastPresign = res.body && (res.body.s3Key ? res.body : res.body.Value || res.body.value || res.body.data || res.body.Data);
+       if (!lastPresign || !lastPresign.Url && !lastPresign.url) {
+         // Core service returns {s3Key,url,expiresAtUtc,version}
+         lastPresign = res.body;
+       }
+        lastFileName = file.name;
 
-        const s3Key = lastPresign.s3Key || lastPresign.S3Key || "";
+       const s3Key = lastPresign.s3Key || lastPresign.S3Key || "";
         const url = lastPresign.url || lastPresign.Url || "";
         qs("#lastS3Key").textContent = s3Key;
         qs("#genericPutUrl").value = url;
@@ -1355,18 +1359,19 @@
       })
     );
 
-    qs("#btnConfirmUpload").addEventListener("click", () =>
-      withUiError(async () => {
-        const caseId = requireCaseId();
-        if (!lastPresign) throw new Error("ابتدا آدرس بارگذاری را دریافت کنید.");
-        const s3Key = lastPresign.s3Key || lastPresign.S3Key;
-        if (!s3Key) throw new Error("s3Key یافت نشد.");
-        await apiRequest({
-          method: "POST",
-          path: casesBasePath() + "/" + caseId + "/documents/confirm?s3Key=" + encodeURIComponent(s3Key),
-          body: null,
-          json: false,
-        });
+   qs("#btnConfirmUpload").addEventListener("click", () =>
+     withUiError(async () => {
+       const caseId = requireCaseId();
+       if (!lastPresign) throw new Error("ابتدا آدرس بارگذاری را دریافت کنید.");
+       const s3Key = lastPresign.s3Key || lastPresign.S3Key;
+       if (!s3Key) throw new Error("s3Key یافت نشد.");
+        const fileNameParam = lastFileName ? "&originalFileName=" + encodeURIComponent(lastFileName) : "";
+       await apiRequest({
+         method: "POST",
+          path: casesBasePath() + "/" + caseId + "/documents/confirm?s3Key=" + encodeURIComponent(s3Key) + fileNameParam,
+         body: null,
+         json: false,
+       });
       })
     );
 
@@ -1689,4 +1694,3 @@
 
   document.addEventListener("DOMContentLoaded", init);
 })();
-

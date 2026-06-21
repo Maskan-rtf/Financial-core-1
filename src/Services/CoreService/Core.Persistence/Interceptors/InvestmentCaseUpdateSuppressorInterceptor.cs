@@ -4,10 +4,6 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Core.Persistence.Interceptors;
 
-/// <summary>
-/// Never persist tracked UPDATEs on <see cref="InvestmentCase"/>; use ExecuteUpdate extensions instead.
-/// Prevents DbUpdateConcurrencyException from legacy xmin/RowVersion on investment_cases.
-/// </summary>
 public sealed class InvestmentCaseUpdateSuppressorInterceptor : SaveChangesInterceptor
 {
     public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)

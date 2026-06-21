@@ -5,6 +5,7 @@ namespace Core.Application.Abstractions;
 public sealed record GuaranteeCaseListProjection(
     Guid Id,
     string CaseNumber,
+    string? Title,
     string ApplicantUserId,
     ApplicantType ApplicantType,
     GuaranteeCasePhase CurrentPhase,

@@ -119,6 +119,7 @@ public sealed class CaseDtoMapper(
             return new InvestmentCaseInternalDto(
                 entity.Id,
                 entity.CaseNumber,
+                entity.Title,
                 entity.ApplicantUserId,
                 applicantFullName,
                 applicantPhoneNumber,
@@ -197,6 +198,7 @@ public sealed class CaseDtoMapper(
             return new InvestmentCaseInternalDto(
                 projection.Id,
                 projection.CaseNumber,
+                projection.Title,
                 projection.ApplicantUserId,
                 projection.ApplicantFullName,
                 projection.ApplicantPhoneNumber,
@@ -215,6 +217,7 @@ public sealed class CaseDtoMapper(
         return new InvestmentCaseApplicantDto(
             projection.Id,
             projection.CaseNumber,
+            projection.Title,
             projection.ApplicantType,
             projection.CurrentPhase,
             projection.CurrentStatus,

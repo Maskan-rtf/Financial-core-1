@@ -52,6 +52,14 @@ public sealed class InvestmentCasesController(
         return Respond(result, CaseSuccessMessages.InvestmentCaseCreated, HttpStatusCode.Created);
     }
 
+    [HttpPut("{id:guid}/title")]
+    [Authorize]
+    public async Task<IActionResult> UpdateTitle(Guid id, [FromBody] UpdateCaseTitleRequest request, CancellationToken ct)
+    {
+        var result = await service.UpdateTitleAsync(id, request, ct);
+        return Respond(result, CaseSuccessMessages.CaseTitleUpdated);
+    }
+
     [HttpGet("{id:guid}")]
     [Authorize]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
@@ -369,9 +377,9 @@ public sealed class InvestmentCasesController(
     /// <summary>Registers the object in DB after client PUT to presigned URL; advances workflow for contract document types when status allows.</summary>
     [HttpPost("{id:guid}/documents/confirm")]
     [Authorize]
-    public async Task<IActionResult> Confirm(Guid id, [FromQuery] string s3Key, CancellationToken ct)
+    public async Task<IActionResult> Confirm(Guid id, [FromQuery] string s3Key, [FromQuery] string? originalFileName, CancellationToken ct)
     {
-        var result = await service.ConfirmDocumentUploadedAsync(id, s3Key, ct);
+        var result = await service.ConfirmDocumentUploadedAsync(id, s3Key, originalFileName, ct);
         return Respond(result, CaseSuccessMessages.DocumentUploadConfirmed);
     }
 

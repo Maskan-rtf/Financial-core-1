@@ -27,4 +27,5 @@ public static class LoanSuccessMessages
     public const string PaymentsRetrieved = "پرداخت‌ها دریافت شد.";
     public const string InstallmentsRetrieved = "اقساط دریافت شد.";
     public const string RepaymentCompleted = "بازپرداخت تکمیل شد.";
+    public const string CaseTitleUpdated = "عنوان پرونده به‌روزرسانی شد.";
 }

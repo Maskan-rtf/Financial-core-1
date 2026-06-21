@@ -10,6 +10,7 @@ namespace Core.Application.DTOs;
 public abstract record InvestmentCaseDto(
     Guid Id,
     string CaseNumber,
+    string? Title,
     ApplicantType ApplicantType,
     CasePhase CurrentPhase,
     CaseStatus CurrentStatus,
@@ -20,6 +21,7 @@ public abstract record InvestmentCaseDto(
 public sealed record InvestmentCaseApplicantDto(
     Guid Id,
     string CaseNumber,
+    string? Title,
     ApplicantType ApplicantType,
     CasePhase CurrentPhase,
     CaseStatus CurrentStatus,
@@ -30,11 +32,12 @@ public sealed record InvestmentCaseApplicantDto(
     ApplicantContactDto? Applicant = null,
     DataEntry1Dto? ApplicantProfile = null,
     DataEntry2Dto? AttractionBasis = null)
-    : InvestmentCaseDto(Id, CaseNumber, ApplicantType, CurrentPhase, CurrentStatus, CreatedAt, UpdatedAt, CompletedAt);
+    : InvestmentCaseDto(Id, CaseNumber, Title, ApplicantType, CurrentPhase, CurrentStatus, CreatedAt, UpdatedAt, CompletedAt);
 
 public sealed record InvestmentCaseInternalDto(
     Guid Id,
     string CaseNumber,
+    string? Title,
     string ApplicantUserId,
     string? ApplicantFullName,
     string? ApplicantPhoneNumber,
@@ -48,4 +51,4 @@ public sealed record InvestmentCaseInternalDto(
     CompanyDto? Company,
     DataEntry1Dto? ApplicantProfile = null,
     DataEntry2Dto? AttractionBasis = null)
-    : InvestmentCaseDto(Id, CaseNumber, ApplicantType, CurrentPhase, CurrentStatus, CreatedAt, UpdatedAt, CompletedAt);
+    : InvestmentCaseDto(Id, CaseNumber, Title, ApplicantType, CurrentPhase, CurrentStatus, CreatedAt, UpdatedAt, CompletedAt);

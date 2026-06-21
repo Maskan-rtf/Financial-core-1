@@ -148,6 +148,8 @@
   async function createCase() {
     const applicantType = Number(qs("#gApplicantType")?.value || 1);
     const payload = { applicantType };
+    const title = qs("#gCaseTitleHub")?.value?.trim() || qs("#gCaseTitleInput")?.value?.trim();
+    if (title) payload.title = title;
     if (applicantType === 2) {
       const companyId = (qs("#gCompanyId")?.value || "").trim();
       if (!companyId) throw new Error("برای متقاضی حقوقی، انتخاب شرکت الزامی است.");
@@ -206,6 +208,12 @@
     empty?.classList.add("hidden");
     header?.classList.remove("hidden");
     qs("#gCaseNumber").textContent = pick(state.caseData, "caseNumber", "CaseNumber") || "—";
+    const title = pick(state.caseData, "title", "Title") || "—";
+    if (qs("#gCaseTitle")) qs("#gCaseTitle").textContent = title;
+    const titleInput = qs("#gCaseTitleInput");
+    if (titleInput && document.activeElement !== titleInput) {
+      titleInput.value = pick(state.caseData, "title", "Title") || "";
+    }
     const gCaseIdEl = qs("#gCaseId");
     if (gCaseIdEl) gCaseIdEl.textContent = state.caseId;
     const st = pickStatus(state.caseData);
@@ -1375,9 +1383,9 @@
       headers: { "Content-Type": mimeType },
     });
 
-    await state.panel.apiRequest({
-      method: "POST",
-      path: gPath("/" + state.caseId + "/documents/confirm?s3Key=" + encodeURIComponent(s3Key)),
+   await state.panel.apiRequest({
+     method: "POST",
+      path: gPath("/" + state.caseId + "/documents/confirm?s3Key=" + encodeURIComponent(s3Key) + "&originalFileName=" + encodeURIComponent(file.name)),
       body: null,
       json: false,
     });
@@ -1665,6 +1673,23 @@
       try {
         setError("");
         await refreshCase();
+      } catch (e) {
+        setError(e.message || String(e));
+      }
+    });
+
+    qs("#gCaseTitleSave")?.addEventListener("click", async () => {
+      try {
+        if (!state.caseId) return;
+        setError("");
+        const title = qs("#gCaseTitleInput")?.value?.trim() || null;
+        await state.panel.apiRequest({
+          method: "PUT",
+          path: gPath("/" + state.caseId + "/title"),
+          body: { title },
+        });
+        await refreshCase();
+        setInfo("عنوان ذخیره شد.");
       } catch (e) {
         setError(e.message || String(e));
       }

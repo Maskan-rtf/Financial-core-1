@@ -60,6 +60,10 @@
               <div class="card__title">ایجاد پرونده سرمایه‌گذاری</div>
               <div class="row">
                 <div class="formrow">
+                  <label>عنوان پرونده (اختیاری)</label>
+                  <input id="caseTitleHub" type="text" maxlength="256" placeholder="مثلاً طرح توسعه محصول" />
+                </div>
+                <div class="formrow">
                   <label>نوع متقاضی</label>
                   <select id="caseApplicantTypeHub">
                     <option value="1">حقیقی</option>
@@ -81,6 +85,10 @@
               <div class="card__title">ایجاد پرونده ضمانت‌نامه</div>
               <div class="row">
                 <div class="formrow">
+                  <label>عنوان پرونده (اختیاری)</label>
+                  <input id="gCaseTitleHub" type="text" maxlength="256" placeholder="مثلاً ضمانت‌نامه پیمان" />
+                </div>
+                <div class="formrow">
                   <label>نوع متقاضی</label>
                   <select id="gApplicantTypeHub">
                     <option value="1">حقیقی</option>
@@ -101,6 +109,10 @@
             <div id="casesCreateLoan" class="card cases-create-panel hidden">
               <div class="card__title">ایجاد پرونده تسهیلات</div>
               <div class="row">
+                <div class="formrow">
+                  <label>عنوان پرونده (اختیاری)</label>
+                  <input id="lCaseTitleHub" type="text" maxlength="256" placeholder="مثلاً تسهیلات سرمایه در گردش" />
+                </div>
                 <div class="formrow">
                   <label>نوع متقاضی</label>
                   <select id="lApplicantTypeHub">
@@ -153,6 +165,7 @@
                   <div id="portalCaseHeader">
                     <div class="portal-summary__grid">
                       <div><span class="muted">شماره</span><div id="portalCaseNumber" class="portal-summary__value"></div></div>
+                      <div><span class="muted">عنوان</span><div id="portalCaseTitle" class="portal-summary__value"></div></div>
                       <div><span class="muted">وضعیت</span><div id="portalCaseStatus" class="portal-summary__value"></div></div>
                       <div><span class="muted">شرکت</span><div id="portalCaseCompany" class="portal-summary__value"></div></div>
                       <div><span class="muted">فاز</span><div id="portalCasePhase" class="portal-summary__value"></div></div>
@@ -160,6 +173,11 @@
                     </div>
                     <div id="portalActionHint" class="portal-action-hint hidden"></div>
                     <div class="row">
+                      <div class="formrow">
+                        <label for="portalCaseTitleInput">ویرایش عنوان</label>
+                        <input id="portalCaseTitleInput" type="text" maxlength="256" />
+                      </div>
+                      <button id="portalCaseTitleSave" type="button" class="btn">ذخیره عنوان</button>
                       <button id="portalRefreshCase" class="btn btn--primary">بروزرسانی</button>
                     </div>
                   </div>
@@ -176,12 +194,18 @@
                 <div id="gPortalHeader" class="card portal-summary">
                   <div class="portal-summary__grid">
                     <div><span class="muted">شماره</span><div id="gCaseNumber" class="portal-summary__value"></div></div>
+                    <div><span class="muted">عنوان</span><div id="gCaseTitle" class="portal-summary__value"></div></div>
                     <div><span class="muted">وضعیت</span><div id="gCaseStatus" class="portal-summary__value"></div></div>
                     <div><span class="muted">شرکت</span><div id="gCaseCompany" class="portal-summary__value"></div></div>
                     <div><span class="muted">نقش</span><div id="gCaseRole" class="portal-summary__value"></div></div>
                   </div>
                   <div id="gPortalActionHint" class="portal-action-hint hidden"></div>
                   <div class="row">
+                    <div class="formrow">
+                      <label for="gCaseTitleInput">ویرایش عنوان</label>
+                      <input id="gCaseTitleInput" type="text" maxlength="256" />
+                    </div>
+                    <button id="gCaseTitleSave" type="button" class="btn">ذخیره عنوان</button>
                     <button id="gPortalRefreshCase" type="button" class="btn btn--primary">بروزرسانی</button>
                   </div>
                 </div>
@@ -196,12 +220,18 @@
                 <div id="lPortalHeader" class="card portal-summary">
                   <div class="portal-summary__grid">
                     <div><span class="muted">شماره</span><div id="lCaseNumber" class="portal-summary__value"></div></div>
+                    <div><span class="muted">عنوان</span><div id="lCaseTitle" class="portal-summary__value"></div></div>
                     <div><span class="muted">وضعیت</span><div id="lCaseStatus" class="portal-summary__value"></div></div>
                     <div><span class="muted">شرکت</span><div id="lCaseCompany" class="portal-summary__value"></div></div>
                     <div><span class="muted">نقش</span><div id="lCaseRole" class="portal-summary__value"></div></div>
                   </div>
                   <div id="lPortalActionHint" class="portal-action-hint hidden"></div>
                   <div class="row">
+                    <div class="formrow">
+                      <label for="lCaseTitleInput">ویرایش عنوان</label>
+                      <input id="lCaseTitleInput" type="text" maxlength="256" />
+                    </div>
+                    <button id="lCaseTitleSave" type="button" class="btn">ذخیره عنوان</button>
                     <button id="lPortalRefreshCase" type="button" class="btn btn--primary">بروزرسانی</button>
                   </div>
                 </div>
@@ -650,7 +680,7 @@
     <script src="js/kanban.js"></script>
     <script src="js/portal.js"></script>
     <script src="js/guarantee-portal.js"></script>
-    <script src="js/loan-portal.js?v=20260606-attachments-download"></script>
+    <script src="js/loan-portal.js?v=20260616-title-save"></script>
     <script src="js/fund-credit-capacity-ui.js"></script>
     <script src="js/fund-credit-limits.js"></script>
     <script src="js/cases-hub.js"></script>

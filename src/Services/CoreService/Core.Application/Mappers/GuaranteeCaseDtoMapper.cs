@@ -63,6 +63,7 @@ public sealed class GuaranteeCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) :
             return new GuaranteeCaseInternalDto(
                 entity.Id,
                 entity.CaseNumber,
+                entity.Title,
                 entity.ApplicantUserId,
                 applicantFullName,
                 applicantPhoneNumber,
@@ -83,6 +84,7 @@ public sealed class GuaranteeCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) :
         return new GuaranteeCaseApplicantDto(
             entity.Id,
             entity.CaseNumber,
+            entity.Title,
             entity.ApplicantType,
             entity.CurrentPhase,
             entity.CurrentStatus,
@@ -223,6 +225,7 @@ public sealed class GuaranteeCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) :
             return new GuaranteeCaseInternalDto(
                 projection.Id,
                 projection.CaseNumber,
+                projection.Title,
                 projection.ApplicantUserId,
                 projection.ApplicantFullName,
                 projection.ApplicantPhoneNumber,
@@ -243,6 +246,7 @@ public sealed class GuaranteeCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) :
         return new GuaranteeCaseApplicantDto(
             projection.Id,
             projection.CaseNumber,
+            projection.Title,
             projection.ApplicantType,
             projection.CurrentPhase,
             projection.CurrentStatus,
@@ -301,6 +305,7 @@ public sealed class GuaranteeCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) :
             return new GuaranteeCaseInternalDto(
                 projection.Id,
                 projection.CaseNumber,
+                projection.Title,
                 projection.ApplicantUserId,
                 projection.ApplicantFullName,
                 projection.ApplicantPhoneNumber,
@@ -318,6 +323,7 @@ public sealed class GuaranteeCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) :
         return new GuaranteeCaseApplicantDto(
             projection.Id,
             projection.CaseNumber,
+            projection.Title,
             projection.ApplicantType,
             projection.CurrentPhase,
             projection.CurrentStatus,

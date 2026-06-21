@@ -5,6 +5,7 @@ namespace Core.Application.Abstractions;
 public sealed record LoanCaseListProjection(
     Guid Id,
     string CaseNumber,
+    string? Title,
     string ApplicantUserId,
     ApplicantType ApplicantType,
     LoanCasePhase CurrentPhase,

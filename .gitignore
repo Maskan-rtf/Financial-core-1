@@ -27,6 +27,8 @@ publish/
 # Logs
 ##################################
 *.log
+debug-*.log
+.cursor/debug-*.log
 
 ##################################
 # OS
@@ -61,3 +63,9 @@ __pycache__/
 ##################################
 _tmp/
 _tmp_*
+
+##################################
+# GapCode / MCP local secrets
+##################################
+.gapcode/secrets.env
+**/gapcode-secrets.env

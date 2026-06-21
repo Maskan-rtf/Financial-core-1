@@ -86,6 +86,9 @@
   }
 
   function caseSubjectFromCase(module, obj) {
+    const title = pick(obj, "title", "Title");
+    if (title && String(title).trim()) return String(title).trim();
+
     if (module === "investment") {
       const company = pickCompany(obj);
       if (company && applicantTypeOf(obj) === 2) {

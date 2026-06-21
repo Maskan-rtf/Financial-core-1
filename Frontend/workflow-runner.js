@@ -155,12 +155,12 @@
       });
       if (!putRes.ok) throw new Error("بارگذاری در storage با وضعیت " + putRes.status + " ناموفق بود.");
 
-      await panel.apiRequest({
-        method: "POST",
-        path: panel.casesBasePath() + "/" + caseId + "/documents/confirm?s3Key=" + encodeURIComponent(s3Key),
-        body: null,
-        json: false,
-      });
+     await panel.apiRequest({
+       method: "POST",
+        path: panel.casesBasePath() + "/" + caseId + "/documents/confirm?s3Key=" + encodeURIComponent(s3Key) + "&originalFileName=" + encodeURIComponent(fileName),
+       body: null,
+       json: false,
+     });
 
       return s3Key;
     }

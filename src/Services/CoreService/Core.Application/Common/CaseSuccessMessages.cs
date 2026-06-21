@@ -51,4 +51,5 @@ public static class CaseSuccessMessages
     public const string CommentsRetrieved = "فهرست نظرات دریافت شد.";
     public const string CommentAdded = "نظر ثبت شد.";
     public const string CommentAttachmentAdded = "پیوست نظر ثبت شد.";
+    public const string CaseTitleUpdated = "عنوان پرونده به‌روزرسانی شد.";
 }

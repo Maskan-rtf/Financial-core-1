@@ -84,6 +84,8 @@ public sealed class InvestmentCaseAppService(
             entity.AssignCompany(linkedCompany.Id);
         }
 
+        entity.SetTitle(request.Title);
+
         var workflowInstanceId = await workflowOrchestrator.StartAsync(entity.Id, cancellationToken);
         entity.AttachWorkflowInstance(workflowInstanceId);
 
@@ -144,6 +146,34 @@ public sealed class InvestmentCaseAppService(
                 clock.UtcNow,
                 authorizationService.IsInternalUser,
                 applicantContact));
+    }
+
+    public async Task<Result<InvestmentCaseDto>> UpdateTitleAsync(
+        Guid caseId,
+        UpdateCaseTitleRequest request,
+        CancellationToken cancellationToken)
+    {
+        var authResult = RequireUserId();
+        if (authResult.IsFailure)
+            return Result<InvestmentCaseDto>.Fail(authResult.Error!);
+
+        var isInternal = authorizationService.IsInternalUser;
+        var exists = await dbContext.InvestmentCases
+            .AsNoTracking()
+            .AnyAsync(
+                x => x.Id == caseId && (isInternal || x.ApplicantUserId == authResult.Value),
+                cancellationToken);
+
+        if (!exists)
+            return Result<InvestmentCaseDto>.Fail(Error.NotFound(ApiMessages.CaseNotFound));
+
+        var title = string.IsNullOrWhiteSpace(request.Title) ? null : request.Title.Trim();
+        var rows = await dbContext.InvestmentCases.SetTitleAsync(caseId, title, clock.UtcNow, cancellationToken);
+
+        if (rows == 0)
+            return Result<InvestmentCaseDto>.Fail(Error.NotFound(ApiMessages.CaseNotFound));
+
+        return await GetAsync(caseId, cancellationToken);
     }
 
     public async Task<Result> UpdateDataEntry1Async(Guid caseId, UpdateDataEntry1Request request, CancellationToken cancellationToken)
@@ -357,7 +387,7 @@ public sealed class InvestmentCaseAppService(
         if (!authorizationService.HasPermission(CasePermissions.ManageContracts))
             return Result.Fail(Error.Forbidden(ApiMessages.NotAllowed));
 
-        var result = await ConfirmDocumentUploadedAsync(caseId, s3Key, ct);
+        var result = await ConfirmDocumentUploadedAsync(caseId, s3Key, null, ct);
         return result.IsFailure ? Result.Fail(result.Error!) : Result.Ok();
     }
 
@@ -391,7 +421,7 @@ public sealed class InvestmentCaseAppService(
         if (!authorizationService.HasPermission(CasePermissions.ManageContracts))
             return Result.Fail(Error.Forbidden(ApiMessages.NotAllowed));
 
-        var result = await ConfirmDocumentUploadedAsync(caseId, s3Key, ct);
+        var result = await ConfirmDocumentUploadedAsync(caseId, s3Key, null, ct);
         return result.IsFailure ? Result.Fail(result.Error!) : Result.Ok();
     }
 
@@ -1431,7 +1461,7 @@ public sealed class InvestmentCaseAppService(
         return await CompleteDocumentConfirmAsync(caseId, document, cancellationToken);
     }
 
-    public async Task<Result<CaseDocumentDto>> ConfirmDocumentUploadedAsync(Guid caseId, string s3Key, CancellationToken cancellationToken)
+    public async Task<Result<CaseDocumentDto>> ConfirmDocumentUploadedAsync(Guid caseId, string s3Key, string? originalFileName, CancellationToken cancellationToken)
     {
         var authResult = RequireUserId();
         if (authResult.IsFailure) return Result<CaseDocumentDto>.Fail(authResult.Error!);
@@ -1488,10 +1518,15 @@ public sealed class InvestmentCaseAppService(
             ? "application/octet-stream"
             : metadata.ContentType;
 
+        // Use original filename if provided, otherwise fall back to s3Key basename
+        var fileName = string.IsNullOrWhiteSpace(originalFileName)
+            ? Path.GetFileName(s3Key)
+            : originalFileName;
+
         var document = await PersistCaseDocumentAsync(
             entity.Id,
             s3Key,
-            Path.GetFileName(s3Key),
+            fileName,
             mimeType,
             metadata.ContentLength,
             version,

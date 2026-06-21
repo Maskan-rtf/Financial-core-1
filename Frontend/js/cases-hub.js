@@ -271,7 +271,9 @@
     setSubTab("workflow");
     const numEl = qs("#caseDetailNumber");
     if (numEl) {
-      numEl.textContent = row ? pick(row, "caseNumber", "CaseNumber") || caseId : caseId;
+      const caseNumber = row ? pick(row, "caseNumber", "CaseNumber") || caseId : caseId;
+      const title = row ? pick(row, "title", "Title") : "";
+      numEl.textContent = title ? title + " · " + caseNumber : caseNumber;
     }
     const companyEl = qs("#caseDetailCompany");
     if (companyEl) {
@@ -298,9 +300,14 @@
     });
   }
 
+  function optionalTitle(selector) {
+    const value = qs(selector)?.value?.trim();
+    return value || null;
+  }
+
   async function createInvestmentCase() {
     const applicantType = Number(qs("#caseApplicantTypeHub")?.value || 1);
-    const payload = { applicantType };
+    const payload = { applicantType, title: optionalTitle("#caseTitleHub") };
     if (applicantType === 2) {
       const companyId = qs("#caseCompanyIdHub")?.value?.trim();
       if (!companyId) throw new Error("شرکت را انتخاب کنید.");
@@ -312,7 +319,7 @@
 
   async function createGuaranteeCase() {
     const applicantType = Number(qs("#gApplicantTypeHub")?.value || 1);
-    const payload = { applicantType };
+    const payload = { applicantType, title: optionalTitle("#gCaseTitleHub") };
     if (applicantType === 2) {
       const companyId = qs("#gCompanyIdHub")?.value?.trim();
       if (!companyId) throw new Error("شرکت را انتخاب کنید.");
@@ -324,7 +331,7 @@
 
   async function createLoanCase() {
     const applicantType = Number(qs("#lApplicantTypeHub")?.value || 1);
-    const payload = { applicantType, companyId: null };
+    const payload = { applicantType, companyId: null, title: optionalTitle("#lCaseTitleHub") };
     if (applicantType === 2) {
       const companyId = qs("#lCompanyIdHub")?.value?.trim();
       if (!companyId) throw new Error("شرکت را انتخاب کنید.");

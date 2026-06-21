@@ -23,6 +23,14 @@ public sealed class LoanCasesController(ILoanCaseAppService service) : ApiContro
         return Respond(result, LoanSuccessMessages.LoanCaseCreated, HttpStatusCode.Created);
     }
 
+    [HttpPut("{id:guid}/title")]
+    [Authorize]
+    public async Task<IActionResult> UpdateTitle(Guid id, [FromBody] UpdateCaseTitleRequest request, CancellationToken ct)
+    {
+        var result = await service.UpdateTitleAsync(id, request, ct);
+        return Respond(result, LoanSuccessMessages.CaseTitleUpdated);
+    }
+
     [HttpGet("{id:guid}")]
     [Authorize]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
@@ -246,9 +254,9 @@ public sealed class LoanCasesController(ILoanCaseAppService service) : ApiContro
 
     [HttpPost("{id:guid}/documents/confirm")]
     [Authorize]
-    public async Task<IActionResult> ConfirmDocument(Guid id, [FromQuery] string s3Key, CancellationToken ct)
+    public async Task<IActionResult> ConfirmDocument(Guid id, [FromQuery] string s3Key, [FromQuery] string? originalFileName, CancellationToken ct)
     {
-        var result = await service.ConfirmDocumentUploadedAsync(id, s3Key, ct);
+        var result = await service.ConfirmDocumentUploadedAsync(id, s3Key, originalFileName, ct);
         return Respond(result, GuaranteeSuccessMessages.DocumentConfirmed);
     }
 

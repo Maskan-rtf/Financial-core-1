@@ -334,14 +334,14 @@
       headers: { "Content-Type": mimeType },
       body: file,
     });
-    if (!putRes.ok) throw new Error("بارگذاری فایل با کد " + putRes.status + " ناموفق بود.");
+   if (!putRes.ok) throw new Error("بارگذاری فایل با کد " + putRes.status + " ناموفق بود.");
 
-    await state.panel.apiRequest({
-      method: "POST",
-      path: casesPath("/" + caseId + "/documents/confirm?s3Key=" + encodeURIComponent(s3Key)),
-      body: null,
-      json: false,
-    });
+   await state.panel.apiRequest({
+     method: "POST",
+      path: casesPath("/" + caseId + "/documents/confirm?s3Key=" + encodeURIComponent(s3Key) + "&originalFileName=" + encodeURIComponent(file.name)),
+     body: null,
+     json: false,
+   });
     return s3Key;
   }
 
@@ -1425,6 +1425,13 @@
     empty.classList.add("hidden");
     header.classList.remove("hidden");
     qs("#portalCaseNumber").textContent = pickCaseNumber(state.caseData) || "—";
+    const title = pickProp(state.caseData, "title", "Title") || "—";
+    const titleEl = qs("#portalCaseTitle");
+    if (titleEl) titleEl.textContent = title;
+    const titleInput = qs("#portalCaseTitleInput");
+    if (titleInput && document.activeElement !== titleInput) {
+      titleInput.value = pickProp(state.caseData, "title", "Title") || "";
+    }
     const company = pickCompany(state.caseData);
     const companyEl = qs("#portalCaseCompany");
     if (companyEl) {
@@ -1723,6 +1730,23 @@
   function wireEvents() {
     const refreshBtn = qs("#portalRefreshCase");
     if (refreshBtn) refreshBtn.addEventListener("click", () => withBusy(refreshCase));
+
+    const titleSaveBtn = qs("#portalCaseTitleSave");
+    if (titleSaveBtn) {
+      titleSaveBtn.addEventListener("click", () =>
+        withBusy(async () => {
+          if (!state.caseId) return;
+          const title = qs("#portalCaseTitleInput")?.value?.trim() || null;
+          await state.panel.apiRequest({
+            method: "PUT",
+            path: casesPath("/" + state.caseId + "/title"),
+            body: { title },
+          });
+          await refreshCase();
+          setPortalInfo("عنوان ذخیره شد.");
+        })
+      );
+    }
 
     const unitTabs = qs("#portalUnitTabs");
     if (unitTabs) {

@@ -64,6 +64,7 @@ public sealed class GuaranteeCaseRepository(CoreDbContext dbContext) : IGuarante
             .Select(x => new GuaranteeCaseDetailProjection(
                 x.Id,
                 x.CaseNumber,
+                x.Title,
                 x.ApplicantUserId,
                 x.ApplicantType,
                 x.CurrentPhase,
@@ -180,6 +181,7 @@ public sealed class GuaranteeCaseRepository(CoreDbContext dbContext) : IGuarante
         var projected = query.Select(x => new GuaranteeCaseListProjection(
             x.Id,
             x.CaseNumber,
+            x.Title,
             x.ApplicantUserId,
             x.ApplicantType,
             x.CurrentPhase,
