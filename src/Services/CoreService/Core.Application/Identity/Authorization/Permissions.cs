@@ -73,7 +73,7 @@ public static class RolePermissions
         Permissions.GuaranteeCases_SetApplicantCreditLimit
     ];
 
-    private static readonly string[] LegalUnitPermissions =
+    private static readonly string[] LegalDepartmentPermissions =
     [
         Permissions.Users_Read,
         Permissions.Companies_Read,
@@ -84,7 +84,7 @@ public static class RolePermissions
         Permissions.GuaranteeCases_LegalReview
     ];
 
-    private static readonly string[] FinancialUnitPermissions =
+    private static readonly string[] FinancialDepartmentPermissions =
     [
         Permissions.Users_Read,
         Permissions.Companies_Read,
@@ -96,15 +96,41 @@ public static class RolePermissions
         Permissions.GuaranteeCases_FinanceReview
     ];
 
-    private static readonly string[] TechnicalUnitPermissions =
+    private static readonly string[] InvestmentDepartmentPermissions =
     [
         Permissions.Users_Read,
+        Permissions.Users_Write,
+        Permissions.Companies_Read,
+        Permissions.Companies_Write,
         Permissions.Sessions_Read,
         Permissions.Otp_Send,
         Permissions.Otp_Verify,
         Permissions.InvestmentCases_Read,
-        Permissions.InvestmentCases_Review
+        Permissions.InvestmentCases_Review,
+        Permissions.InvestmentCases_Write
     ];
+
+    private static readonly string[] CreditDepartmentPermissions =
+    [
+        Permissions.Users_Read,
+        Permissions.Companies_Read,
+        Permissions.Companies_Write,
+        Permissions.Sessions_Read,
+        Permissions.GuaranteeCases_Read,
+        Permissions.GuaranteeCases_CreditReview,
+        Permissions.GuaranteeCases_Write
+    ];
+
+    public static readonly IReadOnlyDictionary<UserDepartment, IReadOnlyCollection<string>> DepartmentPermissionMappings =
+        new Dictionary<UserDepartment, IReadOnlyCollection<string>>
+        {
+            [UserDepartment.Investment] = InvestmentDepartmentPermissions,
+            [UserDepartment.Credit] = CreditDepartmentPermissions,
+            [UserDepartment.Legal] = LegalDepartmentPermissions,
+            [UserDepartment.Financial] = FinancialDepartmentPermissions,
+            // Keep the current broad technical access by preserving the union of existing expert/manager capabilities.
+            [UserDepartment.Technical] = AllPermissions
+        };
 
     public static readonly IReadOnlyDictionary<string, IReadOnlyCollection<string>> RolePermissionMappings =
         new Dictionary<string, IReadOnlyCollection<string>>(StringComparer.OrdinalIgnoreCase)
@@ -121,30 +147,6 @@ public static class RolePermissions
                 Permissions.GuaranteeCases_Read,
                 Permissions.GuaranteeCases_Write
             ],
-            [UserRoleClaims.InvestmentExpert] =
-            [
-                Permissions.Users_Read,
-                Permissions.Companies_Read,
-                Permissions.Companies_Write,
-                Permissions.Sessions_Read,
-                Permissions.Otp_Send,
-                Permissions.Otp_Verify,
-                Permissions.InvestmentCases_Read,
-                Permissions.InvestmentCases_Review
-            ],
-            [UserRoleClaims.InvestmentManager] =
-            [
-                Permissions.Users_Read,
-                Permissions.Users_Write,
-                Permissions.Companies_Read,
-                Permissions.Companies_Write,
-                Permissions.Sessions_Read,
-                Permissions.Otp_Send,
-                Permissions.Otp_Verify,
-                Permissions.InvestmentCases_Read,
-                Permissions.InvestmentCases_Review,
-                Permissions.InvestmentCases_Write
-            ],
             [UserRoleClaims.Ceo] =
             [
                 Permissions.Users_Read,
@@ -158,34 +160,27 @@ public static class RolePermissions
                 Permissions.GuaranteeCases_Read,
                 Permissions.GuaranteeCases_CeoApprove,
                 Permissions.GuaranteeCases_SetApplicantCreditLimit
-            ],
-            [UserRoleClaims.CreditExpert] =
-            [
-                Permissions.Users_Read,
-                Permissions.Companies_Read,
-                Permissions.Sessions_Read,
-                Permissions.GuaranteeCases_Read,
-                Permissions.GuaranteeCases_CreditReview,
-                Permissions.GuaranteeCases_Write
-            ],
-            [UserRoleClaims.CreditManager] =
-            [
-                Permissions.Users_Read,
-                Permissions.Companies_Read,
-                Permissions.Companies_Write,
-                Permissions.Sessions_Read,
-                Permissions.GuaranteeCases_Read,
-                Permissions.GuaranteeCases_CreditReview,
-                Permissions.GuaranteeCases_Write
-            ],
-            [UserRoleClaims.LegalExpert] = LegalUnitPermissions,
-            [UserRoleClaims.LegalManager] = LegalUnitPermissions,
-            [UserRoleClaims.LegalUnit] = LegalUnitPermissions,
-            [UserRoleClaims.FinancialExpert] = FinancialUnitPermissions,
-            [UserRoleClaims.FinancialManager] = FinancialUnitPermissions,
-            [UserRoleClaims.FinancialUnit] = FinancialUnitPermissions,
-            // Sample: full API access (same set as Admin). Revert to TechnicalUnitPermissions for production.
-            [UserRoleClaims.TechnicalExpert] = AllPermissions,
-            [UserRoleClaims.TechnicalManager] = TechnicalUnitPermissions
+            ]
         };
+
+    public static bool TryGetPermissionsForRole(string role, out IReadOnlyCollection<string> permissions)
+    {
+        var normalized = UserRoleClaims.Normalize(role);
+
+        if (RolePermissionMappings.TryGetValue(normalized, out var directPermissions))
+        {
+            permissions = directPermissions;
+            return true;
+        }
+
+        if (UserRoleDepartments.TryGetUserDepartment(normalized, out var department) &&
+            DepartmentPermissionMappings.TryGetValue(department, out var departmentPermissions))
+        {
+            permissions = departmentPermissions;
+            return true;
+        }
+
+        permissions = Array.Empty<string>();
+        return false;
+    }
 }

@@ -203,12 +203,12 @@
     return "/api/v" + TESTPANEL_CONFIG.casesVersion + "/guaranteecases";
   }
 
-  function guaranteeRenewalsBasePath() {
-    return "/api/v" + TESTPANEL_CONFIG.casesVersion + "/guarantee-renewals";
-  }
-
   function loanCasesBasePath() {
     return "/api/v" + TESTPANEL_CONFIG.casesVersion + "/loancases";
+  }
+
+  function caseStagesBasePath(module) {
+    return "/api/v" + TESTPANEL_CONFIG.casesVersion + "/casestages/" + module;
   }
 
   function kanbanBasePath() {
@@ -1658,8 +1658,8 @@
       apiRequest,
       casesBasePath,
       guaranteeCasesBasePath,
-      guaranteeRenewalsBasePath,
       loanCasesBasePath,
+      caseStagesBasePath,
       kanbanBasePath,
       unwrapEnvelope,
       saveSessionFromLogin,

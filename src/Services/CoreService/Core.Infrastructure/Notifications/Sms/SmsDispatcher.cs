@@ -69,4 +69,58 @@ public sealed class SmsDispatcher(
             NotBeforeUtc = notBefore
         }, cancellationToken).AsTask();
     }
+
+    public Task EnqueueRawAsync(
+        string mobile,
+        string message,
+        Guid? caseId = null,
+        TimeSpan? delay = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!options.Value.QueueEnabled)
+            return SendImmediateRawAsync(mobile, message, caseId, cancellationToken);
+
+        var notBefore = DateTimeOffset.UtcNow.Add(delay ?? TimeSpan.Zero);
+        ApplicationLog.Completed(logger,
+            "SMS enqueued (raw) to {Mobile}, not before {NotBeforeUtc}",
+            mobile, notBefore);
+
+        return queue.EnqueueAsync(new SmsQueuedMessage
+        {
+            RawMessage = message,
+            Mobile = mobile,
+            NotBeforeUtc = notBefore,
+            CaseId = caseId
+        }, cancellationToken).AsTask();
+    }
+
+    public async Task<bool> SendImmediateRawAsync(
+        string mobile,
+        string message,
+        Guid? caseId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var success = await smsService.SendRawMessageAsync(mobile, message);
+
+        await auditStore.AppendAsync(new SmsAuditEntry
+        {
+            TemplateId = SmsTemplateId.CaseStatusChanged,
+            Mobile = mobile,
+            Message = message,
+            Success = success,
+            Error = success ? null : "Provider returned failure",
+            CaseId = caseId
+        }, cancellationToken);
+
+        if (success)
+        {
+            ApplicationLog.Completed(logger, "SMS sent immediately (raw) to {Mobile}", mobile);
+        }
+        else
+        {
+            logger.LogWarning("Raw SMS send failed to {Mobile}", mobile);
+        }
+
+        return success;
+    }
 }

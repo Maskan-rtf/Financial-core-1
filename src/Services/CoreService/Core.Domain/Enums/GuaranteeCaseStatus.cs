@@ -16,5 +16,13 @@ public enum GuaranteeCaseStatus
     Completed = 12,
     Rejected = 13,
     Cancelled = 14,
-    Archived = 15
+    Archived = 15,
+    AmendmentDraft = 16,
+    AmendmentDataEntry = 17,
+    AmendmentCreditReview = 18,
+    AmendmentCeoApproval = 19,
+    AmendmentLegalReview = 20,
+    AmendmentCompleted = 21,
+    AmendmentApproved = 22,
+    AmendmentRejected = 23
 }

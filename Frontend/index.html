@@ -2,11 +2,8 @@
 <html lang="fa" dir="rtl">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta name="viewport" content="width=1280" />
     <meta name="theme-color" content="#0b0f14" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>پنل پرونده‌های مالی</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -172,6 +169,7 @@
                       <div><span class="muted">نقش فعال</span><div id="portalCaseRole" class="portal-summary__value"></div></div>
                     </div>
                     <div id="portalActionHint" class="portal-action-hint hidden"></div>
+                    <div id="portalStageRollback" class="hidden"></div>
                     <div class="row">
                       <div class="formrow">
                         <label for="portalCaseTitleInput">ویرایش عنوان</label>
@@ -200,6 +198,7 @@
                     <div><span class="muted">نقش</span><div id="gCaseRole" class="portal-summary__value"></div></div>
                   </div>
                   <div id="gPortalActionHint" class="portal-action-hint hidden"></div>
+                  <div id="gStageRollback" class="hidden"></div>
                   <div class="row">
                     <div class="formrow">
                       <label for="gCaseTitleInput">ویرایش عنوان</label>
@@ -209,6 +208,7 @@
                     <button id="gPortalRefreshCase" type="button" class="btn btn--primary">بروزرسانی</button>
                   </div>
                 </div>
+                <div id="gPortalActionBar" class="portal-action-bar hidden"></div>
                 <div id="gPortalStepper" class="portal-stepper"></div>
                 <div id="gPortalStages" class="portal-stages"></div>
               </div>
@@ -226,6 +226,7 @@
                     <div><span class="muted">نقش</span><div id="lCaseRole" class="portal-summary__value"></div></div>
                   </div>
                   <div id="lPortalActionHint" class="portal-action-hint hidden"></div>
+                  <div id="lStageRollback" class="hidden"></div>
                   <div class="row">
                     <div class="formrow">
                       <label for="lCaseTitleInput">ویرایش عنوان</label>
@@ -306,13 +307,13 @@
           <div class="home-dashboard">
             <div class="home-dashboard__subtabs">
               <button type="button" id="homeTabOverview" class="home-subtab is-active">نمای کلی</button>
-              <button type="button" id="homeTabEmployeeKpi" class="home-subtab hidden">عملکرد پرسنل / KPI</button>
+              <button type="button" id="homeTabEmployeeKpi" class="home-subtab hidden">عملکرد پرسنل و SLA</button>
             </div>
             <div id="homeOverviewPanel">
             <div class="home-dashboard__hero">
               <div>
-                <h1 class="home-dashboard__title">صفحه اصلی — مرکز فرمان</h1>
-                <p id="homeDashboardMeta" class="muted home-dashboard__meta">نمای نقش را انتخاب کنید و داده‌ها را بارگذاری کنید.</p>
+                <h1 class="home-dashboard__title">صفحه اصلی — خلاصه وضعیت</h1>
+                <p id="homeDashboardMeta" class="muted home-dashboard__meta">پس از ورود، خلاصه پرونده‌ها و شاخص‌های مرتبط با نقش شما نمایش داده می‌شود.</p>
               </div>
               <div class="home-dashboard__controls">
                 <div id="homeAdminControls" class="home-admin-controls hidden">
@@ -360,7 +361,7 @@
               <div class="employee-kpi__hero">
                 <div>
                   <h2 class="employee-kpi__title">عملکرد پرسنل و SLA</h2>
-                  <p id="employeeKpiMeta" class="muted employee-kpi__meta">زمان رسیدگی بر اساس تاریخچه گردش کار محاسبه شده است.</p>
+                  <p id="employeeKpiMeta" class="muted employee-kpi__meta">میانگین، حداقل و حداکثر زمان رسیدگی بر اساس تاریخچه گردش کار محاسبه می‌شود.</p>
                 </div>
                 <div class="employee-kpi__controls">
                   <div class="home-role-select">
@@ -372,7 +373,7 @@
                       <option value="AllTime">کل دوره</option>
                     </select>
                   </div>
-                  <button id="btnEmployeeKpiRefresh" type="button" class="btn btn--primary" title="اجرای فوری محاسبه KPI">اجرای محاسبه</button>
+                  <button id="btnEmployeeKpiRefresh" type="button" class="btn btn--primary" title="اجرای فوری محاسبه SLA">اجرای محاسبه</button>
                 </div>
               </div>
               <div id="employeeKpiError" class="alert alert--error hidden"></div>
@@ -449,19 +450,19 @@
             <section class="admin-role-section" data-section="executive">
               <div class="admin-section-header">
                 <h2>نمای اجرایی</h2>
-                <p class="muted">خلاصه KPI، توزیع وضعیت، خروجی مالی و روند پرونده‌ها</p>
+                <p class="muted">خلاصه شاخص‌ها، ترکیب وضعیت پرونده‌ها، خروجی مالی و روند ثبت</p>
               </div>
               <div class="admin-charts-grid admin-charts-grid--3">
                 <div class="admin-chart-card">
-                  <div class="admin-chart-card__title">توزیع وضعیت (دونات)</div>
+                  <div class="admin-chart-card__title">ترکیب وضعیت پرونده‌ها</div>
                   <div class="admin-chart-card__canvas"><canvas id="adminChartStatusDoughnut"></canvas></div>
                 </div>
                 <div class="admin-chart-card">
-                  <div class="admin-chart-card__title">توزیع فاز (پای)</div>
+                  <div class="admin-chart-card__title">توزیع بر اساس فاز</div>
                   <div class="admin-chart-card__canvas"><canvas id="adminChartPhasePie"></canvas></div>
                 </div>
                 <div class="admin-chart-card">
-                  <div class="admin-chart-card__title">حجم فعال ماژول‌ها (پای)</div>
+                  <div class="admin-chart-card__title">مقایسه مبلغ پرونده‌های جاری</div>
                   <div class="admin-chart-card__canvas"><canvas id="adminChartVolumePie"></canvas></div>
                 </div>
               </div>
@@ -471,12 +472,12 @@
                   <div class="admin-chart-card__canvas admin-chart-card__canvas--tall"><canvas id="adminChartMonthlyBar"></canvas></div>
                 </div>
                 <div class="admin-chart-card">
-                  <div class="admin-chart-card__title">روند ماهانه پرونده‌ها</div>
+                  <div class="admin-chart-card__title">روند ثبت پرونده (ماهانه)</div>
                   <div class="admin-chart-card__canvas admin-chart-card__canvas--tall"><canvas id="adminChartTrendLine"></canvas></div>
                 </div>
               </div>
               <div class="admin-chart-card admin-chart-card--wide">
-                <div class="admin-chart-card__title">خط لوله وضعیت (۱۰ وضعیت برتر)</div>
+                <div class="admin-chart-card__title">پرونده‌ها بر اساس وضعیت (۱۰ وضعیت پرتکرار)</div>
                 <div class="admin-chart-card__canvas admin-chart-card__canvas--tall"><canvas id="adminChartPipelineBar"></canvas></div>
               </div>
               <div id="adminBottlenecks" class="admin-bottlenecks card"></div>
@@ -491,7 +492,7 @@
               <div id="adminCeoMetrics" class="dashboard-metrics"></div>
               <div class="admin-charts-grid admin-charts-grid--1">
                 <div class="admin-chart-card">
-                  <div class="admin-chart-card__title">خط لوله وضعیت CEO (دونات)</div>
+                  <div class="admin-chart-card__title">پرونده‌ها بر اساس وضعیت</div>
                   <div class="admin-chart-card__canvas admin-chart-card__canvas--tall"><canvas id="adminChartCeoPipeline"></canvas></div>
                 </div>
               </div>
@@ -505,16 +506,16 @@
               </div>
               <div class="admin-charts-grid admin-charts-grid--2">
                 <div class="admin-chart-card">
-                  <div class="admin-chart-card__title">توزیع وضعیت (پای)</div>
+                  <div class="admin-chart-card__title">پرونده‌ها بر اساس وضعیت</div>
                   <div class="admin-chart-card__canvas admin-chart-card__canvas--tall"><canvas id="adminChartBoardStatus"></canvas></div>
                 </div>
                 <div class="admin-chart-card">
-                  <div class="admin-chart-card__title">توزیع فاز (دونات)</div>
+                  <div class="admin-chart-card__title">توزیع بر اساس فاز</div>
                   <div class="admin-chart-card__canvas admin-chart-card__canvas--tall"><canvas id="adminChartBoardPhase"></canvas></div>
                 </div>
               </div>
               <div class="admin-chart-card admin-chart-card--wide">
-                <div class="admin-chart-card__title">روند ماهانه (میله‌ای)</div>
+                <div class="admin-chart-card__title">روند ثبت پرونده (ماهانه)</div>
                 <div class="admin-chart-card__canvas admin-chart-card__canvas--tall"><canvas id="adminChartBoardTrend"></canvas></div>
               </div>
             </section>
@@ -523,10 +524,10 @@
             <section class="admin-role-section hidden" data-section="departments">
               <div class="admin-section-header">
                 <h2>واحدهای سازمانی</h2>
-                <p class="muted">صف انتظار هر واحد و توزیع ماژول</p>
+                <p class="muted">صف کاری هر واحد و توزیع ماژول‌ها</p>
               </div>
               <div class="admin-chart-card admin-chart-card--wide">
-                <div class="admin-chart-card__title">مقایسه صف انتظار واحدها</div>
+                <div class="admin-chart-card__title">مقایسه پرونده‌های در صف واحدها</div>
                 <div class="admin-chart-card__canvas admin-chart-card__canvas--tall"><canvas id="adminChartDeptCompare"></canvas></div>
               </div>
               <div id="adminDeptGrid" class="admin-dept-grid"></div>
@@ -674,9 +675,12 @@
 
     <script src="config.js"></script>
     <script src="js/workflow-model.js"></script>
+    <script src="js/money-in-words.js"></script>
     <script src="js/guarantee-workflow-model.js"></script>
     <script src="js/loan-workflow-model.js"></script>
     <script src="js/ui-components.js"></script>
+    <script src="js/case-stage-rollback.js"></script>
+    <script src="js/portal-case-refresh.js"></script>
     <script src="js/kanban.js"></script>
     <script src="js/portal.js"></script>
     <script src="js/guarantee-portal.js"></script>

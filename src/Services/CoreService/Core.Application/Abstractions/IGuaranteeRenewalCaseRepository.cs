@@ -18,6 +18,7 @@ public interface IGuaranteeRenewalCaseRepository
 
 public sealed record GuaranteeRenewalKanbanProjection(
     Guid Id,
+    Guid ParentGuaranteeCaseId,
     string CaseNumber,
     GuaranteeRenewalStatus CurrentStatus,
     DateTimeOffset CreatedAt,

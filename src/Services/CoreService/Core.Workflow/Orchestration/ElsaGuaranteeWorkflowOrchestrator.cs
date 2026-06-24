@@ -17,7 +17,6 @@ namespace Core.Workflow.Orchestration;
 
 public sealed class ElsaGuaranteeWorkflowOrchestrator(
     IGuaranteeCaseRepository guaranteeCaseRepository,
-    IGuaranteeRenewalCaseRepository renewalCaseRepository,
     IWorkflowDefinitionService workflowDefinitionService,
     IWorkflowDispatcher workflowDispatcher,
     IWorkflowResumer workflowResumer,
@@ -31,19 +30,10 @@ public sealed class ElsaGuaranteeWorkflowOrchestrator(
     public Task<string> StartGuaranteeCaseAsync(Guid caseId, CancellationToken ct)
         => StartAsync(GuaranteeCaseWorkflow.DefinitionId, caseId, ct);
 
-    public Task<string> StartRenewalCaseAsync(Guid caseId, CancellationToken ct)
-        => StartAsync(GuaranteeRenewalWorkflow.DefinitionId, caseId, ct);
-
     public async Task SignalGuaranteeCaseAsync(Guid caseId, string signal, object? payload, CancellationToken ct)
     {
         var instanceId = await guaranteeCaseRepository.GetWorkflowInstanceIdAsync(caseId, ct);
         await SignalAsync(caseId, instanceId, GuaranteeCaseWorkflow.DefinitionId, signal, payload, ct);
-    }
-
-    public async Task SignalRenewalCaseAsync(Guid caseId, string signal, object? payload, CancellationToken ct)
-    {
-        var instanceId = await renewalCaseRepository.GetWorkflowInstanceIdAsync(caseId, ct);
-        await SignalAsync(caseId, instanceId, GuaranteeRenewalWorkflow.DefinitionId, signal, payload, ct);
     }
 
     private async Task SignalAsync(

@@ -93,6 +93,19 @@ public sealed class InvestmentCase : AggregateRoot<Guid>, IAuditableEntity, ISof
             comment));
     }
 
+    public void RollbackTo(
+        CaseStatus nextStatus,
+        string changedByUserId,
+        string actorRole,
+        Guid correlationId,
+        string? comment)
+    {
+        if (CurrentStatus is CaseStatus.Completed or CaseStatus.Archived or CaseStatus.Rejected or CaseStatus.Cancelled)
+            CompletedAt = null;
+
+        TransitionTo(nextStatus, changedByUserId, actorRole, WorkflowAction.StageRollback, correlationId, comment);
+    }
+
     private static CasePhase DerivePhaseFromStatus(CaseStatus status) => status switch
     {
         CaseStatus.Draft or CaseStatus.DataEntry1 or CaseStatus.ReviewDataEntry1 or CaseStatus.DataEntry2 or CaseStatus.ReviewDataEntry2 => CasePhase.Application,

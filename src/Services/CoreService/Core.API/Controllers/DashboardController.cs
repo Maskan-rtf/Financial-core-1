@@ -39,7 +39,7 @@ public sealed class DashboardController(
     }
 
     [HttpGet("applicant")]
-    [Authorize(Policy = "Dashboard.Applicant")]
+    [Authorize]
     public async Task<IActionResult> GetApplicantDashboard(CancellationToken ct)
     {
         var result = await analyticsService.GetApplicantDashboardAsync(ct);

@@ -14,8 +14,8 @@ internal static class OpenApiMetadata
         - **Companies** — applicant profiles (`/identity/companies`)
         - **Investment cases** — workflow, documents, reviews, CEO approval (`/investmentcases`)
         - **Guarantee cases** — applications, credit limits, workflow (`/guaranteecases`)
-        - **Guarantee renewals** — renewal requests (`/guarantee-renewals`)
         - **Loan cases** — loan applications and workflow (`/loancases`)
+        - **Case stage rollback** — admin/technical backward stage correction (`/casestages`)
         - **Kanban** — action-required and watching queues (`/kanban`)
         - **Dashboard** — CEO and board metrics (`/dashboard`)
 

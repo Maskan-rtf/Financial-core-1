@@ -14,6 +14,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddFluentValidationAutoValidation();
 
         services.AddScoped<ICaseStateManager, CaseStateManager>();
+        services.AddScoped<IInvestmentWorkflowCoordinator, InvestmentWorkflowCoordinator>();
         services.AddScoped<IInvestmentCaseAppService, InvestmentCaseAppService>();
         services.AddScoped<IGuaranteeCaseStateManager, GuaranteeCaseStateManager>();
         services.AddScoped<IGuaranteeCaseAppService, GuaranteeCaseAppService>();
@@ -21,6 +22,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<ILoanCaseStateManager, LoanCaseStateManager>();
         services.AddScoped<IFundCreditLimitAppService, FundCreditLimitAppService>();
         services.AddScoped<ILoanCaseAppService, LoanCaseAppService>();
+        services.AddScoped<ICaseStageRollbackAppService, CaseStageRollbackAppService>();
         services.AddScoped<IKanbanAppService, KanbanAppService>();
         services.AddScoped<ICompanyAppService, CompanyAppService>();
         services.AddScoped<ICaseAuthorizationService, CaseAuthorizationService>();

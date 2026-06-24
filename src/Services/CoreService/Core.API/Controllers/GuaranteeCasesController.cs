@@ -73,12 +73,108 @@ public sealed class GuaranteeCasesController(IGuaranteeCaseAppService service) :
         return Respond(result, GuaranteeSuccessMessages.CaseHistoryRetrieved);
     }
 
+    [HttpGet("{id:guid}/amendment/details")]
+    [Authorize]
+    public async Task<IActionResult> GetAmendment(Guid id, CancellationToken ct)
+    {
+        var result = await service.GetAmendmentAsync(id, ct);
+        return Respond(result, GuaranteeAmendmentMessages.SuccessRetrieved);
+    }
+
+    [HttpGet("{id:guid}/amendment/cancellation/details")]
+    [Authorize]
+    public async Task<IActionResult> GetCancellationDetails(Guid id, CancellationToken ct)
+    {
+        var result = await service.GetCancellationDetailsAsync(id, ct);
+        return Respond(result, GuaranteeSuccessMessages.CancellationDetailsRetrieved);
+    }
+
     [HttpPut("{id:guid}/application")]
     [Authorize(Policy = "ApplicantOnly")]
     public async Task<IActionResult> UpdateApplication(Guid id, [FromBody] UpdateGuaranteeApplicationRequest request, CancellationToken ct)
     {
         var result = await service.UpdateApplicationAsync(id, request, ct);
         return Respond(result, GuaranteeSuccessMessages.ApplicationUpdated);
+    }
+
+    [HttpPost("{id:guid}/amendment/create")]
+    [Authorize(Policy = "ApplicantOnly")]
+    public async Task<IActionResult> CreateAmendment(Guid id, [FromBody] CreateGuaranteeAmendmentRequest request, CancellationToken ct)
+    {
+        var result = await service.CreateOrUpdateAmendmentAsync(id, request, ct);
+        return Respond(result, GuaranteeAmendmentMessages.SuccessCreated);
+    }
+
+    [HttpPost("{id:guid}/amendment/cancellation/create")]
+    [Authorize(Policy = "ApplicantOnly")]
+    public async Task<IActionResult> CreateCancellation(Guid id, [FromBody] CreateGuaranteeCancellationRequest request, CancellationToken ct)
+    {
+        var result = await service.CreateCancellationAsync(id, request, ct);
+        return Respond(result, GuaranteeSuccessMessages.CancellationCreated);
+    }
+
+    [HttpPost("{id:guid}/amendment/submit")]
+    [Authorize(Policy = "ApplicantOnly")]
+    public async Task<IActionResult> SubmitAmendment(Guid id, CancellationToken ct)
+    {
+        var result = await service.SubmitAmendmentAsync(id, ct);
+        return Respond(result, GuaranteeAmendmentMessages.SuccessSubmitted, HttpStatusCode.Accepted);
+    }
+
+    [HttpPost("{id:guid}/amendment/cancellation/submit")]
+    [Authorize(Policy = "ApplicantOnly")]
+    public async Task<IActionResult> SubmitCancellation(Guid id, [FromBody] SubmitGuaranteeCancellationRequest request, CancellationToken ct)
+    {
+        var result = await service.SubmitCancellationAsync(id, request, ct);
+        return Respond(result, GuaranteeSuccessMessages.CancellationSubmitted, HttpStatusCode.Accepted);
+    }
+
+    [HttpPost("{id:guid}/amendment/approve")]
+    [Authorize(Policy = "InternalOnly")]
+    public async Task<IActionResult> ApproveAmendment(Guid id, [FromBody] SemanticTransitionRequest request, CancellationToken ct)
+    {
+        var result = await service.ApproveAmendmentAsync(id, request.Comment, request.InternalComment, ct);
+        return Respond(result, GuaranteeAmendmentMessages.SuccessApproved, HttpStatusCode.Accepted);
+    }
+
+    [HttpPost("{id:guid}/amendment/cancellation/approve")]
+    [Authorize(Policy = "InternalOnly")]
+    public async Task<IActionResult> ApproveCancellation(Guid id, [FromBody] ApproveGuaranteeCancellationRequest request, CancellationToken ct)
+    {
+        var result = await service.ApproveCancellationAsync(id, request, ct);
+        return Respond(result, GuaranteeSuccessMessages.CancellationApproved, HttpStatusCode.Accepted);
+    }
+
+    [HttpPost("{id:guid}/amendment/reject")]
+    [Authorize(Policy = "InternalOnly")]
+    public async Task<IActionResult> RejectAmendment(Guid id, [FromBody] SemanticRevisionRequest request, CancellationToken ct)
+    {
+        var result = await service.RejectAmendmentAsync(id, request.Message, ct);
+        return Respond(result, GuaranteeAmendmentMessages.SuccessRejected, HttpStatusCode.Accepted);
+    }
+
+    [HttpPost("{id:guid}/amendment/revision-request")]
+    [Authorize(Policy = "InternalOnly")]
+    public async Task<IActionResult> RequestAmendmentRevision(Guid id, [FromBody] SemanticRevisionRequest request, CancellationToken ct)
+    {
+        var result = await service.RequestAmendmentRevisionAsync(id, request.Message, ct);
+        return Respond(result, GuaranteeAmendmentMessages.SuccessRevisionRequested, HttpStatusCode.Accepted);
+    }
+
+    [HttpPost("{id:guid}/ceo/amendment/approve")]
+    [Authorize(Policy = "GuaranteeCases.CeoApprove")]
+    public async Task<IActionResult> CeoApproveAmendment(Guid id, [FromBody] SemanticTransitionRequest request, CancellationToken ct)
+    {
+        var result = await service.CeoApproveAmendmentAsync(id, request.Comment, ct);
+        return Respond(result, GuaranteeSuccessMessages.CeoAmendmentApproved, HttpStatusCode.Accepted);
+    }
+
+    [HttpPost("{id:guid}/ceo/amendment/reject")]
+    [Authorize(Policy = "GuaranteeCases.CeoApprove")]
+    public async Task<IActionResult> CeoRejectAmendment(Guid id, [FromBody] SemanticRevisionRequest request, CancellationToken ct)
+    {
+        var result = await service.CeoRejectAmendmentAsync(id, request.Message, ct);
+        return Respond(result, GuaranteeAmendmentMessages.SuccessRejected, HttpStatusCode.Accepted);
     }
 
     [HttpPost("{id:guid}/application/begin")]

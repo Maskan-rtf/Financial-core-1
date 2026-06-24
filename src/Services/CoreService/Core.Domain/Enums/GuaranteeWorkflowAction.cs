@@ -12,5 +12,7 @@ public enum GuaranteeWorkflowAction
     ApproveAttachments = 8,
     UploadFinalContract = 9,
     UploadIssuanceDocuments = 10,
-    Archive = 11
+    Archive = 11,
+    BeginAmendment = 12,
+    StageRollback = 13
 }

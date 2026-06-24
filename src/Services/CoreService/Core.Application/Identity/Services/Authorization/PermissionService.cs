@@ -45,7 +45,7 @@ public class PermissionService : IPermissionService
         if (string.Equals(role, UserRoleClaims.Admin, StringComparison.OrdinalIgnoreCase))
             return Task.FromResult<IEnumerable<string>>(RolePermissions.AllPermissions);
 
-        if (RolePermissions.RolePermissionMappings.TryGetValue(role, out var permissions))
+        if (RolePermissions.TryGetPermissionsForRole(role, out var permissions))
         {
             return Task.FromResult<IEnumerable<string>>(permissions);
         }

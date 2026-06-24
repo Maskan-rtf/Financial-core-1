@@ -1,6 +1,6 @@
 /* global WorkflowModel */
 (function () {
-  const MODULE = { Investment: 1, Guarantee: 2, GuaranteeRenewal: 3 };
+  const MODULE = { Investment: 1, Guarantee: 2 };
 
   const STATUS_BY_KEY = {
     Draft: 1,
@@ -18,6 +18,14 @@
     Rejected: 13,
     Cancelled: 14,
     Archived: 15,
+    AmendmentDraft: 16,
+    AmendmentDataEntry: 17,
+    AmendmentCreditReview: 18,
+    AmendmentCeoApproval: 19,
+    AmendmentLegalReview: 20,
+    AmendmentCompleted: 21,
+    AmendmentApproved: 22,
+    AmendmentRejected: 23,
   };
 
   function coerceStatus(status) {
@@ -43,6 +51,14 @@
     13: { id: 13, title: "رد شده", unit: "all", phase: 5 },
     14: { id: 14, title: "لغو شده", unit: "all", phase: 5 },
     15: { id: 15, title: "بایگانی", unit: "all", phase: 5 },
+    16: { id: 16, title: "اصلاحیه پیش‌نویس", unit: "applicant", phase: 5 },
+    17: { id: 17, title: "اصلاحیه ثبت اطلاعات", unit: "applicant", phase: 5 },
+    18: { id: 18, title: "اصلاحیه در انتظار بررسی", unit: "credit", phase: 5 },
+    19: { id: 19, title: "تأیید مدیرعامل (اصلاحیه)", unit: "ceo", phase: 5 },
+    20: { id: 20, title: "اصلاحیه حقوقی", unit: "legal", phase: 5 },
+    21: { id: 21, title: "اصلاحیه تکمیل", unit: "all", phase: 5 },
+    22: { id: 22, title: "اصلاحیه تایید شد", unit: "all", phase: 5 },
+    23: { id: 23, title: "اصلاحیه رد شد", unit: "all", phase: 5 },
   };
 
   /** مدارک ورود اطلاعات — مطابق mockup ضمانت‌نامه */
@@ -139,6 +155,12 @@
         { type: 27, label: "ضمانت‌نامه صادره", required: true },
         { type: 28, label: "رسید صدور", required: true },
       ],
+    },
+    20: {
+      title: "بارگذاری قرارداد اصلاحیه",
+      subtitle: "واحد حقوقی",
+      autoAdvanceHint: "پس از بارگذاری قرارداد اصلاحیه، «تأیید اصلاحیه» را بزنید.",
+      docs: [{ type: 32, label: "قرارداد اصلاحیه", hint: "PDF یا Word", required: true }],
     },
   };
 
@@ -311,9 +333,83 @@
       26: "قرارداد نهایی",
       27: "ضمانت‌نامه صادره",
       28: "رسید صدور",
+      29: "نامه رفع تعهد ذی‌نفع",
+      30: "مرجع ضمانت‌نامه اصلی",
+      31: "تاییدیه تسویه",
+      32: "قرارداد اصلاحیه",
       99: "سایر",
     };
     return extra[t] || "مدرک (نوع " + t + ")";
+  }
+
+  const CANCELLATION_DOCUMENTS = [
+    { type: 29, label: "نامه رفع تعهد ذی‌نفع", hint: "ضروری", required: true },
+  ];
+
+  const APPLICANT_CATEGORY_OTHER = 8;
+  const BASE_CONTRACT_GUARANTEE_TYPES = [2, 3];
+  const TENDER_REFERENCE_GUARANTEE_TYPES = [1, 2, 3];
+
+  /** فیلدهای فرم درخواست — نمایش شرطی بر اساس نوع ضمانت‌نامه و دسته متقاضی */
+  const APPLICATION_FIELD_RULES = {
+    applicantCategoryOther: {
+      applies: (ctx) => Number(ctx.applicantCategory) === APPLICANT_CATEGORY_OTHER,
+    },
+    baseContractNumber: {
+      applies: (ctx) => TENDER_REFERENCE_GUARANTEE_TYPES.includes(Number(ctx.guaranteeType)),
+      labelFor: (ctx) =>
+        Number(ctx.guaranteeType) === 1 ? "شماره مناقصه / مزایده" : "شماره قرارداد پایه",
+      omitWhenEmpty: true,
+    },
+    baseContractAmount: {
+      applies: (ctx) => BASE_CONTRACT_GUARANTEE_TYPES.includes(Number(ctx.guaranteeType)),
+    },
+    baseContractAmountInWords: {
+      applies: (ctx) => BASE_CONTRACT_GUARANTEE_TYPES.includes(Number(ctx.guaranteeType)),
+    },
+    priceAdjustmentRatePercent: {
+      applies: (ctx) => BASE_CONTRACT_GUARANTEE_TYPES.includes(Number(ctx.guaranteeType)),
+    },
+    executionProvince: {
+      applies: (ctx) => BASE_CONTRACT_GUARANTEE_TYPES.includes(Number(ctx.guaranteeType)),
+    },
+    collateralDescription: {
+      applies: () => true,
+      omitWhenEmpty: true,
+    },
+  };
+
+  function applicationFieldContext(application, guaranteeTypeOverride) {
+    const app = application || {};
+    const pick = (camel, pascal) => {
+      if (app[camel] !== undefined) return app[camel];
+      if (app[pascal] !== undefined) return app[pascal];
+      return undefined;
+    };
+    return {
+      guaranteeType: normalizeGuaranteeType(
+        guaranteeTypeOverride != null && guaranteeTypeOverride !== ""
+          ? guaranteeTypeOverride
+          : pick("guaranteeType", "GuaranteeType")
+      ),
+      applicantCategory: Number(pick("applicantCategory", "ApplicantCategory") || 0),
+    };
+  }
+
+  function isApplicationFieldApplicable(fieldKey, ctx) {
+    const rule = APPLICATION_FIELD_RULES[fieldKey];
+    if (!rule) return true;
+    return rule.applies(ctx || { guaranteeType: 0, applicantCategory: 0 });
+  }
+
+  function applicationFieldLabel(fieldKey, defaultLabel, ctx) {
+    const rule = APPLICATION_FIELD_RULES[fieldKey];
+    if (rule && typeof rule.labelFor === "function") return rule.labelFor(ctx);
+    return defaultLabel;
+  }
+
+  function shouldOmitEmptyApplicationField(fieldKey) {
+    return !!APPLICATION_FIELD_RULES[fieldKey]?.omitWhenEmpty;
   }
 
   window.GuaranteeWorkflowModel = {
@@ -321,6 +417,7 @@
     STEPS,
     DATA_ENTRY_DOCUMENTS,
     WORKFLOW_STAGE_DOCUMENTS,
+    CANCELLATION_DOCUMENTS,
     GUARANTEE_TYPES,
     APPLICANT_CATEGORIES,
     APPLICANT_LEGAL_FORMS,
@@ -337,17 +434,25 @@
     requiredDocumentsForSubmit,
     isDocRequiredForType,
     uploadDocumentDefs,
+    APPLICATION_FIELD_RULES,
+    APPLICANT_CATEGORY_OTHER,
+    applicationFieldContext,
+    isApplicationFieldApplicable,
+    applicationFieldLabel,
+    shouldOmitEmptyApplicationField,
     PHASES,
     getUnit(unitId) {
       return UNITS.find((u) => u.id === unitId) || null;
     },
     getStepperSteps() {
-      return Object.values(STEPS).sort((a, b) => a.id - b.id);
+      const hiddenStepIds = new Set([13, 14, 15, 21, 23]);
+      return Object.values(STEPS)
+        .filter((step) => !hiddenStepIds.has(step.id))
+        .sort((a, b) => a.id - b.id);
     },
     getStepOrderIndex(status) {
       const value = coerceStatus(status);
-      const steps = Object.values(STEPS).sort((a, b) => a.id - b.id);
-      return steps.findIndex((step) => step.id === value);
+      return this.getStepperSteps().findIndex((step) => step.id === value);
     },
     coerceStatus,
     stepForStatus(status) {

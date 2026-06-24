@@ -9,6 +9,7 @@ using Core.Application.Common;
 using Core.Application.DTOs;
 using Core.Application.Logging;
 using Core.Application.Mappers;
+using Core.Application.Notifications.Sms;
 using Core.Application.Requests;
 using Core.Application.Responses;
 using Core.Domain.Constants;
@@ -19,7 +20,9 @@ using Core.Domain.Identity;
 using Core.Domain.Identity.Entities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace Core.Application.Services;
 
@@ -36,6 +39,8 @@ public sealed class GuaranteeCaseAppService(
     IGuaranteeCaseDtoMapper dtoMapper,
     IUserDisplayLookup userDisplayLookup,
     IHttpContextAccessor httpContextAccessor,
+    IServiceScopeFactory serviceScopeFactory,
+    IWorkflowSmsNotifier workflowSmsNotifier,
     ILogger<GuaranteeCaseAppService> logger) : IGuaranteeCaseAppService
 {
     public async Task<Result<GuaranteeCaseDto>> CreateAsync(CreateGuaranteeCaseRequest request, CancellationToken ct)
@@ -46,10 +51,7 @@ public sealed class GuaranteeCaseAppService(
         if (!authorizationService.HasPermission(GuaranteePermissions.Create))
             return Result<GuaranteeCaseDto>.Fail(Error.Forbidden(ApiMessages.NotAllowed));
 
-        var caseNumber = await caseNumberGenerator.GenerateGuaranteeCaseAsync(ct);
-        var entity = new GuaranteeCase(caseNumber, auth.Value!, request.ApplicantType);
         Company? linkedCompany = null;
-
         if (request.ApplicantType == ApplicantType.Company)
         {
             if (request.CompanyId is null || request.CompanyId == Guid.Empty)
@@ -68,20 +70,35 @@ public sealed class GuaranteeCaseAppService(
 
             if (linkedCompany.OwnerUserId != userId)
                 return Result<GuaranteeCaseDto>.Fail(Error.Forbidden(ApiMessages.CompanyAccessDenied));
-
-            entity.AssignCompany(linkedCompany.Id);
         }
 
-        entity.SetTitle(request.Title);
+        for (var sequence = 1; sequence <= CaseNumberFormat.MaxDailySequenceAttempts; sequence++)
+        {
+            var caseNumber = await caseNumberGenerator.GenerateGuaranteeCaseAsync(ct, sequence);
+            var entity = new GuaranteeCase(caseNumber, auth.Value!, request.ApplicantType);
 
-        var workflowInstanceId = await workflowOrchestrator.StartGuaranteeCaseAsync(entity.Id, ct);
-        entity.AttachWorkflowInstance(workflowInstanceId);
+            if (linkedCompany is not null)
+                entity.AssignCompany(linkedCompany.Id);
 
-        await unitOfWork.GuaranteeCases.AddAsync(entity, ct);
-        await unitOfWork.SaveChangesAsync(ct);
+            entity.SetTitle(request.Title);
 
-        return Result<GuaranteeCaseDto>.Ok(
-            dtoMapper.MapCase(entity, authorizationService.IsInternalUser, linkedCompany));
+            var workflowInstanceId = await workflowOrchestrator.StartGuaranteeCaseAsync(entity.Id, ct);
+            entity.AttachWorkflowInstance(workflowInstanceId);
+
+            await unitOfWork.GuaranteeCases.AddAsync(entity, ct);
+            try
+            {
+                await unitOfWork.SaveChangesAsync(ct);
+                return Result<GuaranteeCaseDto>.Ok(
+                    dtoMapper.MapCase(entity, authorizationService.IsInternalUser, linkedCompany));
+            }
+            catch (DbUpdateException)
+            {
+                // Unique constraint on CaseNumber could collide; retry with next daily sequence.
+            }
+        }
+
+        return Result<GuaranteeCaseDto>.Fail(Error.Unexpected(ApiMessages.CaseNumberAllocationFailed));
     }
 
     public async Task<Result<GuaranteeCaseDto>> GetAsync(Guid caseId, CancellationToken ct)
@@ -186,6 +203,396 @@ public sealed class GuaranteeCaseAppService(
         }
 
         return Result<IEnumerable<GuaranteeWorkflowHistoryDto>>.Ok(history.Select(dtoMapper.MapHistory));
+    }
+
+    public async Task<Result<GuaranteeAmendmentDto>> GetAmendmentAsync(Guid caseId, CancellationToken ct)
+    {
+        var scoped = await GetScopedCaseAsync(caseId, ct);
+        if (scoped.IsFailure)
+            return Result<GuaranteeAmendmentDto>.Fail(scoped.Error!);
+
+        var entity = scoped.Value!;
+
+        var history = await LoadAmendmentHistoryAsync(caseId, ct);
+        var amendment = BuildAmendmentDto(entity, history);
+        if (amendment is null)
+        {
+            if (history.Count == 0)
+                return Result<GuaranteeAmendmentDto>.Fail(Error.NotFound(ApiMessages.InvalidTransition));
+
+            var latest = history.OrderByDescending(x => x.CreatedAt).FirstOrDefault();
+            return Result<GuaranteeAmendmentDto>.Ok(new GuaranteeAmendmentDto(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                latest?.PreviousValues,
+                latest?.NewValues,
+                history));
+        }
+
+        return Result<GuaranteeAmendmentDto>.Ok(amendment);
+    }
+
+    public async Task<Result<GuaranteeCancellationDetailsDto>> GetCancellationDetailsAsync(Guid caseId, CancellationToken ct)
+    {
+        var scoped = await GetScopedCaseAsync(caseId, ct);
+        if (scoped.IsFailure)
+            return Result<GuaranteeCancellationDetailsDto>.Fail(scoped.Error!);
+
+        return Result<GuaranteeCancellationDetailsDto>.Ok(BuildCancellationDetailsDto(scoped.Value!));
+    }
+
+    public async Task<Result<GuaranteeAmendmentDto>> CreateOrUpdateAmendmentAsync(
+        Guid caseId,
+        CreateGuaranteeAmendmentRequest request,
+        CancellationToken ct)
+    {
+        var scoped = await GetScopedCaseForTransitionAsync(caseId, ct);
+        if (scoped.IsFailure)
+            return Result<GuaranteeAmendmentDto>.Fail(scoped.Error!);
+
+        var entity = scoped.Value!;
+
+        if (entity.CurrentStatus is not (
+                GuaranteeCaseStatus.Completed or
+                GuaranteeCaseStatus.AmendmentApproved or
+                GuaranteeCaseStatus.AmendmentRejected or
+                GuaranteeCaseStatus.AmendmentDraft or
+                GuaranteeCaseStatus.AmendmentDataEntry))
+        {
+            return Result<GuaranteeAmendmentDto>.Fail(Error.Conflict(GuaranteeAmendmentMessages.NotEditable));
+        }
+
+        if (entity.CurrentStatus == GuaranteeCaseStatus.Cancelled)
+            return Result<GuaranteeAmendmentDto>.Fail(Error.Conflict(ApiMessages.GuaranteeCancellationNotEligible));
+
+        if (HasActiveAmendmentWorkflow(entity) && entity.AmendmentType != request.AmendmentType
+            && entity.CurrentStatus is not (GuaranteeCaseStatus.AmendmentDraft or GuaranteeCaseStatus.AmendmentDataEntry))
+        {
+            return Result<GuaranteeAmendmentDto>.Fail(Error.Conflict(ApiMessages.GuaranteeCancellationAlreadyActive));
+        }
+
+        var fieldValidation = ValidateAmendmentRequest(request);
+        if (fieldValidation.IsFailure)
+            return Result<GuaranteeAmendmentDto>.Fail(fieldValidation.Error!);
+
+        entity.UpsertAmendment(request.AmendmentType, request.NewValidityTo, request.NewGuaranteeAmount, request.Reason);
+
+        if (entity.CurrentStatus is GuaranteeCaseStatus.Completed or GuaranteeCaseStatus.AmendmentApproved or GuaranteeCaseStatus.AmendmentRejected)
+        {
+            var start = await ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.BeginAmendment, request.Reason, ct);
+            if (start.IsFailure)
+                return Result<GuaranteeAmendmentDto>.Fail(start.Error!);
+        }
+        else
+        {
+            await dbContext.GuaranteeCases.TouchUpdatedAtAsync(caseId, clock.UtcNow, ct);
+            await unitOfWork.SaveChangesAsync(ct);
+        }
+
+        var history = await LoadAmendmentHistoryAsync(caseId, ct);
+        return Result<GuaranteeAmendmentDto>.Ok(BuildAmendmentDto(entity, history)!);
+    }
+
+    public async Task<Result> CreateCancellationAsync(Guid caseId, CreateGuaranteeCancellationRequest request, CancellationToken ct)
+    {
+        var prepared = await PrepareCancellationDraftAsync(
+            caseId,
+            request.Reason,
+            request.OriginalGuaranteeReference,
+            request.SettlementConfirmationRequired,
+            ct,
+            validateEligibility: true);
+        if (prepared.IsFailure)
+            return Result.Fail(prepared.Error!);
+
+        var entity = prepared.Value!;
+
+        if (entity.CurrentStatus is GuaranteeCaseStatus.Completed or GuaranteeCaseStatus.AmendmentApproved)
+            return await ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.BeginAmendment, request.Reason, ct);
+
+        await PersistDraftChangesAsync(caseId, ct);
+        return Result.Ok();
+    }
+
+    public Task<Result> SubmitAmendmentAsync(Guid caseId, CancellationToken ct)
+    {
+        // #region agent log
+        AgentDebugLog.Write("H4", "GuaranteeCaseAppService.SubmitAmendmentAsync", "entry", new { caseId });
+        // #endregion
+        return SubmitCurrentAmendmentAsync(caseId, null, ct);
+    }
+
+    public async Task<Result> SubmitCancellationAsync(Guid caseId, SubmitGuaranteeCancellationRequest request, CancellationToken ct)
+    {
+        var prepared = await PrepareCancellationDraftAsync(
+            caseId,
+            reason: null,
+            request.OriginalGuaranteeReference,
+            request.SettlementConfirmationRequired,
+            ct,
+            validateEligibility: false);
+        if (prepared.IsFailure)
+            return Result.Fail(prepared.Error!);
+
+        var entity = prepared.Value!;
+
+        if (entity.CurrentStatus == GuaranteeCaseStatus.AmendmentDraft)
+        {
+            var beginEntry = await SubmitCurrentAmendmentAsync(caseId, request.Comment, ct);
+            if (beginEntry.IsFailure)
+                return beginEntry;
+        }
+
+        return await SubmitCurrentAmendmentAsync(caseId, request.Comment, ct);
+    }
+
+    public Task<Result> ApproveAmendmentAsync(Guid caseId, string? comment, string? internalComment, CancellationToken ct)
+        => ApproveCurrentAmendmentAsync(caseId, comment, internalComment, legalOverrideActiveObligationCheck: false, ct);
+
+    public Task<Result> CeoApproveAmendmentAsync(Guid caseId, string? comment, CancellationToken ct)
+        => ApproveCurrentAmendmentAsync(caseId, comment, internalComment: null, legalOverrideActiveObligationCheck: false, ct);
+
+    public Task<Result> CeoRejectAmendmentAsync(Guid caseId, string reason, CancellationToken ct)
+        => RejectCurrentAmendmentAsync(caseId, reason, ct);
+
+    public Task<Result> ApproveCancellationAsync(Guid caseId, ApproveGuaranteeCancellationRequest request, CancellationToken ct)
+        => ApproveCurrentAmendmentAsync(
+            caseId,
+            request.Comment,
+            request.InternalComment,
+            request.LegalOverrideActiveObligationCheck,
+            ct);
+
+    public Task<Result> RejectAmendmentAsync(Guid caseId, string reason, CancellationToken ct)
+        => RejectCurrentAmendmentAsync(caseId, reason, ct);
+
+    public Task<Result> RequestAmendmentRevisionAsync(Guid caseId, string message, CancellationToken ct)
+        => ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.RequestRevision, message, ct);
+
+    private async Task<Result<GuaranteeCase>> GetScopedCaseAsync(Guid caseId, CancellationToken ct)
+    {
+        var auth = RequireUser();
+        if (auth.IsFailure)
+            return Result<GuaranteeCase>.Fail(auth.Error!);
+
+        var entity = await unitOfWork.GuaranteeCases.GetScopedAsync(
+            caseId,
+            auth.Value!,
+            authorizationService.IsInternalUser,
+            ct);
+
+        return entity is null
+            ? Result<GuaranteeCase>.Fail(Error.NotFound(ApiMessages.GuaranteeCaseNotFound))
+            : Result<GuaranteeCase>.Ok(entity);
+    }
+
+    private async Task<Result<GuaranteeCase>> GetScopedCaseForTransitionAsync(Guid caseId, CancellationToken ct)
+    {
+        var auth = RequireUser();
+        if (auth.IsFailure)
+            return Result<GuaranteeCase>.Fail(auth.Error!);
+
+        var entity = await unitOfWork.GuaranteeCases.GetScopedForTransitionAsync(
+            caseId,
+            auth.Value!,
+            authorizationService.IsInternalUser,
+            ct);
+
+        return entity is null
+            ? Result<GuaranteeCase>.Fail(Error.NotFound(ApiMessages.GuaranteeCaseNotFound))
+            : Result<GuaranteeCase>.Ok(entity);
+    }
+
+    private GuaranteeCancellationDetailsDto BuildCancellationDetailsDto(GuaranteeCase entity)
+    {
+        var documents = entity.Documents
+            .Where(d => !d.IsDeleted)
+            .Select(dtoMapper.MapDocument)
+            .ToList();
+
+        return new GuaranteeCancellationDetailsDto(
+            entity.Id,
+            entity.CaseNumber,
+            entity.CurrentStatus,
+            entity.AmendmentType,
+            entity.AmendmentReason,
+            entity.AmendmentOriginalGuaranteeReference ?? entity.CaseNumber,
+            entity.SettlementConfirmationRequired,
+            entity.AmendmentRequiresCreditReview,
+            entity.LegalOverrideApproved,
+            entity.AmendmentCreatedAt,
+            entity.AmendmentCompletedAt,
+            GuaranteeCancellationSource.BuildSnapshot(entity),
+            documents);
+    }
+
+    private async Task<Result<GuaranteeCase>> PrepareCancellationDraftAsync(
+        Guid caseId,
+        string? reason,
+        string? originalGuaranteeReference,
+        bool settlementConfirmationRequired,
+        CancellationToken ct,
+        bool validateEligibility)
+    {
+        var scoped = await GetScopedCaseForTransitionAsync(caseId, ct);
+        if (scoped.IsFailure)
+            return scoped;
+
+        var entity = scoped.Value!;
+        if (entity.CurrentStatus == GuaranteeCaseStatus.Cancelled)
+            return Result<GuaranteeCase>.Fail(Error.Conflict(ApiMessages.GuaranteeCancellationNotEligible));
+
+        if (validateEligibility
+            && entity.CurrentStatus is not (
+                GuaranteeCaseStatus.Completed or
+                GuaranteeCaseStatus.AmendmentApproved or
+                GuaranteeCaseStatus.AmendmentDraft or
+                GuaranteeCaseStatus.AmendmentDataEntry))
+        {
+            return Result<GuaranteeCase>.Fail(Error.Conflict(ApiMessages.GuaranteeCancellationNotEligible));
+        }
+
+        if (validateEligibility && HasActiveAmendmentWorkflow(entity) && entity.AmendmentType != AmendmentType.Cancellation)
+            return Result<GuaranteeCase>.Fail(Error.Conflict(ApiMessages.GuaranteeCancellationAlreadyActive));
+
+        entity.ConfigureCancellationAmendment(
+            GuaranteeCancellationSource.ResolveReference(entity),
+            GuaranteeCancellationSource.RequiresSettlementConfirmation(entity),
+            HasActiveCancellationObligation(entity),
+            reason ?? entity.AmendmentReason);
+
+        return Result<GuaranteeCase>.Ok(entity);
+    }
+
+    private async Task PersistDraftChangesAsync(Guid caseId, CancellationToken ct)
+    {
+        await dbContext.GuaranteeCases.TouchUpdatedAtAsync(caseId, clock.UtcNow, ct);
+        await unitOfWork.SaveChangesAsync(ct);
+    }
+
+    private Task<Result> SubmitCurrentAmendmentAsync(Guid caseId, string? comment, CancellationToken ct)
+        => ApplyTransitionAsync(
+            caseId,
+            GuaranteeWorkflowAction.Submit,
+            comment,
+            ct,
+            beforeTransition: entity =>
+            {
+                if (entity.CurrentStatus != GuaranteeCaseStatus.AmendmentDataEntry)
+                    return Result.Ok();
+
+                if (entity.AmendmentType == AmendmentType.Cancellation)
+                {
+                    entity.ConfigureCancellationAmendment(
+                        GuaranteeCancellationSource.ResolveReference(entity),
+                        GuaranteeCancellationSource.RequiresSettlementConfirmation(entity),
+                        HasActiveCancellationObligation(entity),
+                        entity.AmendmentReason);
+                }
+
+                if (entity.AmendmentType is not (AmendmentType.Extension or AmendmentType.Reduction or AmendmentType.Cancellation))
+                    return Result.Ok();
+
+                dbContext.GuaranteeAmendmentHistoryRecords.Add(
+                    BuildPendingAmendmentHistoryRecord(entity, authUserId: entity.ApplicantUserId));
+
+                return Result.Ok();
+            });
+
+    private async Task<Result> ApproveCurrentAmendmentAsync(
+        Guid caseId,
+        string? comment,
+        string? internalComment,
+        bool legalOverrideActiveObligationCheck,
+        CancellationToken ct)
+    {
+        var auth = RequireUser();
+        if (auth.IsFailure)
+            return Result.Fail(auth.Error!);
+
+        var scoped = await GetScopedCaseForTransitionAsync(caseId, ct);
+        if (scoped.IsFailure)
+            return Result.Fail(scoped.Error!);
+
+        var entity = scoped.Value!;
+        if (entity.CurrentStatus is not (
+                GuaranteeCaseStatus.AmendmentCreditReview or
+                GuaranteeCaseStatus.AmendmentCeoApproval or
+                GuaranteeCaseStatus.AmendmentLegalReview))
+            return Result.Fail(Error.Conflict(ApiMessages.InvalidTransition));
+
+        if (entity.AmendmentType == AmendmentType.Cancellation
+            && entity.CurrentStatus == GuaranteeCaseStatus.AmendmentLegalReview
+            && legalOverrideActiveObligationCheck)
+        {
+            entity.ApproveCancellationLegalOverride();
+        }
+
+        Result validation = Result.Ok();
+        if (entity.CurrentStatus == GuaranteeCaseStatus.AmendmentCreditReview)
+        {
+            validation = entity.AmendmentType switch
+            {
+                AmendmentType.Extension => await GuaranteeFundCreditGuard.ValidateAmendmentExtensionAsync(dbContext, entity, ct),
+                AmendmentType.Reduction => await GuaranteeFundCreditGuard.ValidateApprovalFormSubmitAsync(dbContext, entity, ct),
+                AmendmentType.Cancellation => Result.Ok(),
+                _ => Result.Fail(Error.Conflict(ApiMessages.InvalidTransition))
+            };
+        }
+        else if (entity.AmendmentType != AmendmentType.Cancellation
+                 && entity.AmendmentType is not (AmendmentType.Extension or AmendmentType.Reduction))
+        {
+            validation = Result.Fail(Error.Conflict(ApiMessages.InvalidTransition));
+        }
+
+        if (validation.IsFailure)
+            return validation;
+
+        if (entity.AmendmentType is AmendmentType.Extension or AmendmentType.Reduction or AmendmentType.Cancellation
+            && ShouldMarkAmendmentAuditApproved(entity.CurrentStatus, entity.AmendmentType))
+        {
+            var auditGate = await ValidateAmendmentAuditForApprovalAsync(entity, ct);
+            if (auditGate.IsFailure)
+                return auditGate;
+        }
+
+        return await ApplyTransitionAsync(
+            caseId,
+            GuaranteeWorkflowAction.Approve,
+            comment,
+            ct,
+            internalComment);
+    }
+
+    private async Task<Result> RejectCurrentAmendmentAsync(Guid caseId, string reason, CancellationToken ct)
+    {
+        var auth = RequireUser();
+        if (auth.IsFailure)
+            return Result.Fail(auth.Error!);
+
+        var scoped = await GetScopedCaseForTransitionAsync(caseId, ct);
+        if (scoped.IsFailure)
+            return Result.Fail(scoped.Error!);
+
+        var entity = scoped.Value!;
+        if (entity.AmendmentType is AmendmentType.Extension or AmendmentType.Reduction or AmendmentType.Cancellation)
+        {
+            var auditGate = await ValidateAmendmentAuditForRejectAsync(entity, ct);
+            if (auditGate.IsFailure)
+                return auditGate;
+        }
+
+        return await ApplyTransitionAsync(
+            caseId,
+            GuaranteeWorkflowAction.Reject,
+            reason,
+            ct);
     }
 
     public async Task<Result> UpdateApplicationAsync(Guid caseId, UpdateGuaranteeApplicationRequest request,
@@ -296,10 +703,10 @@ public sealed class GuaranteeCaseAppService(
         => ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.Reject, reason, ct);
 
     public Task<Result> CeoCancelInitialAsync(Guid caseId, string reason, CancellationToken ct)
-        => ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.Cancel, reason, ct);
+        => ApplyCancellationAliasAsync(caseId, reason, ct);
 
     public Task<Result> CancelAsync(Guid caseId, string reason, CancellationToken ct)
-        => ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.Cancel, reason, ct);
+        => ApplyCancellationAliasAsync(caseId, reason, ct);
 
     public Task<Result> ConfirmDraftContractUploadedAsync(Guid caseId, CancellationToken ct)
         => ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.UploadDraftContract, null, ct);
@@ -321,11 +728,9 @@ public sealed class GuaranteeCaseAppService(
         => ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.Approve, comment, ct);
 
     public Task<Result> CeoRejectOrCancelFinalAsync(Guid caseId, string reason, bool cancel, CancellationToken ct)
-        => ApplyTransitionAsync(
-            caseId,
-            cancel ? GuaranteeWorkflowAction.Cancel : GuaranteeWorkflowAction.Reject,
-            reason,
-            ct);
+        => cancel
+            ? ApplyCancellationAliasAsync(caseId, reason, ct)
+            : ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.Reject, reason, ct);
 
     public Task<Result> ConfirmIssuanceDocumentsUploadedAsync(Guid caseId, CancellationToken ct)
         => ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.UploadIssuanceDocuments, null, ct);
@@ -833,8 +1238,12 @@ public sealed class GuaranteeCaseAppService(
         GuaranteeWorkflowAction action,
         string? comment,
         CancellationToken ct,
-        string? internalComment = null)
+        string? internalComment = null,
+        Func<GuaranteeCase, Result>? beforeTransition = null)
     {
+        // #region agent log
+        AgentDebugLog.Write("H3", "GuaranteeCaseAppService.ApplyTransitionAsync", "entry", new { caseId, action = action.ToString() });
+        // #endregion
         var auth = RequireUser();
         if (auth.IsFailure) return Result.Fail(auth.Error!);
 
@@ -842,17 +1251,31 @@ public sealed class GuaranteeCaseAppService(
             return Result.Fail(Error.Validation(ApiMessages.RevisionMessageRequired));
 
         var actorRole = ResolveActorRole();
+        // #region agent log
+        AgentDebugLog.Write("H3", "GuaranteeCaseAppService.ApplyTransitionAsync", "before-load", new { caseId, action = action.ToString() });
+        // #endregion
         var entity = await unitOfWork.GuaranteeCases.GetScopedForTransitionAsync(
             caseId, auth.Value!, authorizationService.IsInternalUser, ct);
 
         if (entity is null)
             return Result.Fail(Error.NotFound(ApiMessages.GuaranteeCaseNotFound));
 
+        // #region agent log
+        AgentDebugLog.Write("H3", "GuaranteeCaseAppService.ApplyTransitionAsync", "after-load", new { caseId, status = (int)entity.CurrentStatus });
+        // #endregion
+
         var statusBefore = entity.CurrentStatus;
         var phaseBefore = entity.CurrentPhase;
         var historyCountBefore = entity.WorkflowHistory.Count;
         var commentsCountBefore = entity.Comments.Count;
         var correlationId = ResolveCorrelationGuid(httpContextAccessor.HttpContext);
+
+        if (beforeTransition is not null)
+        {
+            var preparation = beforeTransition(entity);
+            if (preparation.IsFailure)
+                return preparation;
+        }
 
         var transition = await stateManager.TransitionAsync(
             entity, action, auth.Value!, actorRole, comment, correlationId);
@@ -868,10 +1291,31 @@ public sealed class GuaranteeCaseAppService(
             entity.AddDiscussionComment(phaseBefore, auth.Value!, actorRole, internalComment, false, true);
         }
 
+        if (entity.CurrentStatus is GuaranteeCaseStatus.AmendmentApproved or GuaranteeCaseStatus.Cancelled)
+            entity.ApplyApprovedAmendment();
+
         if (entity.WorkflowHistory.Count > historyCountBefore)
         {
-            var persist = await PersistTransitionAsync(entity, commentsCountBefore, ct);
+            // #region agent log
+            AgentDebugLog.Write("H1", "GuaranteeCaseAppService.ApplyTransitionAsync", "before-persist", new { caseId, from = statusBefore.ToString(), to = entity.CurrentStatus.ToString() });
+            // #endregion
+            var persist = await PersistTransitionAsync(entity, commentsCountBefore, historyCountBefore, ct);
             if (persist.IsFailure) return persist;
+            // #region agent log
+            AgentDebugLog.Write("H1", "GuaranteeCaseAppService.ApplyTransitionAsync", "after-persist", new { caseId });
+            // #endregion
+
+            foreach (var historyEntry in entity.WorkflowHistory.Skip(historyCountBefore))
+            {
+                WorkflowSmsBackgroundNotifier.NotifyGuaranteeStepChange(
+                    serviceScopeFactory,
+                    logger,
+                    entity.Id,
+                    entity.ApplicantUserId,
+                    entity.CaseNumber,
+                    (int)historyEntry.FromStatus,
+                    (int)historyEntry.ToStatus);
+            }
 
             if (entity.CurrentStatus == GuaranteeCaseStatus.ApprovalFormEntry)
             {
@@ -879,17 +1323,12 @@ public sealed class GuaranteeCaseAppService(
                 if (seed.IsFailure) return seed;
             }
 
-            try
-            {
-                await workflowOrchestrator.SignalGuaranteeCaseAsync(
-                    caseId, WorkflowSignals.StatusChanged, null, ct);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Guarantee workflow signal failed for case {CaseId}", caseId);
-            }
+            GuaranteeWorkflowBackgroundSignaler.SignalStatusChanged(serviceScopeFactory, logger, caseId);
         }
 
+        // #region agent log
+        AgentDebugLog.Write("H3", "GuaranteeCaseAppService.ApplyTransitionAsync", "exit", new { caseId, action = action.ToString(), status = entity.CurrentStatus.ToString() });
+        // #endregion
         return Result.Ok();
     }
 
@@ -984,40 +1423,414 @@ public sealed class GuaranteeCaseAppService(
     private static bool SupportsInternalComment(GuaranteeWorkflowAction action, GuaranteeCaseStatus statusBefore) =>
         action switch
         {
-            GuaranteeWorkflowAction.Approve => statusBefore is GuaranteeCaseStatus.CreditReview,
+            GuaranteeWorkflowAction.Approve => statusBefore is GuaranteeCaseStatus.CreditReview or GuaranteeCaseStatus.AmendmentCreditReview or GuaranteeCaseStatus.AmendmentCeoApproval or GuaranteeCaseStatus.AmendmentLegalReview,
             GuaranteeWorkflowAction.ApproveAttachments => statusBefore == GuaranteeCaseStatus.FinancialAttachmentReview,
             _ => false
         };
 
+    private static bool HasActiveCancellationObligation(GuaranteeCase entity)
+        => (entity.ApprovalForm?.ActiveCommitments ?? 0m) > 0m;
+
+    private Task<Result> ApplyCancellationAliasAsync(Guid caseId, string reason, CancellationToken ct)
+        => ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.Cancel, reason, ct);
+
     private async Task<Result> PersistTransitionAsync(
         GuaranteeCase entity,
         int commentsCountBefore,
+        int historyCountBefore,
         CancellationToken ct)
     {
-        var history = entity.WorkflowHistory[^1];
+        // #region agent log
+        AgentDebugLog.Write("H1", "GuaranteeCaseAppService.PersistTransitionAsync", "entry", new { caseId = entity.Id, status = entity.CurrentStatus.ToString() });
+        // #endregion
+        var pendingHistory = entity.WorkflowHistory.Skip(historyCountBefore).ToList();
         var pendingComments = entity.Comments.Skip(commentsCountBefore).ToList();
+        var pendingNewAmendmentRecords = CapturePendingNewAmendmentHistory();
 
         if (dbContext is DbContext ef)
             ef.ChangeTracker.Clear();
 
-        var rows = await dbContext.GuaranteeCases.ApplyStateAsync(
+        foreach (var record in pendingNewAmendmentRecords)
+        {
+            if (dbContext is DbContext db)
+                await db.InsertAmendmentHistoryRecordAsync(record, ct);
+        }
+
+        // #region agent log
+        AgentDebugLog.Write("H1", "GuaranteeCaseAppService.PersistTransitionAsync", "before-audit-update", new { caseId = entity.Id });
+        // #endregion
+        foreach (var history in pendingHistory)
+        {
+            var auditApplied = await ApplyAmendmentAuditDecisionAsync(entity, history, ct);
+            if (auditApplied.IsFailure)
+                return auditApplied;
+        }
+
+        // #region agent log
+        AgentDebugLog.Write("H1", "GuaranteeCaseAppService.PersistTransitionAsync", "before-state-update", new { caseId = entity.Id });
+        // #endregion
+        var rows = await dbContext.GuaranteeCases.ApplyStateAndAmendmentAsync(
             entity.Id,
             entity.CurrentStatus,
             entity.CurrentPhase,
             entity.UpdatedAt ?? clock.UtcNow,
             entity.CompletedAt,
+            entity.AmendmentType,
+            entity.AmendmentReason,
+            entity.AmendmentRequiresCreditReview,
+            entity.AmendmentOriginalGuaranteeReference,
+            entity.LegalOverrideApproved,
+            entity.SettlementConfirmationRequired,
+            entity.AmendmentRequestedValidityTo,
+            entity.AmendmentRequestedAmount,
+            entity.AmendmentApprovedValidityTo,
+            entity.AmendmentApprovedAmount,
+            entity.AmendmentCreatedAt,
+            entity.AmendmentCompletedAt,
             ct);
 
         if (rows == 0)
             return Result.Fail(Error.NotFound(ApiMessages.GuaranteeCaseNotFound));
 
-        await dbContext.GuaranteeCaseWorkflowHistories.AddAsync(history, ct);
-        foreach (var c in pendingComments)
-            await dbContext.GuaranteeCaseComments.AddAsync(c, ct);
+        // #region agent log
+        AgentDebugLog.Write("H1", "GuaranteeCaseAppService.PersistTransitionAsync", "after-state-update", new { caseId = entity.Id, rows });
+        // #endregion
 
-        await unitOfWork.SaveChangesAsync(ct);
+        if (entity.CurrentStatus is GuaranteeCaseStatus.AmendmentApproved
+            || (entity.CurrentStatus == GuaranteeCaseStatus.Cancelled && entity.AmendmentType == AmendmentType.Cancellation))
+        {
+            // #region agent log
+            AgentDebugLog.Write("H1", "GuaranteeCaseAppService.PersistTransitionAsync", "before-approved-data", new { caseId = entity.Id });
+            // #endregion
+            await PersistApprovedAmendmentDataAsync(entity, ct);
+            // #region agent log
+            AgentDebugLog.Write("H1", "GuaranteeCaseAppService.PersistTransitionAsync", "after-approved-data", new { caseId = entity.Id });
+            // #endregion
+        }
+
+        // #region agent log
+        AgentDebugLog.Write("H1", "GuaranteeCaseAppService.PersistTransitionAsync", "before-history-insert", new { caseId = entity.Id });
+        // #endregion
+        if (dbContext is DbContext dbContextImpl)
+        {
+            foreach (var history in pendingHistory)
+                await dbContextImpl.InsertWorkflowHistoryAsync(history, ct);
+            foreach (var comment in pendingComments)
+                await dbContextImpl.InsertCommentAsync(comment, ct);
+        }
+
+        // #region agent log
+        AgentDebugLog.Write("H1", "GuaranteeCaseAppService.PersistTransitionAsync", "exit", new { caseId = entity.Id });
+        // #endregion
         return Result.Ok();
     }
+
+    private async Task<Result> ApplyAmendmentAuditDecisionAsync(
+        GuaranteeCase entity,
+        GuaranteeCaseWorkflowHistory history,
+        CancellationToken ct)
+    {
+        if (entity.AmendmentType is not (AmendmentType.Extension or AmendmentType.Reduction or AmendmentType.Cancellation))
+            return Result.Ok();
+
+        GuaranteeAmendmentHistoryStatus? decisionStatus = history.Action switch
+        {
+            nameof(GuaranteeWorkflowAction.Approve)
+                when ShouldMarkAmendmentAuditApproved(history.FromStatus, entity.AmendmentType)
+                => GuaranteeAmendmentHistoryStatus.Approved,
+            nameof(GuaranteeWorkflowAction.Reject) => GuaranteeAmendmentHistoryStatus.Rejected,
+            _ => null
+        };
+
+        if (decisionStatus is null)
+            return Result.Ok();
+
+        var rows = await dbContext.GuaranteeAmendmentHistoryRecords.ApplyLatestPendingAmendmentAuditDecisionAsync(
+            entity.Id,
+            decisionStatus.Value,
+            history.ChangedByUserId,
+            history.CreatedAt,
+            history.Comment,
+            ct);
+
+        if (rows == 0)
+        {
+            var latestStatus = await dbContext.GuaranteeAmendmentHistoryRecords
+                .AsNoTracking()
+                .Where(x => x.GuaranteeCaseId == entity.Id)
+                .OrderByDescending(x => x.CreatedAt)
+                .Select(x => (GuaranteeAmendmentHistoryStatus?)x.Status)
+                .FirstOrDefaultAsync(ct);
+
+            if (latestStatus == decisionStatus.Value)
+                return Result.Ok();
+
+            // #region agent log
+            AgentDebugLog.Write("H1", "GuaranteeCaseAppService.ApplyAmendmentAuditDecisionAsync", "no-pending-audit", new { caseId = entity.Id, expected = decisionStatus.Value.ToString(), latest = latestStatus?.ToString() });
+            // #endregion
+            return Result.Fail(Error.Conflict(GuaranteeAmendmentMessages.Incomplete));
+        }
+
+        return Result.Ok();
+    }
+
+    private IReadOnlyList<GuaranteeAmendmentHistoryRecord> CapturePendingNewAmendmentHistory()
+    {
+        if (dbContext is not DbContext ef)
+            return [];
+
+        return ef.ChangeTracker
+            .Entries<GuaranteeAmendmentHistoryRecord>()
+            .Where(x => x.State == EntityState.Added)
+            .Select(x => x.Entity)
+            .ToList();
+    }
+
+    private async Task PersistApprovedAmendmentDataAsync(GuaranteeCase entity, CancellationToken ct)
+    {
+        var approvedValidityTo = entity.AmendmentApprovedValidityTo ?? entity.AmendmentRequestedValidityTo;
+        var approvedAmount = entity.AmendmentApprovedAmount ?? entity.AmendmentRequestedAmount;
+
+        if (entity.AmendmentType == AmendmentType.Extension && approvedValidityTo.HasValue)
+        {
+            await dbContext.GuaranteeCaseApplications
+                .Where(x => x.CaseId == entity.Id)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(x => x.ValidityTo, approvedValidityTo)
+                        .SetProperty(x => x.UpdatedAt, entity.UpdatedAt ?? clock.UtcNow),
+                    ct);
+
+            await dbContext.GuaranteeApprovalForms
+                .Where(x => x.CaseId == entity.Id)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(x => x.ExpiryDate, approvedValidityTo)
+                        .SetProperty(
+                            x => x.ActiveDurationDays,
+                            x => x.IssuanceDate.HasValue
+                                ? approvedValidityTo!.Value.DayNumber - x.IssuanceDate.Value.DayNumber + 1
+                                : x.ActiveDurationDays)
+                        .SetProperty(x => x.UpdatedAt, entity.UpdatedAt ?? clock.UtcNow),
+                    ct);
+        }
+
+        if (entity.AmendmentType == AmendmentType.Reduction && approvedAmount.HasValue)
+        {
+            await dbContext.GuaranteeCaseApplications
+                .Where(x => x.CaseId == entity.Id)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(x => x.RequestedGuaranteeAmount, approvedAmount)
+                        .SetProperty(x => x.UpdatedAt, entity.UpdatedAt ?? clock.UtcNow),
+                    ct);
+
+            await dbContext.GuaranteeApprovalForms
+                .Where(x => x.CaseId == entity.Id)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(x => x.GuaranteeAmount, approvedAmount)
+                        .SetProperty(x => x.UpdatedAt, entity.UpdatedAt ?? clock.UtcNow),
+                    ct);
+        }
+
+        if (entity.AmendmentType == AmendmentType.Cancellation)
+        {
+            await dbContext.GuaranteeApprovalForms
+                .Where(x => x.CaseId == entity.Id)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(x => x.ActiveCommitments, 0m)
+                        .SetProperty(x => x.GuaranteeAmount, 0m)
+                        .SetProperty(x => x.UpdatedAt, entity.UpdatedAt ?? clock.UtcNow),
+                    ct);
+
+            await dbContext.GuaranteeCaseApplications
+                .Where(x => x.CaseId == entity.Id)
+                .ExecuteUpdateAsync(
+                    setters => setters
+                        .SetProperty(x => x.RequestedGuaranteeAmount, 0m)
+                        .SetProperty(x => x.UpdatedAt, entity.UpdatedAt ?? clock.UtcNow),
+                    ct);
+        }
+    }
+
+    private static bool HasActiveAmendmentWorkflow(GuaranteeCase entity)
+        => entity.CurrentStatus is
+            GuaranteeCaseStatus.AmendmentDraft or
+            GuaranteeCaseStatus.AmendmentDataEntry or
+            GuaranteeCaseStatus.AmendmentCreditReview or
+            GuaranteeCaseStatus.AmendmentCeoApproval or
+            GuaranteeCaseStatus.AmendmentLegalReview;
+
+    private static bool ShouldMarkAmendmentAuditApproved(GuaranteeCaseStatus status, AmendmentType? amendmentType)
+        => status switch
+        {
+            GuaranteeCaseStatus.AmendmentLegalReview when amendmentType is AmendmentType.Extension or AmendmentType.Reduction or AmendmentType.Cancellation => true,
+            _ => false
+        };
+
+    private static Result ValidateAmendmentRequest(CreateGuaranteeAmendmentRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Reason))
+            return Result.Fail(Error.Validation(GuaranteeAmendmentMessages.Incomplete));
+
+        if (request.AmendmentType == AmendmentType.Extension && request.NewGuaranteeAmount.HasValue)
+            return Result.Fail(Error.Validation(GuaranteeAmendmentMessages.ReductionAmountInvalid));
+
+        if (request.AmendmentType == AmendmentType.Reduction && request.NewValidityTo.HasValue)
+            return Result.Fail(Error.Validation(GuaranteeAmendmentMessages.ExtensionDateMustExtend));
+
+        return Result.Ok();
+    }
+
+    private async Task<Result> ValidateAmendmentAuditForApprovalAsync(GuaranteeCase entity, CancellationToken ct)
+    {
+        var latestStatus = await GetLatestAmendmentHistoryStatusAsync(entity.Id, ct);
+        // #region agent log
+        AgentDebugLog.Write("H7", "GuaranteeCaseAppService.ValidateAmendmentAuditForApprovalAsync", "audit-status", new { caseId = entity.Id, status = entity.CurrentStatus.ToString(), latest = latestStatus?.ToString() });
+        // #endregion
+
+        if (latestStatus is null)
+            return await EnsureAmendmentAuditRecordAsync(entity, ct);
+
+        if (latestStatus is GuaranteeAmendmentHistoryStatus.PendingReview or GuaranteeAmendmentHistoryStatus.Approved)
+            return Result.Ok();
+
+        return Result.Fail(Error.Conflict(GuaranteeAmendmentMessages.Incomplete));
+    }
+
+    private async Task<Result> ValidateAmendmentAuditForRejectAsync(GuaranteeCase entity, CancellationToken ct)
+    {
+        var latestStatus = await GetLatestAmendmentHistoryStatusAsync(entity.Id, ct);
+        if (latestStatus is GuaranteeAmendmentHistoryStatus.PendingReview or GuaranteeAmendmentHistoryStatus.Rejected)
+            return Result.Ok();
+
+        if (latestStatus is null)
+            return Result.Fail(Error.Conflict(GuaranteeAmendmentMessages.Incomplete));
+
+        return Result.Fail(Error.Conflict(GuaranteeAmendmentMessages.Incomplete));
+    }
+
+    private async Task<Result> EnsureAmendmentAuditRecordAsync(GuaranteeCase entity, CancellationToken ct)
+    {
+        if (entity.AmendmentType is not (AmendmentType.Extension or AmendmentType.Reduction or AmendmentType.Cancellation))
+            return Result.Fail(Error.Conflict(GuaranteeAmendmentMessages.Incomplete));
+
+        if (!GuaranteeAmendmentCompleteness.IsComplete(entity))
+            return Result.Fail(Error.Conflict(GuaranteeAmendmentMessages.Incomplete));
+
+        if (dbContext is not DbContext db)
+            return Result.Fail(Error.Unexpected(ApiMessages.GuaranteeCaseNotFound));
+
+        var record = BuildPendingAmendmentHistoryRecord(entity, entity.ApplicantUserId);
+        await db.InsertAmendmentHistoryRecordAsync(record, ct);
+        // #region agent log
+        AgentDebugLog.Write("H7", "GuaranteeCaseAppService.EnsureAmendmentAuditRecordAsync", "backfilled", new { caseId = entity.Id, recordId = record.Id });
+        // #endregion
+        return Result.Ok();
+    }
+
+    private async Task<GuaranteeAmendmentHistoryStatus?> GetLatestAmendmentHistoryStatusAsync(
+        Guid caseId,
+        CancellationToken ct)
+        => await dbContext.GuaranteeAmendmentHistoryRecords
+            .AsNoTracking()
+            .Where(x => x.GuaranteeCaseId == caseId)
+            .OrderByDescending(x => x.CreatedAt)
+            .Select(x => (GuaranteeAmendmentHistoryStatus?)x.Status)
+            .FirstOrDefaultAsync(ct);
+
+    private GuaranteeAmendmentHistoryRecord BuildPendingAmendmentHistoryRecord(GuaranteeCase entity, string authUserId)
+        => new(
+            entity.Id,
+            entity.AmendmentType!.Value,
+            SerializeSnapshot(BuildCurrentSourceSnapshot(entity)),
+            SerializeSnapshot(BuildRequestedSnapshot(entity)),
+            entity.AmendmentReason ?? string.Empty,
+            authUserId,
+            clock.UtcNow);
+
+    private GuaranteeAmendmentValueSnapshotDto BuildCurrentSourceSnapshot(GuaranteeCase entity)
+        => new(
+            entity.ApprovalForm?.ExpiryDate ?? entity.Application?.ValidityTo,
+            entity.ApprovalForm?.GuaranteeAmount ?? entity.Application?.RequestedGuaranteeAmount);
+
+    private GuaranteeAmendmentValueSnapshotDto BuildRequestedSnapshot(GuaranteeCase entity)
+    {
+        var current = BuildCurrentSourceSnapshot(entity);
+        return entity.AmendmentType!.Value switch
+        {
+            AmendmentType.Extension => current with { ValidityTo = entity.AmendmentRequestedValidityTo },
+            AmendmentType.Reduction => current with { GuaranteeAmount = entity.AmendmentRequestedAmount },
+            AmendmentType.Cancellation => current with { GuaranteeAmount = 0m, ValidityTo = current.ValidityTo },
+            _ => current
+        };
+    }
+
+    private GuaranteeAmendmentDto? BuildAmendmentDto(
+        GuaranteeCase entity,
+        IReadOnlyList<GuaranteeAmendmentHistoryRecordDto> history)
+    {
+        var baseDto = dtoMapper.MapAmendment(entity);
+        if (baseDto is null)
+            return null;
+
+        var latest = history.OrderByDescending(x => x.CreatedAt).FirstOrDefault();
+        return baseDto with
+        {
+            PreviousValues = latest?.PreviousValues,
+            NewValues = latest?.NewValues,
+            History = history
+        };
+    }
+
+    private async Task<IReadOnlyList<GuaranteeAmendmentHistoryRecordDto>> LoadAmendmentHistoryAsync(Guid caseId, CancellationToken ct)
+    {
+        var records = await dbContext.GuaranteeAmendmentHistoryRecords
+            .AsNoTracking()
+            .Where(x => x.GuaranteeCaseId == caseId)
+            .OrderByDescending(x => x.CreatedAt)
+            .ToListAsync(ct);
+
+        if (records.Count == 0)
+            return [];
+
+        var userIds = records
+            .SelectMany(x => new[] { x.CreatedBy, x.ApprovalUser })
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray()!;
+
+        var lookup = userIds.Length == 0
+            ? new Dictionary<string, UserDisplayDto>()
+            : await userDisplayLookup.GetByIdsAsync(userIds!, ct);
+
+        return records
+            .Select(x => new GuaranteeAmendmentHistoryRecordDto(
+                x.Id,
+                x.AmendmentType,
+                x.Status,
+                DeserializeSnapshot(x.PreviousValues),
+                DeserializeSnapshot(x.NewValues),
+                x.Reason,
+                x.CreatedBy,
+                lookup.GetValueOrDefault(x.CreatedBy)?.FullName,
+                x.CreatedAt,
+                x.ApprovalUser,
+                string.IsNullOrWhiteSpace(x.ApprovalUser) ? null : lookup.GetValueOrDefault(x.ApprovalUser)?.FullName,
+                x.ApprovedAt,
+                x.DecisionReason))
+            .ToList();
+    }
+
+    private static string SerializeSnapshot(GuaranteeAmendmentValueSnapshotDto snapshot)
+        => JsonSerializer.Serialize(snapshot);
+
+    private static GuaranteeAmendmentValueSnapshotDto? DeserializeSnapshot(string? json)
+        => string.IsNullOrWhiteSpace(json)
+            ? null
+            : JsonSerializer.Deserialize<GuaranteeAmendmentValueSnapshotDto>(json);
 
     private Result<string> RequireUser() => authorizationService.EnsureAuthenticated();
 
@@ -1042,5 +1855,37 @@ public sealed class GuaranteeCaseAppService(
                   ?? httpContext?.TraceIdentifier;
 
         return Guid.TryParse(raw, out var parsed) ? parsed : Guid.NewGuid();
+    }
+
+    private async Task NotifyWorkflowSmsSafeAsync(
+        Guid caseId,
+        string applicantUserId,
+        string caseNumber,
+        int fromStatus,
+        int toStatus,
+        CancellationToken cancellationToken)
+    {
+        // #region agent log
+        AgentDebugLog.Write("H2", "GuaranteeCaseAppService.NotifyWorkflowSmsSafeAsync", "entry", new { caseId, fromStatus, toStatus });
+        // #endregion
+        try
+        {
+            await workflowSmsNotifier.NotifyStepChangeAsync(
+                new WorkflowSmsNotification(
+                    CaseModuleType.Guarantee,
+                    caseId,
+                    applicantUserId,
+                    caseNumber,
+                    fromStatus,
+                    toStatus),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Workflow SMS notification failed for guarantee case {CaseId}", caseId);
+        }
+        // #region agent log
+        AgentDebugLog.Write("H2", "GuaranteeCaseAppService.NotifyWorkflowSmsSafeAsync", "exit", new { caseId });
+        // #endregion
     }
 }

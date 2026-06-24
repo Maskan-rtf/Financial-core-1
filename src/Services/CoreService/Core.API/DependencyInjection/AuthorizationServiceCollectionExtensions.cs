@@ -93,8 +93,6 @@ public static class AuthorizationServiceCollectionExtensions
                 UserRoleClaims.LegalUnit,
                 UserRoleClaims.FinancialUnit,
                 UserRoleClaims.InvestmentUnit));
-            options.AddPolicy("Dashboard.Applicant", p => p.RequireRole(UserRoleClaims.Applicant, UserRoleClaims.Admin));
-
             options.AddPolicy("Analytics.EmployeeKpi", p => p.RequireRole(
                 UserRoleClaims.Ceo,
                 UserRoleClaims.TechnicalExpert,
@@ -113,6 +111,11 @@ public static class AuthorizationServiceCollectionExtensions
                 UserRoleClaims.Admin,
                 UserRoleClaims.TechnicalExpert,
                 "CEO"));
+
+            options.AddPolicy("CaseStages.Rollback", p => p.RequireRole(
+                UserRoleClaims.Admin,
+                UserRoleClaims.TechnicalExpert,
+                UserRoleClaims.TechnicalManager));
         });
 
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();

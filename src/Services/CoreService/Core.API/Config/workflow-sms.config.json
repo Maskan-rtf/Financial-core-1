@@ -1,0 +1,376 @@
+{
+  "globalEnabled": true,
+  "signature": "صندوق پژوهش و فناوری غیردولتی مسکن",
+  "modules": {
+    "investment": {
+      "steps": [
+        {
+          "status": 2,
+          "statusName": "DataEntry1",
+          "enabled": true,
+          "message": "پرونده {caseNumber}: فرم اولیه نیاز به تکمیل دارد. وضعیت: «{statusTitle}».",
+          "applicantActionRequired": true,
+          "applicantActionHint": "لطفاً وارد سامانه شوید، فرم اولیه را تکمیل و ارسال کنید."
+        },
+        {
+          "status": 3,
+          "statusName": "ReviewDataEntry1",
+          "enabled": true,
+          "message": "پرونده {caseNumber}: فرم اولیه ثبت شد و در صف بررسی کارشناس قرار گرفت."
+        },
+        {
+          "status": 4,
+          "statusName": "DataEntry2",
+          "enabled": true,
+          "message": "پرونده {caseNumber}: فرم تکمیلی نیاز به تکمیل دارد. وضعیت: «{statusTitle}».",
+          "applicantActionRequired": true,
+          "applicantActionHint": "لطفاً وارد سامانه شوید، فرم تکمیلی را تکمیل و ارسال کنید."
+        },
+        {
+          "status": 5,
+          "statusName": "ReviewDataEntry2",
+          "enabled": true,
+          "message": "پرونده {caseNumber}: فرم تکمیلی ثبت شد و در صف بررسی کارشناس قرار گرفت."
+        },
+        {
+          "status": 6,
+          "statusName": "InitialValuation",
+          "enabled": true,
+          "message": "پرونده {caseNumber}: وارد مرحله ارزش‌گذاری اولیه شد."
+        },
+        {
+          "status": 7,
+          "statusName": "SecondaryValuation",
+          "enabled": true,
+          "message": "پرونده {caseNumber}: وارد مرحله ارزش‌گذاری ثانویه شد."
+        },
+        {
+          "status": 8,
+          "statusName": "WaitingPreliminaryContract",
+          "enabled": true,
+          "message": "پرونده {caseNumber}: پرونده وارد مرحله آماده‌سازی پیش‌قرارداد شد."
+        },
+        {
+          "status": 9,
+          "statusName": "WaitingUserReviewPreliminaryContract",
+          "enabled": true,
+          "message": "پرونده {caseNumber}: پیش‌قرارداد آماده بازبینی است. وضعیت: «{statusTitle}».",
+          "applicantActionRequired": true,
+          "applicantActionHint": "لطفاً وارد سامانه شوید، پیش‌قرارداد را بررسی و تأیید یا اصلاح کنید."
+        },
+        {
+          "status": 10,
+          "statusName": "ContractDrafting",
+          "enabled": false,
+          "message": "پرونده {caseNumber}: پیش‌نویس قرارداد در حال تدوین است."
+        },
+        {
+          "status": 11,
+          "statusName": "WaitingContractSignature",
+          "enabled": false,
+          "message": "پرونده {caseNumber}: قرارداد در مرحله آماده‌سازی امضا است."
+        },
+        {
+          "status": 12,
+          "statusName": "WaitingSignedContractUpload",
+          "enabled": false,
+          "message": "پرونده {caseNumber}: در انتظار بارگذاری قرارداد امضاشده توسط واحد حقوقی است."
+        },
+        {
+          "status": 13,
+          "statusName": "WaitingFinancialWorksheet",
+          "enabled": true,
+          "message": "پرونده {caseNumber}: کاربرگ مالی نیاز به تکمیل دارد. وضعیت: «{statusTitle}».",
+          "applicantActionRequired": true,
+          "applicantActionHint": "لطفاً وارد سامانه شوید، کاربرگ مالی را تکمیل و ارسال کنید."
+        },
+        {
+          "status": 14,
+          "statusName": "FinancialWorksheetReview",
+          "enabled": true,
+          "message": "پرونده {caseNumber}: کاربرگ مالی ثبت شد و در صف بررسی واحد مالی قرار گرفت."
+        },
+        {
+          "status": 20,
+          "statusName": "WaitingCeoApproval",
+          "enabled": true,
+          "message": "پرونده {caseNumber}: پرونده برای تأیید مدیرعامل ارسال شد."
+        },
+        {
+          "status": 15,
+          "statusName": "WaitingPayment",
+          "enabled": true,
+          "message": "پرونده {caseNumber}: پرونده وارد مرحله پرداخت شد."
+        },
+        {
+          "status": 16,
+          "statusName": "Completed",
+          "enabled": true,
+          "message": "پرونده {caseNumber}: پرونده با موفقیت تکمیل شد."
+        },
+        {
+          "status": 17,
+          "statusName": "Rejected",
+          "enabled": true,
+          "message": "پرونده {caseNumber}: درخواست شما رد شد."
+        },
+        {
+          "status": 18,
+          "statusName": "Cancelled",
+          "enabled": true,
+          "message": "پرونده {caseNumber}: درخواست شما لغو شد."
+        },
+        {
+          "status": 19,
+          "statusName": "Archived",
+          "enabled": false,
+          "message": "پرونده {caseNumber}: پرونده بایگانی شد."
+        }
+      ]
+    },
+    "guarantee": {
+      "steps": [
+        {
+          "status": 2,
+          "statusName": "DataEntry",
+          "enabled": true,
+          "message": "ضمانت‌نامه {caseNumber}: اطلاعات درخواست نیاز به تکمیل دارد. وضعیت: «{statusTitle}».",
+          "applicantActionRequired": true,
+          "applicantActionHint": "لطفاً وارد سامانه شوید، اطلاعات درخواست را تکمیل و ارسال کنید."
+        },
+        {
+          "status": 3,
+          "statusName": "CreditReview",
+          "enabled": true,
+          "message": "ضمانت‌نامه {caseNumber}: درخواست ثبت شد و در صف بررسی اعتبارات قرار گرفت."
+        },
+        {
+          "status": 4,
+          "statusName": "ApprovalFormEntry",
+          "enabled": false,
+          "message": "ضمانت‌نامه {caseNumber}: در حال تکمیل فرم تصویب است."
+        },
+        {
+          "status": 5,
+          "statusName": "CeoApprovalInitial",
+          "enabled": true,
+          "message": "ضمانت‌نامه {caseNumber}: درخواست برای تأیید اولیه مدیرعامل ارسال شد."
+        },
+        {
+          "status": 6,
+          "statusName": "WaitingDraftContract",
+          "enabled": true,
+          "message": "ضمانت‌نامه {caseNumber}: پرونده وارد مرحله آماده‌سازی پیش‌قرارداد شد."
+        },
+        {
+          "status": 7,
+          "statusName": "WaitingSignedContractAndAttachments",
+          "enabled": true,
+          "message": "ضمانت‌نامه {caseNumber}: لطفاً قرارداد امضاشده و پیوست‌ها را بارگذاری کنید. وضعیت: «{statusTitle}».",
+          "applicantActionRequired": true,
+          "applicantActionHint": "لطفاً وارد سامانه شوید، قرارداد امضاشده و مدارک موردنیاز را بارگذاری کنید."
+        },
+        {
+          "status": 8,
+          "statusName": "FinancialAttachmentReview",
+          "enabled": true,
+          "message": "ضمانت‌نامه {caseNumber}: مدارک شما ثبت شد و در صف بررسی واحد مالی قرار گرفت."
+        },
+        {
+          "status": 9,
+          "statusName": "WaitingFinalContract",
+          "enabled": true,
+          "message": "ضمانت‌نامه {caseNumber}: پرونده وارد مرحله آماده‌سازی قرارداد نهایی شد."
+        },
+        {
+          "status": 10,
+          "statusName": "CeoApprovalFinal",
+          "enabled": true,
+          "message": "ضمانت‌نامه {caseNumber}: درخواست برای تأیید نهایی مدیرعامل ارسال شد."
+        },
+        {
+          "status": 11,
+          "statusName": "WaitingIssuanceDocuments",
+          "enabled": true,
+          "message": "ضمانت‌نامه {caseNumber}: پرونده وارد مرحله صدور ضمانت‌نامه شد."
+        },
+        {
+          "status": 12,
+          "statusName": "Completed",
+          "enabled": true,
+          "message": "ضمانت‌نامه {caseNumber}: پرونده با موفقیت تکمیل شد."
+        },
+        {
+          "status": 13,
+          "statusName": "Rejected",
+          "enabled": true,
+          "message": "ضمانت‌نامه {caseNumber}: درخواست شما رد شد."
+        },
+        {
+          "status": 14,
+          "statusName": "Cancelled",
+          "enabled": true,
+          "message": "ضمانت‌نامه {caseNumber}: درخواست شما لغو شد."
+        },
+        {
+          "status": 16,
+          "statusName": "AmendmentDraft",
+          "enabled": true,
+          "message": "ضمانت‌نامه {caseNumber}: اصلاحیه جدید ایجاد شد. وضعیت: «{statusTitle}».",
+          "applicantActionRequired": true,
+          "applicantActionHint": "لطفاً وارد سامانه شوید و اطلاعات اصلاحیه را تکمیل کنید."
+        },
+        {
+          "status": 17,
+          "statusName": "AmendmentDataEntry",
+          "enabled": true,
+          "message": "ضمانت‌نامه {caseNumber}: ثبت اطلاعات اصلاحیه نیاز به تکمیل دارد.",
+          "applicantActionRequired": true,
+          "applicantActionHint": "لطفاً وارد سامانه شوید، اطلاعات اصلاحیه را تکمیل و ارسال کنید."
+        },
+        {
+          "status": 18,
+          "statusName": "AmendmentCreditReview",
+          "enabled": true,
+          "message": "ضمانت‌نامه {caseNumber}: اصلاحیه ثبت شد و در صف بررسی اعتبارات قرار گرفت."
+        },
+        {
+          "status": 19,
+          "statusName": "AmendmentCeoApproval",
+          "enabled": true,
+          "message": "ضمانت‌نامه {caseNumber}: اصلاحیه برای تأیید مدیرعامل ارسال شد."
+        },
+        {
+          "status": 20,
+          "statusName": "AmendmentLegalReview",
+          "enabled": true,
+          "message": "ضمانت‌نامه {caseNumber}: اصلاحیه وارد مرحله بررسی حقوقی شد."
+        },
+        {
+          "status": 22,
+          "statusName": "AmendmentApproved",
+          "enabled": true,
+          "message": "ضمانت‌نامه {caseNumber}: اصلاحیه تأیید شد."
+        },
+        {
+          "status": 23,
+          "statusName": "AmendmentRejected",
+          "enabled": true,
+          "message": "ضمانت‌نامه {caseNumber}: اصلاحیه رد شد."
+        }
+      ]
+    },
+    "loan": {
+      "steps": [
+        {
+          "status": 2,
+          "statusName": "DataEntry",
+          "enabled": true,
+          "message": "تسهیلات {caseNumber}: اطلاعات درخواست نیاز به تکمیل دارد. وضعیت: «{statusTitle}».",
+          "applicantActionRequired": true,
+          "applicantActionHint": "لطفاً وارد سامانه شوید، اطلاعات درخواست را تکمیل و ارسال کنید."
+        },
+        {
+          "status": 3,
+          "statusName": "PendingCreditReview",
+          "enabled": true,
+          "message": "تسهیلات {caseNumber}: درخواست ثبت شد و در صف بررسی اعتبارات قرار گرفت."
+        },
+        {
+          "status": 4,
+          "statusName": "RevisionRequestedByCredit",
+          "enabled": true,
+          "message": "تسهیلات {caseNumber}: درخواست شما نیاز به اصلاح دارد. وضعیت: «{statusTitle}».",
+          "applicantActionRequired": true,
+          "applicantActionHint": "لطفاً وارد سامانه شوید، اصلاحات درخواستی واحد اعتبارات را اعمال و مجدداً ارسال کنید."
+        },
+        {
+          "status": 5,
+          "statusName": "PendingCeoInitialApproval",
+          "enabled": true,
+          "message": "تسهیلات {caseNumber}: درخواست برای تأیید اولیه مدیرعامل ارسال شد."
+        },
+        {
+          "status": 6,
+          "statusName": "CanceledByCeo",
+          "enabled": true,
+          "message": "تسهیلات {caseNumber}: درخواست توسط مدیرعامل لغو شد."
+        },
+        {
+          "status": 7,
+          "statusName": "PendingLegalRawContract",
+          "enabled": true,
+          "message": "تسهیلات {caseNumber}: پرونده وارد مرحله آماده‌سازی قرارداد و اقساط شد."
+        },
+        {
+          "status": 8,
+          "statusName": "PendingApplicantSignature",
+          "enabled": true,
+          "message": "تسهیلات {caseNumber}: قرارداد آماده امضا است. وضعیت: «{statusTitle}».",
+          "applicantActionRequired": true,
+          "applicantActionHint": "لطفاً وارد سامانه شوید، قرارداد را بررسی و بسته امضاشده را بارگذاری کنید."
+        },
+        {
+          "status": 9,
+          "statusName": "PendingLegalFinalReview",
+          "enabled": true,
+          "message": "تسهیلات {caseNumber}: بسته امضاشده ثبت شد و در صف بررسی حقوقی قرار گرفت."
+        },
+        {
+          "status": 10,
+          "statusName": "RevisionRequestedByLegal",
+          "enabled": true,
+          "message": "تسهیلات {caseNumber}: مدارک شما نیاز به اصلاح دارد (واحد حقوقی).",
+          "applicantActionRequired": true,
+          "applicantActionHint": "لطفاً وارد سامانه شوید، اصلاحات درخواستی را اعمال و مجدداً ارسال کنید."
+        },
+        {
+          "status": 11,
+          "statusName": "PendingFinancialReview",
+          "enabled": true,
+          "message": "تسهیلات {caseNumber}: پرونده در صف بررسی واحد مالی قرار گرفت."
+        },
+        {
+          "status": 12,
+          "statusName": "RevisionRequestedByFinancial",
+          "enabled": true,
+          "message": "تسهیلات {caseNumber}: مدارک شما نیاز به اصلاح دارد (واحد مالی).",
+          "applicantActionRequired": true,
+          "applicantActionHint": "لطفاً وارد سامانه شوید، اصلاحات درخواستی را اعمال و مجدداً ارسال کنید."
+        },
+        {
+          "status": 13,
+          "statusName": "PendingLegalFinalContract",
+          "enabled": true,
+          "message": "تسهیلات {caseNumber}: پرونده وارد مرحله آماده‌سازی قرارداد نهایی شد."
+        },
+        {
+          "status": 14,
+          "statusName": "PendingCeoFinalApproval",
+          "enabled": true,
+          "message": "تسهیلات {caseNumber}: درخواست برای تأیید نهایی مدیرعامل ارسال شد."
+        },
+        {
+          "status": 15,
+          "statusName": "ReadyForPayment",
+          "enabled": true,
+          "message": "تسهیلات {caseNumber}: پرونده آماده پرداخت است."
+        },
+        {
+          "status": 16,
+          "statusName": "RepaymentPhase",
+          "enabled": true,
+          "message": "تسهیلات {caseNumber}: وارد فاز بازپرداخت شدید.",
+          "applicantActionRequired": true,
+          "applicantActionHint": "لطفاً وضعیت اقساط را در سامانه پیگیری کنید."
+        },
+        {
+          "status": 17,
+          "statusName": "Completed",
+          "enabled": true,
+          "message": "تسهیلات {caseNumber}: پرونده با موفقیت تکمیل شد."
+        }
+      ]
+    }
+  }
+}

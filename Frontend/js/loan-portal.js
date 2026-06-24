@@ -67,6 +67,24 @@
     return model.normalizeRole(session.userRoleText, session.userRoleNumber);
   }
 
+  async function refreshStageRollback() {
+    if (!window.CaseStageRollback) return;
+    await window.CaseStageRollback.refresh({
+      panel: state.panel,
+      module: "loan",
+      host: "lStageRollback",
+      getCaseId: function () {
+        return state.caseId;
+      },
+      getRole: getSessionRole,
+      onSuccess: async function (msg) {
+        setInfo(msg);
+        await refreshCase();
+      },
+      onError: setError,
+    });
+  }
+
   function canViewFundCreditCapacity() {
     const role = getSessionRole();
     return window.FundCreditCapacityUi && window.FundCreditCapacityUi.canViewFundCreditCapacity(role);
@@ -134,23 +152,40 @@
   }
 
   function buildApprovalDetailBody(form) {
-    const app = pick(state.caseData, "application", "Application") || {};
-    const contractSubject = pick(app, "facilitySubject", "FacilitySubject");
-    const collateral = pick(app, "offeredGuarantees", "OfferedGuarantees");
+    const app = getApplication();
     const approved = Number(form.approvedAmount) || null;
     const repaymentMonths = Number(form.repaymentMonths) || null;
     const rate = Number(form.annualProfitRatePercent);
     const grace = form.gracePeriodMonths == null || form.gracePeriodMonths === "" ? null : Number(form.gracePeriodMonths);
+    const contractSubject =
+      pick(app, "facilitySubject", "FacilitySubject") || pickDetailField("contractSubject", "ContractSubject");
+    const collateral =
+      pick(app, "offeredGuarantees", "OfferedGuarantees") || pickDetailField("collateralDescription", "CollateralDescription");
+    const expectedProfit = computeExpectedTotalProfit(approved, rate, repaymentMonths);
+    const repaymentCheck =
+      pickDetailField("repaymentCheckAmount", "RepaymentCheckAmount") ??
+      (approved && expectedProfit ? approved + expectedProfit : approved || null);
     return {
+      debtToAssetRatio: pickDetailField("debtToAssetRatio", "DebtToAssetRatio"),
+      currentRatio: pickDetailField("currentRatio", "CurrentRatio"),
+      profitabilityRatioPercent: pickDetailField("profitabilityRatioPercent", "ProfitabilityRatioPercent"),
+      creditLimitWithCheck: pickDetailField("creditLimitWithCheck", "CreditLimitWithCheck"),
+      isCreditLineActive: pick(getApprovalDetail(), "isCreditLineActive", "IsCreditLineActive") ?? null,
+      remainingCreditAfterGrant: pickDetailField("remainingCreditAfterGrant", "RemainingCreditAfterGrant"),
       approvedAmount: approved,
       facilityType: form.facilityType ?? 3,
-      contractSubject: contractSubject || collateral || "—",
+      contractSubject: contractSubject || null,
+      brokerageAndRelatedContract: pickDetailField("brokerageAndRelatedContract", "BrokerageAndRelatedContract"),
+      approvedAmountInWords: pickDetailField("approvedAmountInWords", "ApprovedAmountInWords"),
       repaymentMonths,
       gracePeriodMonths: Number.isFinite(grace) ? grace : null,
       annualProfitRatePercent: Number.isFinite(rate) ? rate : null,
-      expectedTotalProfit: computeExpectedTotalProfit(approved, rate, repaymentMonths),
-      collateralDescription: collateral || "—",
-      guarantorsDescription: "—",
+      dailyPenaltyRatePercent: pickDetailField("dailyPenaltyRatePercent", "DailyPenaltyRatePercent"),
+      expectedTotalProfit: expectedProfit,
+      collateralDescription: collateral || null,
+      guarantorsDescription: pickDetailField("guarantorsDescription", "GuarantorsDescription"),
+      otherNotes: pickDetailField("otherNotes", "OtherNotes"),
+      repaymentCheckAmount: repaymentCheck,
     };
   }
 
@@ -172,26 +207,51 @@
     });
   }
 
-  async function refreshCase() {
-    if (!state.caseId || state.busy) return;
-    state.busy = true;
+  async function reloadCaseData(applicationDraft, approvalDraft) {
+    const [caseRes] = await Promise.all([
+      state.panel.apiRequest({ method: "GET", path: lPath("/" + state.caseId) }),
+      loadDocuments(),
+      loadInstallments(),
+      loadComments(),
+      loadHistory(),
+      loadPayments(),
+    ]);
+    state.caseData = unwrap(caseRes.body);
+    const caseInstallments = pick(state.caseData, "installments", "Installments");
+    if (Array.isArray(caseInstallments) && caseInstallments.length) {
+      state.installments = caseInstallments;
+    }
+    const casePayments = pick(state.caseData, "payments", "Payments");
+    if (Array.isArray(casePayments) && casePayments.length) {
+      state.payments = casePayments;
+    }
+    renderCase(applicationDraft, approvalDraft);
+  }
+
+  async function runRefreshCase(previousStatus) {
+    if (!state.caseId) return;
     const applicationDraft = captureApplicationDraft();
     const approvalDraft = captureApprovalDraft();
-    try {
-      const [caseRes] = await Promise.all([
-        state.panel.apiRequest({ method: "GET", path: lPath("/" + state.caseId) }),
-        loadDocuments(),
-        loadInstallments(),
-        loadComments(),
-        loadHistory(),
-        loadPayments(),
-      ]);
-      state.caseData = unwrap(caseRes.body);
-      renderCase(applicationDraft, approvalDraft);
-    } finally {
-      state.busy = false;
+    const refreshOnce = function () {
+      return reloadCaseData(applicationDraft, approvalDraft);
+    };
+    if (previousStatus != null && window.PortalCaseRefresh) {
+      await window.PortalCaseRefresh.refreshUntilChanged(
+        refreshOnce,
+        function () {
+          return pickStatus(state.caseData);
+        },
+        previousStatus
+      );
+    } else {
+      await refreshOnce();
     }
+    await refreshStageRollback();
   }
+
+  const refreshCase = window.PortalCaseRefresh
+    ? window.PortalCaseRefresh.createCoalescedRefresh(runRefreshCase)
+    : runRefreshCase;
 
   async function loadDocuments() {
     if (!state.caseId) return;
@@ -251,10 +311,25 @@
     return role && role !== "Applicant";
   }
 
+  function shouldShowCompletedCaseDossier(status) {
+    const value = model.coerceStatus ? model.coerceStatus(status) : Number(status) || 0;
+    return value === 17 || value === 18;
+  }
+
   function shouldShowCaseDossier(status) {
     const value = model.coerceStatus ? model.coerceStatus(status) : Number(status) || 0;
+    if (shouldShowCompletedCaseDossier(value)) return true;
     if (canViewFullCaseDossier() && value >= 1) return true;
     return isInternalUser() && [3, 5, 7, 9, 11, 13, 14, 15, 16].includes(value);
+  }
+
+  function formatCaseDate(iso) {
+    if (!iso) return "—";
+    try {
+      return new Date(iso).toLocaleString("fa-IR");
+    } catch {
+      return String(iso);
+    }
   }
 
   function labelFromOptions(value, options) {
@@ -340,18 +415,168 @@
       parent.appendChild(el("div", "muted", "فرم تصویب هنوز ثبت نشده است."));
       return;
     }
-    const f = (camel, pascal) => pick(detail, camel, pascal);
-    renderReadOnlyBlock(parent, null, [
-      ["مبلغ تأییدشده (ریال)", formatRial(f("approvedAmount", "ApprovedAmount"))],
-      ["نوع تسهیلات", labelFromOptions(f("facilityType", "FacilityType"), model.FACILITY_TYPES)],
-      ["موضوع قرارداد", f("contractSubject", "ContractSubject")],
-      ["مدت بازپرداخت (ماه)", f("repaymentMonths", "RepaymentMonths")],
-      ["دوره تنفس (ماه)", f("gracePeriodMonths", "GracePeriodMonths")],
-      ["نرخ سود سالانه (٪)", f("annualProfitRatePercent", "AnnualProfitRatePercent")],
-      ["سود کل برآوردی (ریال)", formatRial(f("expectedTotalProfit", "ExpectedTotalProfit"))],
-      ["وثایق / تضمین", f("collateralDescription", "CollateralDescription")],
-      ["ضامنین", f("guarantorsDescription", "GuarantorsDescription")],
+
+    const profit = getExpectedTotalProfit();
+    const approved = getApprovedAmount();
+    const repaymentCheck = getRepaymentCheckAmount();
+    const contractSubject = resolveDetailOrApp("contractSubject", "ContractSubject", "facilitySubject", "FacilitySubject");
+    const collateral = resolveDetailOrApp("collateralDescription", "CollateralDescription", "offeredGuarantees", "OfferedGuarantees");
+    const facilityType = pickDetailField("facilityType", "FacilityType");
+    const creditActive = pick(detail, "isCreditLineActive", "IsCreditLineActive");
+
+    const rows = [];
+    const pushText = (label, value) => {
+      const text = displayDetailText(value);
+      if (text !== "—") rows.push([label, text]);
+    };
+    const pushRial = (label, value) => {
+      if (value == null || value === "" || Number(value) <= 0) return;
+      rows.push([label, formatRialOptional(value)]);
+    };
+    const pushNumber = (label, value) => {
+      if (value == null || value === "") return;
+      rows.push([label, String(value)]);
+    };
+
+    pushRial("مبلغ تأییدشده (ریال)", approved);
+    if (facilityType != null) rows.push(["نوع تسهیلات", labelFromOptions(facilityType, model.FACILITY_TYPES)]);
+    pushText("موضوع قرارداد", contractSubject);
+    pushText("کارگزاری / قرارداد مرتبط", pickDetailField("brokerageAndRelatedContract", "BrokerageAndRelatedContract"));
+    pushNumber("مدت بازپرداخت (ماه)", pickDetailField("repaymentMonths", "RepaymentMonths"));
+    pushNumber("دوره تنفس (ماه)", pickDetailField("gracePeriodMonths", "GracePeriodMonths"));
+    pushNumber("نرخ سود سالانه (٪)", pickDetailField("annualProfitRatePercent", "AnnualProfitRatePercent"));
+    pushNumber("نرخ جریمه روزانه (٪)", pickDetailField("dailyPenaltyRatePercent", "DailyPenaltyRatePercent"));
+    pushRial("سود کل برآوردی (ریال)", profit > 0 ? profit : null);
+    pushRial("مبلغ چک بازپرداخت", repaymentCheck);
+    pushNumber("نسبت بدهی به دارایی", pickDetailField("debtToAssetRatio", "DebtToAssetRatio"));
+    pushNumber("نسبت جاری", pickDetailField("currentRatio", "CurrentRatio"));
+    pushNumber("نسبت سودآوری (٪)", pickDetailField("profitabilityRatioPercent", "ProfitabilityRatioPercent"));
+    pushRial("سقف اعتبار", pickDetailField("creditLimitWithCheck", "CreditLimitWithCheck"));
+    if (creditActive === true || creditActive === false) {
+      rows.push(["خط اعتباری فعال", creditActive ? "بله" : "خیر"]);
+    }
+    pushRial("اعتبار باقی‌مانده پس از اعطا", pickDetailField("remainingCreditAfterGrant", "RemainingCreditAfterGrant"));
+    pushText("وثایق / تضمین", collateral);
+    pushText("ضامنین", pickDetailField("guarantorsDescription", "GuarantorsDescription"));
+    pushText("سایر توضیحات", pickDetailField("otherNotes", "OtherNotes"));
+
+    if (!rows.length) {
+      parent.appendChild(el("div", "muted", "فرم تصویب هنوز ثبت نشده است."));
+      return;
+    }
+    renderReadOnlyBlock(parent, null, rows);
+  }
+
+  function renderCompanyProfile(parent) {
+    const company = pick(state.caseData, "company", "Company");
+    if (!company) return;
+    renderReadOnlyBlock(parent, "اطلاعات شرکت", [
+      ["نام شرکت", pick(company, "name", "Name")],
+      ["شناسه ملی", pick(company, "nationalId", "NationalId")],
+      ["تلفن", pick(company, "phoneNumber", "PhoneNumber")],
+      ["آدرس", pick(company, "address", "Address")],
     ]);
+  }
+
+  function renderAllDocumentsArchive(parent) {
+    if (!state.documents.length) {
+      parent.appendChild(el("div", "muted", "هنوز مدرکی بارگذاری نشده است."));
+      return;
+    }
+    const byType = new Map();
+    state.documents.forEach((doc) => {
+      const type = Number(pick(doc, "documentType", "DocumentType"));
+      if (!byType.has(type)) byType.set(type, []);
+      byType.get(type).push(doc);
+    });
+    const wrap = el("div", "portal-doc-archive");
+    Array.from(byType.keys())
+      .sort((a, b) => a - b)
+      .forEach((type) => {
+        const versions = byType
+          .get(type)
+          .slice()
+          .sort((a, b) => Number(pick(b, "version", "Version") ?? 0) - Number(pick(a, "version", "Version") ?? 0));
+        const block = el("div", "portal-doc-archive__type");
+        const typeLabel =
+          (model.DOCUMENT_LABELS && model.DOCUMENT_LABELS[type]) ||
+          (model.DATA_ENTRY_DOCUMENTS || []).find((d) => d.type === type)?.label ||
+          "نوع " + type;
+        block.appendChild(el("div", "portal-doc-archive__type-title", typeLabel));
+        versions.forEach((doc) => {
+          const id = pick(doc, "id", "Id");
+          const ver = pick(doc, "version", "Version") ?? 1;
+          const name = pick(doc, "fileName", "FileName") || "فایل";
+          const row = el("div", "portal-doc-archive__row");
+          const meta = el("div", "portal-doc-archive__meta");
+          meta.textContent = "نسخه " + ver + " — " + name + (formatUploadedAt(doc) ? " · " + formatUploadedAt(doc) : "");
+          row.appendChild(meta);
+          if (id) {
+            const btn = el("button", "btn btn--small", "دانلود");
+            btn.type = "button";
+            btn.addEventListener("click", () => {
+              void downloadLoanDocument(id).catch((e) => setError(e.message || String(e)));
+            });
+            row.appendChild(btn);
+          }
+          block.appendChild(row);
+        });
+        wrap.appendChild(block);
+      });
+    parent.appendChild(wrap);
+  }
+
+  function renderPaymentsReadOnly(parent) {
+    const payments = state.payments || pick(state.caseData, "payments", "Payments") || [];
+    if (!payments.length) {
+      parent.appendChild(el("div", "muted", "پرداختی ثبت نشده است."));
+      return;
+    }
+    const list = el("div", "portal-payments-list");
+    payments.forEach((payment) => {
+      const amount = Number(pick(payment, "amount", "Amount")) || 0;
+      const date = pick(payment, "paymentDate", "PaymentDate") || "—";
+      const txn = pick(payment, "transactionNumber", "TransactionNumber") || "—";
+      const stage = pick(payment, "stageNumber", "StageNumber") || "—";
+      const creator = pick(payment, "createdByFullName", "CreatedByFullName") || pick(payment, "createdByUserId", "CreatedByUserId") || "";
+      list.appendChild(
+        el(
+          "div",
+          "portal-payments-list__item",
+          formatRial(amount) +
+            " · " +
+            date +
+            " · " +
+            txn +
+            " · مرحله " +
+            stage +
+            (creator ? " · " + creator : "") +
+            (pick(payment, "receiptS3Key", "ReceiptS3Key") ? " · دارای رسید" : "")
+        )
+      );
+    });
+    parent.appendChild(list);
+  }
+
+  function renderFullWorkflowHistory(parent) {
+    if (!state.history.length) {
+      parent.appendChild(el("div", "muted", "تاریخچه‌ای ثبت نشده است."));
+      return;
+    }
+    const list = el("div", "portal-history");
+    state.history.forEach((item) => {
+      const row = el("div", "portal-history__item");
+      const fromStatus = pick(item, "fromStatus", "FromStatus") ?? "";
+      const toStatus = pick(item, "toStatus", "ToStatus") ?? "";
+      const action = pick(item, "action", "Action") || "";
+      const actor = pick(item, "actorRole", "ActorRole") || "";
+      const when = formatCaseDate(pick(item, "createdAt", "CreatedAt"));
+      row.textContent = [when, action, fromStatus && toStatus ? fromStatus + " → " + toStatus : toStatus, actor]
+        .filter(Boolean)
+        .join(" · ");
+      list.appendChild(row);
+    });
+    parent.appendChild(list);
   }
 
   function renderDossierComments(parent) {
@@ -413,13 +638,42 @@
 
     const summary = document.createElement("summary");
     summary.className = "portal-dossier__summary card__title";
-    summary.textContent = "پرونده کامل — اطلاعات ثبت‌شده، مدارک و اقساط";
+    summary.textContent = "پرونده کامل — اطلاعات ثبت‌شده، مدارک، پرداخت‌ها و اقساط";
     details.appendChild(summary);
 
     const body = el("div", "portal-dossier__body");
+    const status = pickStatus(state.caseData);
     body.appendChild(
-      el("div", "muted portal-stage__hint", "خلاصه درخواست، فرم تصویب، همه فایل‌ها و جدول اقساط برای بررسی این مرحله.")
+      el(
+        "div",
+        "muted portal-stage__hint",
+        shouldShowCompletedCaseDossier(status)
+          ? "پرونده تکمیل شده است. تمام اطلاعات ثبت‌شده در زیر قابل مشاهده است."
+          : "خلاصه درخواست، فرم تصویب، همه فایل‌ها و جدول اقساط برای بررسی این مرحله."
+      )
     );
+
+    const metaRows = [
+      ["تاریخ ایجاد", formatCaseDate(pick(state.caseData, "createdAt", "CreatedAt"))],
+      ["تاریخ تکمیل", formatCaseDate(pick(state.caseData, "completedAt", "CompletedAt"))],
+    ];
+    if (isInternalUser()) {
+      metaRows.push(
+        ["متقاضی", pick(state.caseData, "applicantFullName", "ApplicantFullName") || "—"],
+        ["موبایل متقاضی", pick(state.caseData, "applicantPhoneNumber", "ApplicantPhoneNumber") || "—"]
+      );
+    }
+    const metaWrap = el("div", "card portal-card portal-card--nested");
+    metaWrap.appendChild(el("div", "card__title", "اطلاعات پرونده"));
+    metaRows.forEach(([label, value]) => {
+      const row = el("div", "portal-profile-summary__row");
+      row.appendChild(el("span", "portal-profile-summary__label muted", label));
+      row.appendChild(el("span", "portal-profile-summary__value", value || "—"));
+      metaWrap.appendChild(row);
+    });
+    body.appendChild(metaWrap);
+
+    renderCompanyProfile(body);
 
     const appWrap = el("div", "card portal-card portal-card--nested");
     renderApplicationReadOnly(appWrap);
@@ -430,14 +684,27 @@
     renderApprovalFormReadOnly(afWrap);
     body.appendChild(afWrap);
 
-    renderAttachmentsDownloadSection(body);
+    const docsWrap = el("div", "card portal-card portal-card--nested");
+    docsWrap.appendChild(el("div", "card__title", "همه مدارک و پیوست‌ها"));
+    renderAllDocumentsArchive(docsWrap);
+    body.appendChild(docsWrap);
 
     renderInstallmentsReadOnly(body);
+
+    const paymentsWrap = el("div", "card portal-card portal-card--nested");
+    paymentsWrap.appendChild(el("div", "card__title", "پرداخت‌های ثبت‌شده"));
+    renderPaymentsReadOnly(paymentsWrap);
+    body.appendChild(paymentsWrap);
 
     const commentsWrap = el("div", "card portal-card portal-card--nested");
     commentsWrap.appendChild(el("div", "card__title", "تاریخچه نظرات و درخواست‌های اصلاح"));
     renderDossierComments(commentsWrap);
     body.appendChild(commentsWrap);
+
+    const historyWrap = el("div", "card portal-card portal-card--nested");
+    historyWrap.appendChild(el("div", "card__title", "تاریخچه گردش کار"));
+    renderFullWorkflowHistory(historyWrap);
+    body.appendChild(historyWrap);
 
     details.appendChild(body);
     return details;
@@ -650,7 +917,7 @@
     if (showApplicantRepayment) {
       host.appendChild(renderApplicantRepaymentForm());
     }
-    if ([16, 17].includes(status) && !showApplicantRepayment) {
+    if (status === 16 && !showApplicantRepayment) {
       host.appendChild(renderInstallmentDashboard());
     }
   }
@@ -797,6 +1064,32 @@
     return Number(value || 0).toLocaleString("fa-IR") + " ریال";
   }
 
+  function formatRialOptional(value) {
+    if (value == null || value === "") return "—";
+    const n = Number(value);
+    if (!Number.isFinite(n)) return "—";
+    return n.toLocaleString("fa-IR") + " ریال";
+  }
+
+  function displayDetailText(value) {
+    if (value == null || value === "" || value === "—") return "—";
+    return String(value);
+  }
+
+  function pickDetailField(camel, pascal) {
+    const value = pick(getApprovalDetail(), camel, pascal);
+    if (value == null || value === "" || value === "—") return null;
+    return value;
+  }
+
+  function resolveDetailOrApp(detailCamel, detailPascal, appCamel, appPascal) {
+    const detail = pickDetailField(detailCamel, detailPascal);
+    if (detail != null) return detail;
+    const app = pick(getApplication(), appCamel, appPascal);
+    if (app == null || app === "" || app === "—") return null;
+    return app;
+  }
+
   function getApprovalDetail() {
     return pick(state.caseData, "approvalDetail", "ApprovalDetail") || {};
   }
@@ -828,6 +1121,17 @@
       return Math.round(approved * (rate / 100) * (months / 12));
     }
     return 0;
+  }
+
+  function getRepaymentCheckAmount() {
+    const stored = Number(pick(getApprovalDetail(), "repaymentCheckAmount", "RepaymentCheckAmount"));
+    if (Number.isFinite(stored) && stored > 0) return stored;
+    const installmentTotal = getInstallmentTotals().total;
+    if (installmentTotal > 0) return installmentTotal;
+    const approved = getApprovedAmount();
+    const profit = getExpectedTotalProfit();
+    if (approved > 0 && profit > 0) return approved + profit;
+    return approved > 0 ? approved : 0;
   }
 
   function getPaymentDisbursementAmount() {
@@ -1518,15 +1822,23 @@
 
   async function postEmpty(path) {
     setError("");
-    await state.panel.apiRequest({ method: "POST", path: lPath("/" + state.caseId + path) });
-    await refreshCase();
+    const statusBefore = pickStatus(state.caseData);
+    const res = await state.panel.apiRequest({ method: "POST", path: lPath("/" + state.caseId + path) });
+    if (!res.ok) {
+      throw new Error((res.body && (res.body.message || res.body.Message)) || "درخواست ناموفق بود.");
+    }
+    await refreshCase(statusBefore);
     setInfo("عملیات انجام شد.");
   }
 
   async function postJson(path, body) {
     setError("");
-    await state.panel.apiRequest({ method: "POST", path: lPath("/" + state.caseId + path), body });
-    await refreshCase();
+    const statusBefore = pickStatus(state.caseData);
+    const res = await state.panel.apiRequest({ method: "POST", path: lPath("/" + state.caseId + path), body });
+    if (!res.ok) {
+      throw new Error((res.body && (res.body.message || res.body.Message)) || "درخواست ناموفق بود.");
+    }
+    await refreshCase(statusBefore);
     setInfo("عملیات انجام شد.");
   }
 

@@ -71,7 +71,14 @@ public sealed class SmsQueueBackgroundService(
             if (stoppingToken.IsCancellationRequested)
                 break;
 
-            await dispatcher.SendImmediateAsync(item.TemplateId, item.Mobile, item.Args, stoppingToken);
+            if (!string.IsNullOrWhiteSpace(item.RawMessage))
+            {
+                await dispatcher.SendImmediateRawAsync(item.Mobile, item.RawMessage, item.CaseId, stoppingToken);
+                continue;
+            }
+
+            if (item.TemplateId is { } templateId)
+                await dispatcher.SendImmediateAsync(templateId, item.Mobile, item.Args, stoppingToken);
         }
     }
 }

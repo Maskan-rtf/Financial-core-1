@@ -1,4 +1,0 @@
-interface:
-  display_name: "Production Incident Debugger"
-  short_description: "Debug logs, traces, and runtime failures"
-  default_prompt: "Use $production-incident-debugger to diagnose a production failure from logs, traces, and code paths."

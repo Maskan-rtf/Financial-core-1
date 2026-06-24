@@ -8,7 +8,7 @@ namespace Core.Application.Authorization;
 
 public sealed class LoanAuthorizationService(IUserContext userContext) : ILoanAuthorizationService
 {
-    private static readonly string[] CreditUnitPermissions =
+    private static readonly string[] CreditDepartmentPermissions =
     [
         LoanPermissions.ReadAll,
         LoanPermissions.ViewInternalComments,
@@ -17,7 +17,7 @@ public sealed class LoanAuthorizationService(IUserContext userContext) : ILoanAu
         LoanPermissions.DownloadDocuments
     ];
 
-    private static readonly string[] LegalUnitPermissions =
+    private static readonly string[] LegalDepartmentPermissions =
     [
         LoanPermissions.ReadAll,
         LoanPermissions.ViewInternalComments,
@@ -28,7 +28,7 @@ public sealed class LoanAuthorizationService(IUserContext userContext) : ILoanAu
         LoanPermissions.DownloadDocuments
     ];
 
-    private static readonly string[] FinancialUnitPermissions =
+    private static readonly string[] FinancialDepartmentPermissions =
     [
         LoanPermissions.ReadAll,
         LoanPermissions.ViewInternalComments,
@@ -55,6 +55,15 @@ public sealed class LoanAuthorizationService(IUserContext userContext) : ILoanAu
         LoanPermissions.DownloadDocuments
     ];
 
+    private static readonly IReadOnlyDictionary<UserDepartment, IReadOnlyCollection<string>> DepartmentPermissions =
+        new Dictionary<UserDepartment, IReadOnlyCollection<string>>
+        {
+            [UserDepartment.Credit] = CreditDepartmentPermissions,
+            [UserDepartment.Legal] = LegalDepartmentPermissions,
+            [UserDepartment.Financial] = FinancialDepartmentPermissions,
+            [UserDepartment.Technical] = AllLoanPermissions
+        };
+
     private static readonly IReadOnlyDictionary<string, IReadOnlyCollection<string>> RolePermissions =
         new Dictionary<string, IReadOnlyCollection<string>>(StringComparer.OrdinalIgnoreCase)
         {
@@ -66,29 +75,18 @@ public sealed class LoanAuthorizationService(IUserContext userContext) : ILoanAu
                 LoanPermissions.UploadDocuments,
                 LoanPermissions.DownloadDocuments
             ],
-            [UserRoleClaims.CreditExpert] = CreditUnitPermissions,
-            [UserRoleClaims.CreditManager] = CreditUnitPermissions,
-            [UserRoleClaims.LegalExpert] = LegalUnitPermissions,
-            [UserRoleClaims.LegalManager] = LegalUnitPermissions,
-            [UserRoleClaims.FinancialExpert] = FinancialUnitPermissions,
-            [UserRoleClaims.FinancialManager] = FinancialUnitPermissions,
             [UserRoleClaims.Ceo] =
             [
                 LoanPermissions.ReadAll,
                 LoanPermissions.ViewInternalComments,
                 LoanPermissions.DownloadDocuments,
                 LoanPermissions.CeoApprove
-            ],
-            [UserRoleClaims.Admin] = AllLoanPermissions,
-            [UserRoleClaims.TechnicalExpert] = AllLoanPermissions
+            ]
         };
 
     public string? UserId => userContext.UserId;
 
-    public bool IsInternalUser =>
-        userContext.Roles.Any(r =>
-            !string.Equals(UserRoleClaims.Applicant, UserRoleClaims.Normalize(r), StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals("User", r, StringComparison.OrdinalIgnoreCase));
+    public bool IsInternalUser => DepartmentPermissionEvaluator.IsInternalUser(userContext.Roles);
 
     public Result<string> EnsureAuthenticated()
     {
@@ -103,13 +101,10 @@ public sealed class LoanAuthorizationService(IUserContext userContext) : ILoanAu
         if (userContext.Roles.Contains(UserRoleClaims.Admin))
             return true;
 
-        foreach (var role in userContext.Roles)
-        {
-            var normalized = UserRoleClaims.Normalize(role);
-            if (RolePermissions.TryGetValue(normalized, out var permissions) && permissions.Contains(permission))
-                return true;
-        }
-
-        return false;
+        return DepartmentPermissionEvaluator.HasPermission(
+            userContext.Roles,
+            permission,
+            RolePermissions,
+            DepartmentPermissions);
     }
 }

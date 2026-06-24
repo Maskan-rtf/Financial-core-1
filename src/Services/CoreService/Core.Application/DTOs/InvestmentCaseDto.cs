@@ -31,7 +31,9 @@ public sealed record InvestmentCaseApplicantDto(
     CompanyDto? Company,
     ApplicantContactDto? Applicant = null,
     DataEntry1Dto? ApplicantProfile = null,
-    DataEntry2Dto? AttractionBasis = null)
+    DataEntry2Dto? AttractionBasis = null,
+    CaseFinancialWorksheetDto? FinancialWorksheet = null,
+    IReadOnlyList<CaseValuationDto>? Valuations = null)
     : InvestmentCaseDto(Id, CaseNumber, Title, ApplicantType, CurrentPhase, CurrentStatus, CreatedAt, UpdatedAt, CompletedAt);
 
 public sealed record InvestmentCaseInternalDto(
@@ -50,5 +52,7 @@ public sealed record InvestmentCaseInternalDto(
     DateTimeOffset? CompletedAt,
     CompanyDto? Company,
     DataEntry1Dto? ApplicantProfile = null,
-    DataEntry2Dto? AttractionBasis = null)
+    DataEntry2Dto? AttractionBasis = null,
+    CaseFinancialWorksheetDto? FinancialWorksheet = null,
+    IReadOnlyList<CaseValuationDto>? Valuations = null)
     : InvestmentCaseDto(Id, CaseNumber, Title, ApplicantType, CurrentPhase, CurrentStatus, CreatedAt, UpdatedAt, CompletedAt);

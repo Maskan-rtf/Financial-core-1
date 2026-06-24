@@ -12,7 +12,17 @@ public interface IGuaranteeCaseAppService
     Task<Result<GuaranteeCaseDto>> UpdateTitleAsync(Guid caseId, UpdateCaseTitleRequest request, CancellationToken ct);
     Task<Result<PagedResult<GuaranteeCaseDto>>> GetPagedAsync(GetGuaranteeCasesRequest request, CancellationToken ct);
     Task<Result<IEnumerable<GuaranteeWorkflowHistoryDto>>> GetHistoryAsync(Guid caseId, CancellationToken ct);
+    Task<Result<GuaranteeAmendmentDto>> GetAmendmentAsync(Guid caseId, CancellationToken ct);
+    Task<Result<GuaranteeCancellationDetailsDto>> GetCancellationDetailsAsync(Guid caseId, CancellationToken ct);
     Task<Result> UpdateApplicationAsync(Guid caseId, UpdateGuaranteeApplicationRequest request, CancellationToken ct);
+    Task<Result<GuaranteeAmendmentDto>> CreateOrUpdateAmendmentAsync(Guid caseId, CreateGuaranteeAmendmentRequest request, CancellationToken ct);
+    Task<Result> CreateCancellationAsync(Guid caseId, CreateGuaranteeCancellationRequest request, CancellationToken ct);
+    Task<Result> SubmitAmendmentAsync(Guid caseId, CancellationToken ct);
+    Task<Result> SubmitCancellationAsync(Guid caseId, SubmitGuaranteeCancellationRequest request, CancellationToken ct);
+    Task<Result> ApproveAmendmentAsync(Guid caseId, string? comment, string? internalComment, CancellationToken ct);
+    Task<Result> ApproveCancellationAsync(Guid caseId, ApproveGuaranteeCancellationRequest request, CancellationToken ct);
+    Task<Result> RejectAmendmentAsync(Guid caseId, string reason, CancellationToken ct);
+    Task<Result> RequestAmendmentRevisionAsync(Guid caseId, string message, CancellationToken ct);
     Task<Result> BeginDataEntryAsync(Guid caseId, CancellationToken ct);
     Task<Result> SubmitApplicationAsync(Guid caseId, string? comment, CancellationToken ct);
     Task<Result> ApproveCreditReviewAsync(Guid caseId, string? comment, string? internalComment, CancellationToken ct);
@@ -35,6 +45,8 @@ public interface IGuaranteeCaseAppService
     Task<Result> CeoApproveInitialAsync(Guid caseId, string? comment, CancellationToken ct);
     Task<Result> CeoRejectInitialAsync(Guid caseId, string reason, CancellationToken ct);
     Task<Result> CeoCancelInitialAsync(Guid caseId, string reason, CancellationToken ct);
+    Task<Result> CeoApproveAmendmentAsync(Guid caseId, string? comment, CancellationToken ct);
+    Task<Result> CeoRejectAmendmentAsync(Guid caseId, string reason, CancellationToken ct);
     Task<Result> CancelAsync(Guid caseId, string reason, CancellationToken ct);
     Task<Result> ConfirmDraftContractUploadedAsync(Guid caseId, CancellationToken ct);
     Task<Result> SubmitSignedPackageAsync(Guid caseId, CancellationToken ct);

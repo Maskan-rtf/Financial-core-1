@@ -68,7 +68,7 @@ public sealed class EmployeeKpiAnalyticsService(
             PeriodStartUtc = periodData.PeriodStartUtc,
             PeriodEndUtc = periodData.PeriodEndUtc,
             IsStale = DateTimeOffset.UtcNow - snapshot.ComputedAtUtc > StaleThreshold,
-            Departments = periodData.Departments
+            Departments = EmployeeKpiDepartmentFilter.FilterForSlaDashboard(periodData.Departments)
         });
     }
 

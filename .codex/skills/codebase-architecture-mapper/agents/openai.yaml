@@ -1,4 +1,0 @@
-interface:
-  display_name: "Codebase Architecture Mapper"
-  short_description: "Map modules, flows, and technical hotspots"
-  default_prompt: "Use $codebase-architecture-mapper to understand the architecture, dependencies, and request flow of a codebase."

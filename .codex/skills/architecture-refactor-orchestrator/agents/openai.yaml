@@ -1,4 +1,0 @@
-interface:
-  display_name: "Architecture Refactor Orchestrator"
-  short_description: "Refactor multi-layer production architecture"
-  default_prompt: "Use $architecture-refactor-orchestrator to safely refactor a multi-layer ASP.NET Core and React system."

@@ -3,11 +3,9 @@ using BuildingBlocks.Application.Errors;
 using BuildingBlocks.Application.Results;
 using BuildingBlocks.Application.Abstractions;
 using BuildingBlocks.Domain.Abstractions;
-using BuildingBlocks.Observability.Correlation;
 using Core.Application.Authorization;
 using Core.Application.Abstractions;
 using Core.Application.Logging;
-using Core.Application.Notifications.Sms;
 using Core.Application.Mappers;
 using Microsoft.EntityFrameworkCore;
 using Core.Application.DTOs;
@@ -18,7 +16,6 @@ using Core.Domain.Entities;
 using Core.Domain.Enums;
 using Core.Domain.Identity;
 using Core.Domain.Identity.Entities;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
 
@@ -27,7 +24,7 @@ namespace Core.Application.Services;
 public sealed class InvestmentCaseAppService(
     ICoreUnitOfWork unitOfWork,
     ICoreDbContext dbContext,
-    ICaseStateManager stateManager,
+    IInvestmentWorkflowCoordinator workflowCoordinator,
     ICaseWorkflowOrchestrator workflowOrchestrator,
     ICaseNumberGenerator caseNumberGenerator,
     IDocumentStorage documentStorage,
@@ -36,8 +33,6 @@ public sealed class InvestmentCaseAppService(
     ICaseAuthorizationService authorizationService,
     ICaseDtoMapper caseDtoMapper,
     IUserDisplayLookup userDisplayLookup,
-    IHttpContextAccessor httpContextAccessor,
-    ICaseWorkflowSmsNotifier workflowSmsNotifier,
     ILogger<InvestmentCaseAppService> logger) : IInvestmentCaseAppService
 {
     public async Task<Result<InvestmentCaseDto>> CreateAsync(CreateInvestmentCaseRequest request, CancellationToken cancellationToken)
@@ -58,10 +53,7 @@ public sealed class InvestmentCaseAppService(
         }
 
         var now = clock.UtcNow;
-        var caseNumber = await caseNumberGenerator.GenerateAsync(cancellationToken);
-        var entity = new InvestmentCase(caseNumber, authResult.Value!, request.ApplicantType);
         Company? linkedCompany = null;
-
         if (request.ApplicantType == ApplicantType.Company)
         {
             if (request.CompanyId is null || request.CompanyId == Guid.Empty)
@@ -80,23 +72,39 @@ public sealed class InvestmentCaseAppService(
 
             if (linkedCompany.OwnerUserId != userId)
                 return Result<InvestmentCaseDto>.Fail(Error.Forbidden(ApiMessages.CompanyAccessDenied));
-
-            entity.AssignCompany(linkedCompany.Id);
         }
 
-        entity.SetTitle(request.Title);
+        for (var sequence = 1; sequence <= CaseNumberFormat.MaxDailySequenceAttempts; sequence++)
+        {
+            var caseNumber = await caseNumberGenerator.GenerateAsync(cancellationToken, sequence);
+            var entity = new InvestmentCase(caseNumber, authResult.Value!, request.ApplicantType);
 
-        var workflowInstanceId = await workflowOrchestrator.StartAsync(entity.Id, cancellationToken);
-        entity.AttachWorkflowInstance(workflowInstanceId);
+            if (linkedCompany is not null)
+                entity.AssignCompany(linkedCompany.Id);
 
-        await unitOfWork.InvestmentCases.AddAsync(entity, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+            entity.SetTitle(request.Title);
 
-        ApplicationLog.Completed(logger,
-            "User {UserId} created investment case {CaseId} ({CaseNumber}) as {ApplicantType}; workflow instance {WorkflowInstanceId} started",
-            authResult.Value, entity.Id, entity.CaseNumber, request.ApplicantType, workflowInstanceId);
+            var workflowInstanceId = await workflowOrchestrator.StartAsync(entity.Id, cancellationToken);
+            entity.AttachWorkflowInstance(workflowInstanceId);
 
-        return Result<InvestmentCaseDto>.Ok(caseDtoMapper.MapCase(entity, now, isInternalView: false, linkedCompany));
+            await unitOfWork.InvestmentCases.AddAsync(entity, cancellationToken);
+            try
+            {
+                await unitOfWork.SaveChangesAsync(cancellationToken);
+
+                ApplicationLog.Completed(logger,
+                    "User {UserId} created investment case {CaseId} ({CaseNumber}) as {ApplicantType}; workflow instance {WorkflowInstanceId} started",
+                    authResult.Value, entity.Id, entity.CaseNumber, request.ApplicantType, workflowInstanceId);
+
+                return Result<InvestmentCaseDto>.Ok(caseDtoMapper.MapCase(entity, now, isInternalView: false, linkedCompany));
+            }
+            catch (DbUpdateException)
+            {
+                // Unique constraint on CaseNumber could collide; retry with next daily sequence.
+            }
+        }
+
+        return Result<InvestmentCaseDto>.Fail(Error.Unexpected(ApiMessages.CaseNumberAllocationFailed));
     }
 
     public async Task<Result<InvestmentCaseDto>> GetAsync(Guid caseId, CancellationToken cancellationToken)
@@ -140,12 +148,48 @@ public sealed class InvestmentCaseAppService(
             }
         }
 
+        CaseFinancialWorksheetDto? financialWorksheet = null;
+        IReadOnlyList<CaseValuationDto>? valuations = null;
+        if (detail.CurrentStatus is CaseStatus.Completed or CaseStatus.Archived)
+        {
+            var completion = await dbContext.InvestmentCases.AsNoTracking()
+                .Where(x => x.Id == caseId)
+                .Select(x => new
+                {
+                    Worksheet = x.FinancialWorksheet == null
+                        ? null
+                        : new CaseFinancialWorksheetDto(
+                            x.FinancialWorksheet.BankName,
+                            x.FinancialWorksheet.Iban,
+                            x.FinancialWorksheet.ApprovedAmount,
+                            x.FinancialWorksheet.PaymentSchedule,
+                            x.FinancialWorksheet.Notes),
+                    Valuations = x.Valuations
+                        .OrderBy(v => v.CreatedAt)
+                        .Select(v => new CaseValuationDto(
+                            v.Type,
+                            v.Amount,
+                            v.Notes,
+                            v.CreatedAt))
+                        .ToList()
+                })
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (completion is not null)
+            {
+                financialWorksheet = completion.Worksheet;
+                valuations = completion.Valuations.Count == 0 ? null : completion.Valuations;
+            }
+        }
+
         return Result<InvestmentCaseDto>.Ok(
             caseDtoMapper.MapFromDetailProjection(
                 detail,
                 clock.UtcNow,
                 authorizationService.IsInternalUser,
-                applicantContact));
+                applicantContact,
+                financialWorksheet,
+                valuations));
     }
 
     public async Task<Result<InvestmentCaseDto>> UpdateTitleAsync(
@@ -597,125 +641,16 @@ public sealed class InvestmentCaseAppService(
         if (action == WorkflowAction.RequestRevision && string.IsNullOrWhiteSpace(comment))
             return Result.Fail(Error.Validation(ApiMessages.RevisionMessageRequired));
 
-        var actorRole = ResolveActorRole();
-        ApplicationLog.Started(logger, $"Workflow:{action}", authResult.Value, caseId);
-
-        var entity = await unitOfWork.InvestmentCases.GetScopedForTransitionAsync(
-            caseId, authResult.Value!, authorizationService.IsInternalUser, ct);
-        if (entity is null)
-        {
-            ApplicationLog.Blocked(logger, $"Workflow:{action}", "case not found or access denied", authResult.Value, caseId);
-            return Result.Fail(Error.NotFound(ApiMessages.CaseNotFound));
-        }
-
-        var statusBefore = entity.CurrentStatus;
-        var phaseBefore = entity.CurrentPhase;
-        var historyCountBefore = entity.WorkflowHistory.Count;
-        var commentsCountBefore = entity.Comments.Count;
-
-        var correlationId = ResolveCorrelationGuid(httpContextAccessor.HttpContext);
-        var transition = await stateManager.TransitionAsync(entity, action, authResult.Value!, actorRole, comment, correlationId);
-        if (transition.IsFailure)
-        {
-            ApplicationLog.Blocked(logger, $"Workflow:{action}",
-                transition.Error?.Message ?? "transition rejected by state machine",
-                authResult.Value, caseId);
-            return transition;
-        }
-
-        if (!string.IsNullOrWhiteSpace(internalComment) && SupportsInternalApproveComment(action, statusBefore))
-        {
-            if (!authorizationService.HasPermission(CasePermissions.CreateInternalComment))
-            {
-                ApplicationLog.Blocked(logger, $"Workflow:{action}", "cannot create internal comment", authResult.Value, caseId);
-                return Result.Fail(Error.Forbidden(ApiMessages.NotAllowed));
-            }
-
-            entity.AddDiscussionComment(
-                phaseBefore,
-                authResult.Value!,
-                actorRole,
-                internalComment,
-                isRevisionRequest: false,
-                isInternal: true);
-        }
-
-        if (entity.WorkflowHistory.Count > historyCountBefore)
-        {
-            var persistResult = await PersistCaseTransitionAsync(entity, commentsCountBefore, ct);
-            if (persistResult.IsFailure)
-                return persistResult;
-
-            await NotifyWorkflowSmsSafeAsync(
-                entity.Id,
-                entity.ApplicantUserId,
-                entity.CaseNumber,
-                statusBefore,
-                entity.CurrentStatus,
-                action,
-                ct);
-        }
-
-        try
-        {
-            await workflowOrchestrator.SignalAsync(
+        return await workflowCoordinator.ApplyTransitionAsync(
+            new InvestmentWorkflowTransitionRequest(
                 caseId,
-                WorkflowSignals.StatusChanged,
-                payload: null,
-                ct);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(
-                ex,
-                "Elsa workflow signal failed for case {CaseId}; domain transition is already saved.",
-                caseId);
-        }
-
-        ApplicationLog.Completed(logger,
-            "User {UserId} (role {Role}) applied {Action} on case {CaseId} ({CaseNumber}): {PhaseBefore}/{StatusBefore} → {PhaseAfter}/{StatusAfter}",
-            authResult.Value, actorRole, action, caseId, entity.CaseNumber,
-            phaseBefore, statusBefore, entity.CurrentPhase, entity.CurrentStatus);
-
-        return Result.Ok();
-    }
-
-    private async Task NotifyWorkflowSmsSafeAsync(
-        Guid caseId,
-        string applicantUserId,
-        string caseNumber,
-        CaseStatus from,
-        CaseStatus to,
-        WorkflowAction action,
-        CancellationToken ct)
-    {
-        try
-        {
-            await workflowSmsNotifier.NotifyStatusChangeAsync(
-                caseId, applicantUserId, caseNumber, from, to, action, ct);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Workflow SMS notification failed for case {CaseId}", caseId);
-        }
-    }
-
-    private static Guid ResolveCorrelationGuid(HttpContext? httpContext)
-    {
-        var raw = httpContext?.Items[CorrelationContext.ItemKey]?.ToString()
-                  ?? httpContext?.Request.Headers[CorrelationContext.HeaderName].ToString()
-                  ?? httpContext?.TraceIdentifier;
-
-        if (string.IsNullOrWhiteSpace(raw))
-            return Guid.NewGuid();
-
-        if (Guid.TryParse(raw, out var parsed))
-            return parsed;
-
-        using var sha = System.Security.Cryptography.SHA256.Create();
-        var bytes = sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(raw));
-        var guidBytes = bytes.Take(16).ToArray();
-        return new Guid(guidBytes);
+                action,
+                authResult.Value!,
+                ResolveActorRole(),
+                authorizationService.IsInternalUser,
+                comment,
+                internalComment),
+            ct);
     }
 
     private string ResolveActorRole()
@@ -1762,47 +1697,6 @@ public sealed class InvestmentCaseAppService(
         if (entry.State is EntityState.Modified or EntityState.Added)
             entry.State = EntityState.Unchanged;
     }
-
-    /// <summary>
-    /// Persists status/phase via ExecuteUpdate so legacy xmin/RowVersion on investment_cases cannot cause concurrency failures.
-    /// </summary>
-    private async Task<Result> PersistCaseTransitionAsync(
-        InvestmentCase entity,
-        int commentsCountBefore,
-        CancellationToken cancellationToken)
-    {
-        var history = entity.WorkflowHistory[^1];
-        var pendingComments = entity.Comments.Skip(commentsCountBefore).ToList();
-
-        if (dbContext is DbContext efContext)
-            efContext.ChangeTracker.Clear();
-
-        var rows = await dbContext.InvestmentCases.ApplyStateAsync(
-            entity.Id,
-            entity.CurrentStatus,
-            entity.CurrentPhase,
-            entity.UpdatedAt ?? clock.UtcNow,
-            entity.CompletedAt,
-            cancellationToken);
-
-        if (rows == 0)
-            return Result.Fail(Error.NotFound(ApiMessages.CaseNotFound));
-
-        await dbContext.CaseWorkflowHistories.AddAsync(history, cancellationToken);
-        foreach (var pendingComment in pendingComments)
-            await dbContext.CaseComments.AddAsync(pendingComment, cancellationToken);
-
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-        return Result.Ok();
-    }
-
-    private static bool SupportsInternalApproveComment(WorkflowAction action, CaseStatus statusBefore) =>
-        action switch
-        {
-            WorkflowAction.Approve => statusBefore is CaseStatus.ReviewDataEntry1 or CaseStatus.ReviewDataEntry2,
-            WorkflowAction.ApproveFinancialWorksheet => statusBefore == CaseStatus.FinancialWorksheetReview,
-            _ => false
-        };
 
     private static bool IsFreeformCommentAllowed(CaseStatus status, CasePhase phase) =>
         status == CaseStatus.WaitingUserReviewPreliminaryContract && phase == CasePhase.Legal;

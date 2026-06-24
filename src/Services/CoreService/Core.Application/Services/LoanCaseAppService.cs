@@ -9,6 +9,7 @@ using Core.Application.Common;
 using Core.Application.DTOs;
 using Core.Application.Logging;
 using Core.Application.Mappers;
+using Core.Application.Notifications.Sms;
 using Core.Application.Requests;
 using Core.Application.Responses;
 using Core.Domain.Constants;
@@ -35,6 +36,7 @@ public sealed class LoanCaseAppService(
     ILoanCaseDtoMapper dtoMapper,
     IUserDisplayLookup userDisplayLookup,
     IHttpContextAccessor httpContextAccessor,
+    IWorkflowSmsNotifier workflowSmsNotifier,
     ILogger<LoanCaseAppService> logger) : ILoanCaseAppService
 {
     public async Task<Result<LoanCaseDto>> CreateAsync(CreateLoanCaseRequest request, CancellationToken ct)
@@ -45,10 +47,7 @@ public sealed class LoanCaseAppService(
         if (!authorizationService.HasPermission(LoanPermissions.Create))
             return Result<LoanCaseDto>.Fail(Error.Forbidden(ApiMessages.NotAllowed));
 
-        var caseNumber = await caseNumberGenerator.GenerateLoanCaseAsync(ct);
-        var entity = new LoanCase(caseNumber, auth.Value!, request.ApplicantType);
         Company? linkedCompany = null;
-
         if (request.ApplicantType == ApplicantType.Company)
         {
             if (request.CompanyId is null || request.CompanyId == Guid.Empty)
@@ -67,19 +66,34 @@ public sealed class LoanCaseAppService(
 
             if (linkedCompany.OwnerUserId != userId)
                 return Result<LoanCaseDto>.Fail(Error.Forbidden(ApiMessages.CompanyAccessDenied));
-
-            entity.AssignCompany(linkedCompany.Id);
         }
 
-        entity.SetTitle(request.Title);
+        for (var sequence = 1; sequence <= CaseNumberFormat.MaxDailySequenceAttempts; sequence++)
+        {
+            var caseNumber = await caseNumberGenerator.GenerateLoanCaseAsync(ct, sequence);
+            var entity = new LoanCase(caseNumber, auth.Value!, request.ApplicantType);
 
-        var workflowInstanceId = await workflowOrchestrator.StartLoanCaseAsync(entity.Id, ct);
-        entity.AttachWorkflowInstance(workflowInstanceId);
+            if (linkedCompany is not null)
+                entity.AssignCompany(linkedCompany.Id);
 
-        await unitOfWork.LoanCases.AddAsync(entity, ct);
-        await unitOfWork.SaveChangesAsync(ct);
+            entity.SetTitle(request.Title);
 
-        return Result<LoanCaseDto>.Ok(dtoMapper.MapCase(entity, authorizationService.IsInternalUser, linkedCompany));
+            var workflowInstanceId = await workflowOrchestrator.StartLoanCaseAsync(entity.Id, ct);
+            entity.AttachWorkflowInstance(workflowInstanceId);
+
+            await unitOfWork.LoanCases.AddAsync(entity, ct);
+            try
+            {
+                await unitOfWork.SaveChangesAsync(ct);
+                return Result<LoanCaseDto>.Ok(dtoMapper.MapCase(entity, authorizationService.IsInternalUser, linkedCompany));
+            }
+            catch (DbUpdateException)
+            {
+                // Unique constraint on CaseNumber could collide; retry with next daily sequence.
+            }
+        }
+
+        return Result<LoanCaseDto>.Fail(Error.Unexpected(ApiMessages.CaseNumberAllocationFailed));
     }
 
     public async Task<Result<LoanCaseDto>> GetAsync(Guid caseId, CancellationToken ct)
@@ -748,6 +762,14 @@ public sealed class LoanCaseAppService(
             var persist = await PersistTransitionAsync(entity, commentsCountBefore, ct);
             if (persist.IsFailure) return persist;
 
+            await NotifyWorkflowSmsSafeAsync(
+                entity.Id,
+                entity.ApplicantUserId,
+                entity.CaseNumber,
+                (int)statusBefore,
+                (int)entity.CurrentStatus,
+                ct);
+
             try
             {
                 await workflowOrchestrator.SignalLoanCaseAsync(
@@ -899,5 +921,31 @@ public sealed class LoanCaseAppService(
                   ?? httpContext?.TraceIdentifier;
 
         return Guid.TryParse(raw, out var parsed) ? parsed : Guid.NewGuid();
+    }
+
+    private async Task NotifyWorkflowSmsSafeAsync(
+        Guid caseId,
+        string applicantUserId,
+        string caseNumber,
+        int fromStatus,
+        int toStatus,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await workflowSmsNotifier.NotifyStepChangeAsync(
+                new WorkflowSmsNotification(
+                    CaseModuleType.Loan,
+                    caseId,
+                    applicantUserId,
+                    caseNumber,
+                    fromStatus,
+                    toStatus),
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Workflow SMS notification failed for loan case {CaseId}", caseId);
+        }
     }
 }

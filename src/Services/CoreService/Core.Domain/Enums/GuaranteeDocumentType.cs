@@ -30,5 +30,9 @@ public enum GuaranteeDocumentType
     FinalContract = 26,
     GuaranteeInstrument = 27,
     IssuanceReceipt = 28,
+    BeneficiaryReleaseLetter = 29,
+    OriginalGuaranteeReference = 30,
+    SettlementConfirmation = 31,
+    AmendmentContract = 32,
     Other = 99
 }

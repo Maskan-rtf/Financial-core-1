@@ -93,6 +93,67 @@ namespace Core.Persistence.Migrations
                     b.ToTable("fund_credit_limits", "Fund");
                 });
 
+            modelBuilder.Entity("Core.Domain.Entities.Guarantee.GuaranteeAmendmentHistoryRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AmendmentType")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ApprovalUser")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("timezone('utc', now())");
+
+                    b.Property<string>("CreatedBy")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("DecisionReason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("GuaranteeCaseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("NewValues")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("PreviousValues")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GuaranteeCaseId", "CreatedAt");
+
+                    b.HasIndex("GuaranteeCaseId", "Status");
+
+                    b.ToTable("guarantee_amendment_history_records", "Guarantee");
+                });
+
             modelBuilder.Entity("Core.Domain.Entities.Guarantee.GuaranteeApplicantCreditProfile", b =>
                 {
                     b.Property<Guid>("Id")
@@ -239,6 +300,40 @@ namespace Core.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<decimal?>("AmendmentApprovedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateOnly?>("AmendmentApprovedValidityTo")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset?>("AmendmentCompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("AmendmentCreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AmendmentOriginalGuaranteeReference")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("AmendmentReason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<decimal?>("AmendmentRequestedAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateOnly?>("AmendmentRequestedValidityTo")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("AmendmentRequiresCreditReview")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("AmendmentType")
+                        .HasColumnType("integer");
+
                     b.Property<int>("ApplicantType")
                         .HasColumnType("integer");
 
@@ -276,6 +371,12 @@ namespace Core.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
+
+                    b.Property<bool>("LegalOverrideApproved")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("SettlementConfirmationRequired")
+                        .HasColumnType("boolean");
 
                     b.Property<string>("Title")
                         .HasMaxLength(256)
@@ -2093,6 +2194,17 @@ namespace Core.Persistence.Migrations
                     b.ToTable("UserSessions", "Identity");
                 });
 
+            modelBuilder.Entity("Core.Domain.Entities.Guarantee.GuaranteeAmendmentHistoryRecord", b =>
+                {
+                    b.HasOne("Core.Domain.Entities.Guarantee.GuaranteeCase", "GuaranteeCase")
+                        .WithMany("AmendmentHistoryRecords")
+                        .HasForeignKey("GuaranteeCaseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("GuaranteeCase");
+                });
+
             modelBuilder.Entity("Core.Domain.Entities.Guarantee.GuaranteeApprovalForm", b =>
                 {
                     b.HasOne("Core.Domain.Entities.Guarantee.GuaranteeCase", "Case")
@@ -2422,6 +2534,8 @@ namespace Core.Persistence.Migrations
 
             modelBuilder.Entity("Core.Domain.Entities.Guarantee.GuaranteeCase", b =>
                 {
+                    b.Navigation("AmendmentHistoryRecords");
+
                     b.Navigation("Application");
 
                     b.Navigation("ApprovalForm");

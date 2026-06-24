@@ -1,13 +1,13 @@
 using Core.Application.Abstractions;
+using Core.Application.Common;
 
 namespace Core.Application.Services;
 
 public sealed class LoanCaseNumberGenerator : ILoanCaseNumberGenerator
 {
-    public Task<string> GenerateLoanCaseAsync(CancellationToken cancellationToken = default)
+    public Task<string> GenerateLoanCaseAsync(CancellationToken cancellationToken = default, int dailySequence = 1)
     {
-        var date = DateTimeOffset.UtcNow.ToString("yyyyMMdd");
-        var random = Guid.NewGuid().ToString("N")[..8].ToUpperInvariant();
-        return Task.FromResult($"LN-{date}-{random}");
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.FromResult(CaseNumberFormat.Build("LN", DateTimeOffset.UtcNow, dailySequence));
     }
 }

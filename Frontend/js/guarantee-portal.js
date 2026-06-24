@@ -1,8 +1,17 @@
 /* global GuaranteeWorkflowModel */
 (function () {
   const model = window.GuaranteeWorkflowModel;
-  const state = { panel: null, caseId: "", caseData: null, documents: [], comments: [], history: [], busy: false };
+  const state = { panel: null, caseId: "", caseData: null, documents: [], comments: [], history: [], amendmentDetails: null, cancellationDetails: null, busy: false };
   let uploadFieldCounter = 0;
+
+  function ensureCancellationModel() {
+    if (!model) return;
+    model.CANCELLATION_DOCUMENTS = [
+      { type: 29, label: "نامه رفع تعهد ذی‌نفع", hint: "ضروری", required: true },
+    ];
+  }
+
+  ensureCancellationModel();
 
   const qs = (sel, root) => (root || document).querySelector(sel);
 
@@ -35,6 +44,24 @@
     const session = state.panel.getActiveSession();
     if (!session) return "";
     return model.normalizeRole(session.userRoleText, session.userRoleNumber);
+  }
+
+  async function refreshStageRollback() {
+    if (!window.CaseStageRollback) return;
+    await window.CaseStageRollback.refresh({
+      panel: state.panel,
+      module: "guarantee",
+      host: "gStageRollback",
+      getCaseId: function () {
+        return state.caseId;
+      },
+      getRole: getSessionRole,
+      onSuccess: async function (msg) {
+        setInfo(msg);
+        await refreshCase();
+      },
+      onError: setError,
+    });
   }
 
   function isInternalUser() {
@@ -162,25 +189,131 @@
     await refreshCase();
   }
 
-  async function refreshCase() {
-    if (!state.caseId) return;
-    setError("");
-    const res = await state.panel.apiRequest({ method: "GET", path: gPath("/" + state.caseId) });
-    state.caseData = unwrap(res.body);
-    const docs = await state.panel.apiRequest({ method: "GET", path: gPath("/" + state.caseId + "/documents") });
-    state.documents = unwrap(docs.body) || [];
-    const commentsRes = await state.panel.apiRequest({
-      method: "GET",
-      path: gPath("/" + state.caseId + "/comments?includeInternal=" + (isInternalUser() ? "true" : "false")),
-    });
-    state.comments = unwrap(commentsRes.body) || [];
+  async function fetchOptionalGet(path) {
     try {
-      const historyRes = await state.panel.apiRequest({ method: "GET", path: gPath("/" + state.caseId + "/history") });
-      state.history = unwrap(historyRes.body) || [];
+      const res = await state.panel.apiRequest({ method: "GET", path });
+      if (!isApiSuccess(res)) return null;
+      return unwrap(res.body);
     } catch (_) {
-      state.history = [];
+      return null;
     }
+  }
+
+  async function reloadCaseData(options) {
+    options = options || {};
+    setError("");
+    const base = gPath("/" + state.caseId);
+    const caseRes = await apiCall({ method: "GET", path: base });
+    state.caseData = unwrap(caseRes.body);
+    if (options.renderEarly) {
+      render();
+    }
+
+    const [docsPayload, commentsPayload, historyPayload, amendmentPayload, cancellationPayload] =
+      await Promise.all([
+        fetchOptionalGet(base + "/documents"),
+        fetchOptionalGet(base + "/comments?includeInternal=" + (isInternalUser() ? "true" : "false")),
+        fetchOptionalGet(base + "/history"),
+        fetchOptionalGet(base + "/amendment/details"),
+        fetchOptionalGet(base + "/amendment/cancellation/details"),
+      ]);
+
+    state.documents = docsPayload || [];
+    state.comments = commentsPayload || [];
+    state.history = historyPayload || [];
+    state.amendmentDetails = amendmentPayload;
+    state.cancellationDetails = cancellationPayload;
     render();
+  }
+
+  async function refreshCase(previousStatus, options) {
+    if (!state.caseId) return;
+    const pollOptions = Object.assign(
+      { maxAttempts: previousStatus != null ? 4 : 1, baseDelayMs: 80 },
+      options || {}
+    );
+    const refreshOnce = function () {
+      return reloadCaseData({ renderEarly: previousStatus != null });
+    };
+    if (previousStatus != null && window.PortalCaseRefresh) {
+      await window.PortalCaseRefresh.refreshUntilChanged(
+        refreshOnce,
+        function () {
+          return pickStatus(state.caseData);
+        },
+        previousStatus,
+        pollOptions
+      );
+    } else {
+      await refreshOnce();
+    }
+    try {
+      await refreshStageRollback();
+    } catch (rollbackErr) {
+      console.warn("[guarantee-portal] stage rollback refresh failed", rollbackErr);
+    }
+  }
+
+  async function apiCall(opts) {
+    // #region agent log
+    fetch("http://127.0.0.1:7438/ingest/bf39201f-34dc-4f1d-8b2a-d1537a00d85c",{method:"POST",headers:{"Content-Type":"application/json","X-Debug-Session-Id":"35307a"},body:JSON.stringify({sessionId:"35307a",hypothesisId:"H6",location:"guarantee-portal.apiCall",message:"before",data:{method:opts.method||"GET",path:opts.path||""},timestamp:Date.now()})}).catch(function(){});
+    // #endregion
+    const res = await state.panel.apiRequest(opts);
+    // #region agent log
+    fetch("http://127.0.0.1:7438/ingest/bf39201f-34dc-4f1d-8b2a-d1537a00d85c",{method:"POST",headers:{"Content-Type":"application/json","X-Debug-Session-Id":"35307a"},body:JSON.stringify({sessionId:"35307a",hypothesisId:"H6",location:"guarantee-portal.apiCall",message:"after",data:{method:opts.method||"GET",path:opts.path||"",status:res.status},timestamp:Date.now()})}).catch(function(){});
+    // #endregion
+    if (!isApiSuccess(res)) {
+      const msg =
+        (res.body && (res.body.message || res.body.Message)) ||
+        "درخواست با کد " + res.status + " ناموفق بود.";
+      throw new Error(msg);
+    }
+    return res;
+  }
+
+  async function safeRefreshAfterAction(previousStatus) {
+    try {
+      await refreshCase(previousStatus, { maxAttempts: 4, baseDelayMs: 80 });
+    } catch (refreshErr) {
+      console.warn("[guarantee-portal] post-action refresh failed", refreshErr);
+    }
+  }
+
+  function resolveActionSuccessMessage(actionId) {
+    const messages = {
+      "submit-app": "پرونده با موفقیت به واحد اعتبارات ارسال شد — وضعیت: بررسی اعتبارات.",
+      "save-app": "درخواست ذخیره شد.",
+      "credit-approve": "بررسی اعتبارات تأیید شد.",
+      "credit-revision": "درخواست اصلاح برای متقاضی ثبت شد.",
+      "fin-approve": "مدارک مالی تأیید شد.",
+      "fin-revision": "درخواست اصلاح برای متقاضی ثبت شد.",
+      "approval-save": "فرم تصویب ذخیره شد.",
+      "approval-submit": "فرم تصویب ارسال شد — پرونده به تأیید مدیرعامل رفت.",
+      "cancel-case": "پرونده لغو شد.",
+      "ceo-cancel": "پرونده لغو شد.",
+      "ceo-final-cancel": "پرونده لغو شد.",
+      "save-amendment": "اصلاحیه ذخیره شد.",
+      "submit-amendment": "اصلاحیه برای بررسی ارسال شد.",
+      "approve-amendment": "اصلاحیه تایید شد.",
+      "approve-cancellation": "اصلاحیه تایید شد.",
+      "ceo-amendment-approve": "اصلاحیه تایید شد.",
+      "reject-amendment": "اصلاحیه رد شد.",
+      "ceo-amendment-reject": "اصلاحیه رد شد.",
+      "amendment-revision": "درخواست اصلاح برای متقاضی ثبت شد.",
+    };
+    return messages[actionId] || "";
+  }
+
+  function finishPortalMutation(successMessage, previousStatus) {
+    if (successMessage) {
+      setInfo(successMessage);
+      scrollToPortalMessage();
+    }
+    void safeRefreshAfterAction(previousStatus);
+  }
+
+  function cancelPortalAction() {
+    setInfo("");
   }
 
   function documentForType(documentType) {
@@ -236,6 +369,196 @@
     if (c.application || c.Application) return c.application || c.Application;
     if (pick(c, "guaranteeType", "GuaranteeType") != null) return c;
     return null;
+  }
+
+  function readAmendmentFromCase() {
+    return state.amendmentDetails || state.caseData?.amendment || state.caseData?.Amendment || null;
+  }
+
+  function readCancellationDetails() {
+    return state.cancellationDetails || null;
+  }
+
+  function amendmentTypeLabel(value) {
+    const n = Number(value || 0);
+    if (n === 1) return "تمدید";
+    if (n === 2) return "تقلیل";
+    if (n === 3) return "ابطال";
+    return "—";
+  }
+
+  function amendmentReviewStateLabel(status) {
+    const value = Number(status || 0);
+    if (value === 1) return "در انتظار بررسی";
+    if (value === 2) return "تایید شده";
+    if (value === 3) return "رد شده";
+    if (value === 18) return "در انتظار بررسی اعتبارات";
+    if (value === 19) return "در انتظار تأیید مدیرعامل";
+    if (value === 20) return "در انتظار بررسی حقوقی";
+    if (value === 22 || value === 21 || value === 14) return "تایید شده";
+    if (value === 23) return "رد شده";
+    if (value === 16 || value === 17) return "پیش‌نویس";
+    return "—";
+  }
+
+  function currentAmendmentType() {
+    const amendment = readAmendmentFromCase() || {};
+    const cancellation = readCancellationDetails() || {};
+    return Number(
+      pick(amendment, "amendmentType", "AmendmentType") ||
+      pick(cancellation, "amendmentType", "AmendmentType") ||
+      pick(state.caseData, "amendmentType", "AmendmentType") ||
+      0
+    );
+  }
+
+  function canStartNewAmendment(status) {
+    return status === 12 || status === 16 || status === 17 || status === 22 || status === 23;
+  }
+
+  function isApiSuccess(res) {
+    return !!(res && res.ok && !(res.body && res.body.success === false));
+  }
+
+  function pickAmendmentType(amendment) {
+    return Number(pick(amendment, "amendmentType", "AmendmentType") || 0);
+  }
+
+  function pickAmendmentValidityTo(amendment) {
+    const next = pick(amendment, "newValues", "NewValues") || {};
+    return (
+      pick(amendment, "approvedValidityTo", "ApprovedValidityTo") ||
+      pick(amendment, "requestedValidityTo", "RequestedValidityTo") ||
+      pick(next, "validityTo", "ValidityTo") ||
+      null
+    );
+  }
+
+  function pickAmendmentAmount(amendment, fallbackAmount) {
+    const next = pick(amendment, "newValues", "NewValues") || {};
+    const approved = pick(amendment, "approvedAmount", "ApprovedAmount");
+    const requested = pick(amendment, "requestedAmount", "RequestedAmount");
+    const fromNext = pick(next, "guaranteeAmount", "GuaranteeAmount");
+    if (approved != null && approved !== "") return approved;
+    if (requested != null && requested !== "") return requested;
+    if (fromNext != null && fromNext !== "") return fromNext;
+    return fallbackAmount ?? null;
+  }
+
+  function buildAmendmentInfoRows(amendment, typeValue, status, currentValidityTo, currentAmount) {
+    const rows = [
+      ["نوع اصلاحیه", amendmentTypeLabel(typeValue)],
+      ["وضعیت اصلاحیه", amendmentReviewStateLabel(status)],
+      ["علت", pick(amendment, "reason", "Reason") || "—"],
+    ];
+    const prev = pick(amendment, "previousValues", "PreviousValues") || {};
+    const beforeValidity = pick(prev, "validityTo", "ValidityTo") || currentValidityTo;
+    const beforeAmount = pick(prev, "guaranteeAmount", "GuaranteeAmount") || currentAmount;
+    rows.push(["تاریخ اعتبار قبل از اصلاح", beforeValidity || "—"]);
+    rows.push(["مبلغ قبل از اصلاح", formatRialAmount(beforeAmount) || "—"]);
+
+    if (typeValue === 1) {
+      rows.push(["تاریخ اعتبار جدید", pickAmendmentValidityTo(amendment) || "—"]);
+    } else if (typeValue === 2) {
+      rows.push(["مبلغ جدید", formatRialAmount(pickAmendmentAmount(amendment, null)) || "—"]);
+    } else if (typeValue === 3) {
+      rows.push(["نوع عملیات", "ابطال ضمانت‌نامه"]);
+    }
+
+    if (typeValue === 1 || typeValue === 2) {
+      const approvedValidity = pick(amendment, "approvedValidityTo", "ApprovedValidityTo");
+      const approvedAmount = pick(amendment, "approvedAmount", "ApprovedAmount");
+      if (approvedValidity) rows.push(["تاریخ اعتبار تأییدشده", approvedValidity]);
+      if (approvedAmount != null && approvedAmount !== "") rows.push(["مبلغ تأییدشده", formatRialAmount(approvedAmount)]);
+    }
+
+    return rows;
+  }
+
+  function readAmendmentForm() {
+    const type = Number(qs("#gAmendmentType")?.value || 0);
+    const reason = qs("#gAmendmentReason")?.value?.trim() || null;
+    const newValidityTo = qs("#gAmendmentValidityTo")?.value?.trim() || null;
+    const amountRaw = qs("#gAmendmentAmount")?.value?.trim() || "";
+    const newGuaranteeAmount = amountRaw ? Number(amountRaw) : null;
+    return {
+      amendmentType: type || null,
+      newValidityTo: type === 1 ? newValidityTo : null,
+      newGuaranteeAmount: type === 2 && Number.isFinite(newGuaranteeAmount) ? newGuaranteeAmount : null,
+      reason,
+    };
+  }
+
+  function readCancellationForm() {
+    return {
+      reason: qs("#gAmendmentReason")?.value?.trim() || null,
+    };
+  }
+
+  function readCancellationSubmitForm() {
+    return {
+      comment: qs("#gAmendmentApproveComment")?.value?.trim() || null,
+    };
+  }
+
+  function guaranteeSourceSnapshot() {
+    const cancellation = readCancellationDetails() || {};
+    const src = cancellation.source || cancellation.Source;
+    if (src && (pick(src, "caseNumber", "CaseNumber") || pick(src, "caseId", "CaseId"))) return src;
+    const app = readApplicationFromCase() || {};
+    const form = (state.caseData && (state.caseData.approvalForm || state.caseData.ApprovalForm)) || {};
+    const instrument = (state.documents || []).find((d) => Number(pick(d, "documentType", "DocumentType")) === 27);
+    const active = Number(pick(form, "activeCommitments", "ActiveCommitments") || 0);
+    return {
+      caseId: pick(state.caseData, "id", "Id"),
+      caseNumber: pick(state.caseData, "caseNumber", "CaseNumber"),
+      guaranteeAmount: pick(form, "guaranteeAmount", "GuaranteeAmount") || pick(app, "requestedGuaranteeAmount", "RequestedGuaranteeAmount"),
+      beneficiaryName: pick(form, "beneficiary", "Beneficiary") || pick(app, "beneficiaryName", "BeneficiaryName"),
+      issuanceDate: pick(form, "issuanceDate", "IssuanceDate"),
+      expiryDate: pick(form, "expiryDate", "ExpiryDate") || pick(app, "validityTo", "ValidityTo"),
+      commissionAmount: pick(form, "commissionAmount", "CommissionAmount"),
+      depositAmount: pick(form, "depositAmount", "DepositAmount"),
+      activeCommitments: pick(form, "activeCommitments", "ActiveCommitments"),
+      settlementConfirmationRequired: active > 0,
+      hasIssuanceDocument: !!instrument,
+      issuanceDocumentFileName: instrument ? pick(instrument, "fileName", "FileName") : null,
+    };
+  }
+
+  function renderIssuedGuaranteeSummary(card) {
+    const src = guaranteeSourceSnapshot();
+    const settlementNote = pick(src, "settlementConfirmationRequired", "SettlementConfirmationRequired")
+      ? "تعهد فعال باقی مانده — بررسی اعتباری الزامی است."
+      : "بدون تعهد فعال — تسویه از نظر سیستم تکمیل است.";
+    renderReadOnlyBlock(card, "ضمانت‌نامه صادره (مرجع سیستم)", [
+      ["شماره پرونده / مرجع", pick(src, "caseNumber", "CaseNumber") || "—"],
+      ["شناسه پرونده", pick(src, "caseId", "CaseId") || "—"],
+      ["مبلغ ضمانت‌نامه", formatRialAmount(pick(src, "guaranteeAmount", "GuaranteeAmount")) || "—"],
+      ["ذی‌نفع", pick(src, "beneficiaryName", "BeneficiaryName") || "—"],
+      ["تاریخ صدور", pick(src, "issuanceDate", "IssuanceDate") || "—"],
+      ["تاریخ انقضا", pick(src, "expiryDate", "ExpiryDate") || "—"],
+      ["کارمزد", formatRialAmount(pick(src, "commissionAmount", "CommissionAmount")) || "—"],
+      ["ودیعه", formatRialAmount(pick(src, "depositAmount", "DepositAmount")) || "—"],
+      ["تعهدات فعال", formatRialAmount(pick(src, "activeCommitments", "ActiveCommitments")) || "—"],
+      ["وضعیت تسویه", settlementNote],
+      [
+        "مدرک صدور (ضمانت‌نامه)",
+        pick(src, "hasIssuanceDocument", "HasIssuanceDocument")
+          ? "✓ " + (pick(src, "issuanceDocumentFileName", "IssuanceDocumentFileName") || "بارگذاری شده")
+          : "— (در پرونده یافت نشد)",
+      ],
+    ]);
+  }
+
+  function checkboxField(label, id, checked) {
+    const row = el("label", "formrow");
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.id = id;
+    input.checked = !!checked;
+    row.appendChild(input);
+    row.appendChild(document.createTextNode(" " + label));
+    return row;
   }
 
   function savedGuaranteeType() {
@@ -306,10 +629,8 @@
       const item = el("div", "portal-stepper__item");
       if (currentIndex >= 0) {
         if (index < currentIndex) item.classList.add("is-done");
-        if (index === currentIndex) item.classList.add("is-current");
-        if (index > currentIndex) item.classList.add("is-upcoming");
-      } else if (step.id < current) {
-        item.classList.add("is-done");
+        else if (index === currentIndex) item.classList.add("is-current");
+        else item.classList.add("is-upcoming");
       } else if (step.id === current) {
         item.classList.add("is-current");
       } else {
@@ -321,9 +642,70 @@
       const unit = model.getUnit(step.unit);
       item.appendChild(el("div", "portal-stepper__unit", (unit && unit.label) || step.unit));
       track.appendChild(item);
+
+      if (step.id === current) {
+        requestAnimationFrame(function () {
+          item.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+        });
+      }
     });
 
     root.appendChild(track);
+  }
+
+  function renderActionBar() {
+    const root = qs("#gPortalActionBar");
+    if (!root) return;
+    root.innerHTML = "";
+    root.classList.add("hidden");
+
+    if (!state.caseData) return;
+
+    const status = pickStatus(state.caseData);
+    const role = getSessionRole();
+
+    // Only show action bar if case is Completed (status 12)
+    if (status !== 12) return;
+
+    const actions = [];
+    const isApplicant = role === "Applicant" || role === "Admin";
+    if (!isApplicant) return;
+
+    actions.push(
+      { id: "extension", label: "تمدید ضمانت‌نامه", amendmentType: 1, class: "btn--success" },
+      { id: "reduction", label: "تقلیل ضمانت‌نامه", amendmentType: 2, class: "btn--warning" },
+      { id: "cancellation", label: "ابطال ضمانت‌نامه", amendmentType: 3, class: "btn--danger" }
+    );
+
+    root.classList.remove("hidden");
+
+    const title = el("div", "portal-action-bar__title", "عملیات‌های پرونده تکمیل‌شده");
+    root.appendChild(title);
+
+    const buttonGroup = el("div", "portal-action-bar__buttons");
+
+    actions.forEach(action => {
+      const btn = el("button", "btn " + action.class, action.label);
+      btn.type = "button";
+      btn.dataset.amendmentType = action.amendmentType;
+      btn.addEventListener("click", () => focusAmendmentForm(action.amendmentType));
+      buttonGroup.appendChild(btn);
+    });
+
+    root.appendChild(buttonGroup);
+  }
+
+  function focusAmendmentForm(amendmentType) {
+    const sel = qs("#gAmendmentType");
+    if (!sel) {
+      setError("فرم اصلاحیه یافت نشد. صفحه را یک‌بار رفرش کنید.");
+      scrollToPortalMessage();
+      return;
+    }
+    sel.value = String(amendmentType);
+    sel.dispatchEvent(new Event("change"));
+    const form = sel.closest(".portal-form");
+    if (form) form.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function renderActionHint() {
@@ -353,9 +735,18 @@
     } else if (status >= 4 && status <= 11) {
       text = "مرحله «" + step.title + "» — از دکمه‌های اقدام در پایین استفاده کنید.";
     } else if (status === 12) {
-      text = "پرونده تکمیل شده است.";
+      text = "پرونده تکمیل شده است — برای تمدید، تقلیل یا ابطال از دکمه‌های بالا یا فرم پایین استفاده کنید.";
     }
 
+    if (!text && status >= 16 && status <= 23) {
+      const amendment = readAmendmentFromCase();
+      const typeValue = Number(pick(amendment, "amendmentType", "AmendmentType") || 0);
+      const typeLabel = amendmentTypeLabel(typeValue);
+      text = "فرایند " + typeLabel + " ضمانت‌نامه در حال پیگیری است. وضعیت جاری: " + step.title + ".";
+    }
+    if (!text && status === 14) {
+      text = "این پرونده ابطال شده است.";
+    }
     if (!text) {
       box.classList.add("hidden");
       box.textContent = "";
@@ -445,8 +836,67 @@
     card.appendChild(wrap);
   }
 
+  function shouldShowCompletedCaseDossier(status) {
+    const value = Number(status) || 0;
+    return value === 12 || value === 22;
+  }
+
   function shouldShowCaseDossier(status) {
-    return isInternalUser() && status >= 3 && status <= 11;
+    const value = Number(status) || 0;
+    if (value >= 12) return true;
+    return isInternalUser() && value >= 3 && value <= 11;
+  }
+
+  function formatCaseDate(iso) {
+    if (!iso) return "—";
+    try {
+      return new Date(iso).toLocaleString("fa-IR");
+    } catch {
+      return String(iso);
+    }
+  }
+
+  function renderFullWorkflowHistory(parent) {
+    if (!state.history.length) {
+      parent.appendChild(el("div", "muted", "تاریخچه‌ای ثبت نشده است."));
+      return;
+    }
+    const list = el("div", "portal-history");
+    state.history.forEach((item) => {
+      const row = el("div", "portal-history__item");
+      const fromStatus = pick(item, "fromStatus", "FromStatus") ?? "";
+      const toStatus = pick(item, "toStatus", "ToStatus") ?? "";
+      const action = pick(item, "action", "Action") || "";
+      const actor = pick(item, "actorRole", "ActorRole") || "";
+      const when = formatCaseDate(pick(item, "createdAt", "CreatedAt"));
+      row.textContent = [when, action, fromStatus && toStatus ? fromStatus + " → " + toStatus : toStatus, actor]
+        .filter(Boolean)
+        .join(" · ");
+      list.appendChild(row);
+    });
+    parent.appendChild(list);
+  }
+
+  function renderAmendmentHistoryInDossier(parent) {
+    const amendment = readAmendmentFromCase() || {};
+    const auditHistory = pick(amendment, "history", "History") || [];
+    if (!auditHistory.length) {
+      parent.appendChild(el("div", "muted", "سابقه اصلاحیه‌ای ثبت نشده است."));
+      return;
+    }
+    auditHistory.forEach((item) => {
+      const row = el("div", "portal-thread__item");
+      const createdBy = pick(item, "createdByFullName", "CreatedByFullName") || pick(item, "createdBy", "CreatedBy") || "—";
+      const approvalBy = pick(item, "approvalUserFullName", "ApprovalUserFullName") || pick(item, "approvalUser", "ApprovalUser") || "—";
+      const decisionReason = pick(item, "decisionReason", "DecisionReason") || "—";
+      row.appendChild(el("div", "portal-thread__meta muted", amendmentReviewStateLabel(pick(item, "status", "Status"))));
+      row.appendChild(el("div", "portal-thread__message", "نوع: " + amendmentTypeLabel(pick(item, "amendmentType", "AmendmentType"))));
+      row.appendChild(el("div", "portal-thread__message", "ثبت‌کننده: " + createdBy));
+      row.appendChild(el("div", "portal-thread__message", "علت: " + (pick(item, "reason", "Reason") || "—")));
+      row.appendChild(el("div", "portal-thread__message", "تایید/رد توسط: " + approvalBy));
+      row.appendChild(el("div", "portal-thread__message", "توضیح تصمیم: " + decisionReason));
+      parent.appendChild(row);
+    });
   }
 
   function formatUploadedAt(doc) {
@@ -638,7 +1088,38 @@
     details.appendChild(summary);
 
     const body = el("div", "portal-dossier__body");
-    body.appendChild(el("div", "muted portal-stage__hint", "خلاصه درخواست متقاضی، فرم تصویب (در صورت وجود) و همه فایل‌های بارگذاری‌شده."));
+    const status = pickStatus(state.caseData);
+    body.appendChild(
+      el(
+        "div",
+        "muted portal-stage__hint",
+        status === 22
+          ? "اصلاحیه تأیید شد. خلاصه کامل پرونده و سابقه اصلاحیه در زیر قابل مشاهده است."
+          : shouldShowCompletedCaseDossier(status)
+            ? "پرونده تکمیل شده است. تمام اطلاعات ثبت‌شده در زیر قابل مشاهده است."
+            : "خلاصه درخواست متقاضی، فرم تصویب (در صورت وجود) و همه فایل‌های بارگذاری‌شده."
+      )
+    );
+
+    const metaRows = [
+      ["تاریخ ایجاد", formatCaseDate(pick(state.caseData, "createdAt", "CreatedAt"))],
+      ["تاریخ تکمیل", formatCaseDate(pick(state.caseData, "completedAt", "CompletedAt"))],
+    ];
+    if (isInternalUser()) {
+      metaRows.push(
+        ["متقاضی", pick(state.caseData, "applicantFullName", "ApplicantFullName") || "—"],
+        ["موبایل متقاضی", pick(state.caseData, "applicantPhoneNumber", "ApplicantPhoneNumber") || "—"]
+      );
+    }
+    const metaWrap = el("div", "card portal-card portal-card--nested");
+    metaWrap.appendChild(el("div", "card__title", "اطلاعات پرونده"));
+    metaRows.forEach(([label, value]) => {
+      const row = el("div", "portal-profile-summary__row");
+      row.appendChild(el("span", "portal-profile-summary__label muted", label));
+      row.appendChild(el("span", "portal-profile-summary__value", value || "—"));
+      metaWrap.appendChild(row);
+    });
+    body.appendChild(metaWrap);
 
     renderProfileSummary(body);
     renderApplicantApplicationReadOnly(body);
@@ -647,6 +1128,41 @@
     afWrap.appendChild(el("div", "card__title", "فرم تصویب (ثبت‌شده)"));
     renderApprovalFormReadOnly(afWrap);
     body.appendChild(afWrap);
+
+    if (shouldShowCompletedCaseDossier(status) || status >= 12) {
+      renderIssuedGuaranteeSummary(body);
+    }
+
+    const amendment = readAmendmentFromCase();
+    const auditHistory = pick(amendment, "history", "History") || [];
+    if (amendment && (pick(amendment, "amendmentType", "AmendmentType") || auditHistory.length)) {
+      const prev = pick(amendment, "previousValues", "PreviousValues") || {};
+      const next = pick(amendment, "newValues", "NewValues") || {};
+      if (pick(amendment, "amendmentType", "AmendmentType")) {
+        const typeValue = pickAmendmentType(amendment);
+        renderReadOnlyBlock(body, "آخرین اصلاحیه", buildAmendmentInfoRows(
+          amendment,
+          typeValue,
+          status,
+          pick(readApplicationFromCase(), "validityTo", "ValidityTo") || pick(prev, "validityTo", "ValidityTo"),
+          pick(readApplicationFromCase(), "requestedGuaranteeAmount", "RequestedGuaranteeAmount") || pick(prev, "guaranteeAmount", "GuaranteeAmount")
+        ));
+        if (pick(prev, "validityTo", "ValidityTo") || pick(next, "validityTo", "ValidityTo") || pick(prev, "guaranteeAmount", "GuaranteeAmount") || pick(next, "guaranteeAmount", "GuaranteeAmount")) {
+          renderReadOnlyBlock(body, "مقایسه قبل و بعد (اصلاحیه)", [
+            ["تاریخ اعتبار قبل", pick(prev, "validityTo", "ValidityTo") || "—"],
+            ["تاریخ اعتبار بعد", pick(next, "validityTo", "ValidityTo") || pickAmendmentValidityTo(amendment) || "—"],
+            ["مبلغ قبل", formatRialAmount(pick(prev, "guaranteeAmount", "GuaranteeAmount")) || "—"],
+            ["مبلغ بعد", formatRialAmount(pick(next, "guaranteeAmount", "GuaranteeAmount") || pickAmendmentAmount(amendment, null)) || "—"],
+          ]);
+        }
+      }
+      if (auditHistory.length) {
+        const amendmentHistoryWrap = el("div", "card portal-card portal-card--nested");
+        amendmentHistoryWrap.appendChild(el("div", "card__title", "سابقه اصلاحیه‌ها"));
+        renderAmendmentHistoryInDossier(amendmentHistoryWrap);
+        body.appendChild(amendmentHistoryWrap);
+      }
+    }
 
     const docsWrap = el("div", "card portal-card portal-card--nested");
     docsWrap.appendChild(el("div", "card__title", "همه مدارک و پیوست‌ها"));
@@ -657,6 +1173,11 @@
     commentsWrap.appendChild(el("div", "card__title", "تاریخچه نظرات و درخواست‌های اصلاح"));
     renderDossierComments(commentsWrap);
     body.appendChild(commentsWrap);
+
+    const historyWrap = el("div", "card portal-card portal-card--nested");
+    historyWrap.appendChild(el("div", "card__title", "تاریخچه گردش کار"));
+    renderFullWorkflowHistory(historyWrap);
+    body.appendChild(historyWrap);
 
     details.appendChild(body);
     card.appendChild(details);
@@ -670,31 +1191,7 @@
       return;
     }
 
-    const gt = model.normalizeGuaranteeType(pick(app, "guaranteeType", "GuaranteeType"));
-    const kb = pick(app, "isKnowledgeBasedProduct", "IsKnowledgeBasedProduct");
-
-    renderReadOnlyBlock(card, "درخواست متقاضی (ثبت‌شده در ورود اطلاعات — فقط نمایش)", [
-      ["نوع ضمانت‌نامه", labelFromOptions(gt, model.GUARANTEE_TYPES)],
-      ["موضوع ضمانت‌نامه (قرارداد پایه)", pick(app, "contractSubject", "ContractSubject")],
-      ["محصول دانش‌بنیان", kb === true || kb === "true" ? "بله" : kb === false || kb === "false" ? "خیر" : "—"],
-      ["نام ذی‌نفع", pick(app, "beneficiaryName", "BeneficiaryName")],
-      ["شناسه ملی ذی‌نفع", pick(app, "beneficiaryNationalId", "BeneficiaryNationalId")],
-      ["نوع شرکت ذی‌نفع", labelFromOptions(pick(app, "beneficiaryCompanyType", "BeneficiaryCompanyType"), model.BENEFICIARY_COMPANY_TYPES)],
-      ["دسته‌بندی متقاضی", labelFromOptions(pick(app, "applicantCategory", "ApplicantCategory"), model.APPLICANT_CATEGORIES)],
-      ["دسته‌بندی سایر", pick(app, "applicantCategoryOther", "ApplicantCategoryOther")],
-      ["نوع شرکت متقاضی (حقوقی)", labelFromOptions(pick(app, "applicantLegalForm", "ApplicantLegalForm"), model.APPLICANT_LEGAL_FORMS)],
-      ["موضوع تسهیلات", pick(app, "facilitySubject", "FacilitySubject")],
-      ["شماره قرارداد پایه / مناقصه", pick(app, "baseContractNumber", "BaseContractNumber")],
-      ["مبلغ قرارداد پایه (ریال)", pick(app, "baseContractAmount", "BaseContractAmount")],
-      ["مبلغ قرارداد پایه (حروف)", pick(app, "baseContractAmountInWords", "BaseContractAmountInWords")],
-      ["نرخ تعدیل قرارداد (٪)", pick(app, "priceAdjustmentRatePercent", "PriceAdjustmentRatePercent")],
-      ["استان محل اجرا", pick(app, "executionProvince", "ExecutionProvince")],
-      ["مبلغ ضمانت‌نامه درخواستی (ریال)", pick(app, "requestedGuaranteeAmount", "RequestedGuaranteeAmount")],
-      ["مدت اعتبار اولیه (روز)", pick(app, "initialValidityDays", "InitialValidityDays")],
-      ["اعتبار از", formatDateInput(pick(app, "validityFrom", "ValidityFrom"))],
-      ["اعتبار تا", formatDateInput(pick(app, "validityTo", "ValidityTo"))],
-      ["تضمین و وثایق قابل ارائه", pick(app, "collateralDescription", "CollateralDescription")],
-    ]);
+    renderReadOnlyBlock(card, "درخواست متقاضی (ثبت‌شده در ورود اطلاعات — فقط نمایش)", buildApplicantApplicationRows(app));
   }
 
   function renderApplicationSummaryReadOnly(card) {
@@ -719,12 +1216,14 @@
     }
     const saved = pickApprovalForm();
     const gt = model.normalizeGuaranteeType(pick(app, "guaranteeType", "GuaranteeType"));
+    const requestedAmount = pick(app, "requestedGuaranteeAmount", "RequestedGuaranteeAmount");
     return {
       guaranteeType: gt || null,
-      guaranteeAmount: pick(app, "requestedGuaranteeAmount", "RequestedGuaranteeAmount") ?? null,
+      guaranteeAmount: requestedAmount ?? null,
       guaranteeAmountInWords:
         pick(saved, "guaranteeAmountInWords", "GuaranteeAmountInWords") ||
-        pick(app, "baseContractAmountInWords", "BaseContractAmountInWords") ||
+        resolveAmountInWords(null, requestedAmount) ||
+        resolveAmountInWords(pick(app, "baseContractAmountInWords", "BaseContractAmountInWords"), pick(app, "baseContractAmount", "BaseContractAmount")) ||
         null,
       contractSubject: pick(app, "contractSubject", "ContractSubject") || null,
       beneficiary: pick(app, "beneficiaryName", "BeneficiaryName") || null,
@@ -800,6 +1299,81 @@
     const n = Number(value);
     if (!Number.isFinite(n)) return String(value);
     return n.toLocaleString("fa-IR") + " ریال";
+  }
+
+  function resolveAmountInWords(storedWords, amount) {
+    const stored = storedWords != null ? String(storedWords).trim() : "";
+    if (stored) return stored;
+    if (window.MoneyInWords && amount != null && Number(amount) > 0) {
+      return window.MoneyInWords.formatRial(amount);
+    }
+    return null;
+  }
+
+  function isBlankDisplayValue(value) {
+    return value == null || value === "" || value === "—";
+  }
+
+  function buildApplicantApplicationRows(app) {
+    const ctx = model.applicationFieldContext(app);
+    const gt = ctx.guaranteeType;
+    const kb = pick(app, "isKnowledgeBasedProduct", "IsKnowledgeBasedProduct");
+    const baseContractAmount = pick(app, "baseContractAmount", "BaseContractAmount");
+    const requestedAmount = pick(app, "requestedGuaranteeAmount", "RequestedGuaranteeAmount");
+
+    const rows = [
+      ["guaranteeType", "نوع ضمانت‌نامه", labelFromOptions(gt, model.GUARANTEE_TYPES)],
+      ["contractSubject", "موضوع ضمانت‌نامه (قرارداد پایه)", pick(app, "contractSubject", "ContractSubject")],
+      [
+        "isKnowledgeBasedProduct",
+        "محصول دانش‌بنیان",
+        kb === true || kb === "true" ? "بله" : kb === false || kb === "false" ? "خیر" : "—",
+      ],
+      ["beneficiaryName", "نام ذی‌نفع", pick(app, "beneficiaryName", "BeneficiaryName")],
+      ["beneficiaryNationalId", "شناسه ملی ذی‌نفع", pick(app, "beneficiaryNationalId", "BeneficiaryNationalId")],
+      [
+        "beneficiaryCompanyType",
+        "نوع شرکت ذی‌نفع",
+        labelFromOptions(pick(app, "beneficiaryCompanyType", "BeneficiaryCompanyType"), model.BENEFICIARY_COMPANY_TYPES),
+      ],
+      [
+        "applicantCategory",
+        "دسته‌بندی متقاضی",
+        labelFromOptions(pick(app, "applicantCategory", "ApplicantCategory"), model.APPLICANT_CATEGORIES),
+      ],
+      ["applicantCategoryOther", "دسته‌بندی سایر", pick(app, "applicantCategoryOther", "ApplicantCategoryOther")],
+      [
+        "applicantLegalForm",
+        "نوع شرکت متقاضی (حقوقی)",
+        labelFromOptions(pick(app, "applicantLegalForm", "ApplicantLegalForm"), model.APPLICANT_LEGAL_FORMS),
+      ],
+      [
+        "baseContractNumber",
+        model.applicationFieldLabel("baseContractNumber", "شماره قرارداد پایه / مناقصه", ctx),
+        pick(app, "baseContractNumber", "BaseContractNumber"),
+      ],
+      ["baseContractAmount", "مبلغ قرارداد پایه (ریال)", formatRialAmount(baseContractAmount)],
+      [
+        "baseContractAmountInWords",
+        "مبلغ قرارداد پایه (حروف)",
+        resolveAmountInWords(
+          pick(app, "baseContractAmountInWords", "BaseContractAmountInWords"),
+          baseContractAmount
+        ),
+      ],
+      ["priceAdjustmentRatePercent", "نرخ تعدیل قرارداد (٪)", pick(app, "priceAdjustmentRatePercent", "PriceAdjustmentRatePercent")],
+      ["executionProvince", "استان محل اجرا", pick(app, "executionProvince", "ExecutionProvince")],
+      ["requestedGuaranteeAmount", "مبلغ ضمانت‌نامه درخواستی (ریال)", formatRialAmount(requestedAmount)],
+      ["initialValidityDays", "مدت اعتبار اولیه (روز)", pick(app, "initialValidityDays", "InitialValidityDays")],
+      ["validityFrom", "اعتبار از", formatDateInput(pick(app, "validityFrom", "ValidityFrom"))],
+      ["validityTo", "اعتبار تا", formatDateInput(pick(app, "validityTo", "ValidityTo"))],
+      ["collateralDescription", "تضمین و وثایق قابل ارائه", pick(app, "collateralDescription", "CollateralDescription")],
+    ];
+
+    return rows
+      .filter(([fieldKey]) => model.isApplicationFieldApplicable(fieldKey, ctx))
+      .filter(([fieldKey, , value]) => !model.shouldOmitEmptyApplicationField(fieldKey) || !isBlankDisplayValue(value))
+      .map(([, label, value]) => [label, value]);
   }
 
   /** جدول ۱ — از API (محاسبه از پرونده‌های قبلی متقاضی) */
@@ -944,6 +1518,217 @@
     }
   }
 
+  function renderAmendmentCreationForm(card, status, canAct) {
+    if (!canAct) return;
+
+    const amendment = readAmendmentFromCase() || {};
+    const cancellation = readCancellationDetails() || {};
+    const typeValue = Number(
+      pick(amendment, "amendmentType", "AmendmentType") ||
+      pick(cancellation, "amendmentType", "AmendmentType") ||
+      0
+    );
+    const isFreshEntry = status === 12 || status === 22 || status === 23;
+
+    const box = el("div", "portal-form card portal-card portal-card--nested");
+    const initialType = isFreshEntry ? 1 : (typeValue || 1);
+    box.appendChild(el("div", "card__title", "ثبت اصلاحیه ضمانت‌نامه"));
+    box.appendChild(
+      el(
+        "div",
+        "muted portal-stage__hint",
+        status === 12
+          ? "پرونده تکمیل شده است. در صورت نیاز می‌توانید درخواست تمدید، تقلیل یا ابطال ثبت کنید."
+          : status === 22 || status === 23
+            ? "اصلاحیه قبلی به پایان رسیده است. در صورت نیاز می‌توانید درخواست جدید (تمدید، تقلیل یا ابطال) ثبت کنید."
+            : "اطلاعات اصلاحیه را تکمیل و ذخیره کنید."
+      )
+    );
+    box.appendChild(
+      selectField("نوع اصلاحیه", "gAmendmentType", [
+        { value: "1", label: "تمدید" },
+        { value: "2", label: "تقلیل" },
+        { value: "3", label: "ابطال" },
+      ], initialType)
+    );
+    const validityRow = field(
+      "تاریخ اعتبار جدید",
+      "gAmendmentValidityTo",
+      "date",
+      isFreshEntry ? "" : pick(amendment, "requestedValidityTo", "RequestedValidityTo")
+    );
+    validityRow.hidden = initialType !== 1;
+    box.appendChild(validityRow);
+    const amountRow = field(
+      "مبلغ جدید",
+      "gAmendmentAmount",
+      "number",
+      isFreshEntry ? "" : pick(amendment, "requestedAmount", "RequestedAmount")
+    );
+    amountRow.hidden = initialType !== 2;
+    box.appendChild(amountRow);
+    box.appendChild(
+      field("علت", "gAmendmentReason", "textarea", isFreshEntry ? "" : pick(amendment, "reason", "Reason"))
+    );
+    card.appendChild(box);
+
+    let cancellationUploads = null;
+
+    const syncAmendmentTypeFields = function () {
+      const type = Number(qs("#gAmendmentType", card)?.value || 0);
+      const validity = qs("#gAmendmentValidityTo", card)?.closest(".formrow");
+      const amount = qs("#gAmendmentAmount", card)?.closest(".formrow");
+      if (validity) validity.hidden = type !== 1;
+      if (amount) amount.hidden = type !== 2;
+
+      if (type === 3) {
+        if (!cancellationUploads) {
+          cancellationUploads = el("div", "portal-cancellation-documents");
+          renderCancellationUploads(cancellationUploads);
+          box.insertAdjacentElement("afterend", cancellationUploads);
+        }
+      } else if (cancellationUploads) {
+        cancellationUploads.remove();
+        cancellationUploads = null;
+      }
+    };
+    syncAmendmentTypeFields();
+    qs("#gAmendmentType", card)?.addEventListener("change", syncAmendmentTypeFields);
+
+    const actionsWrap = el("div", "card portal-card portal-card--nested");
+    actionsWrap.appendChild(el("div", "card__title", "اقدامات اصلاحیه"));
+    const row = el("div", "row");
+    const saveBtn = el("button", "btn btn--primary", "ذخیره اصلاحیه");
+    saveBtn.type = "button";
+    saveBtn.addEventListener("click", () => void handleAction({ id: "save-amendment", method: "POST", path: "/amendment/create" }));
+    row.appendChild(saveBtn);
+    if (status === 16 || status === 17) {
+      const submitBtn = el("button", "btn btn--primary", "ارسال اصلاحیه");
+      submitBtn.type = "button";
+      submitBtn.addEventListener("click", () => void handleAction({ id: "submit-amendment", method: "POST", path: "/amendment/submit" }));
+      row.appendChild(submitBtn);
+    }
+    actionsWrap.appendChild(row);
+    card.appendChild(actionsWrap);
+  }
+
+  function renderAmendmentStage(card, status, canAct) {
+    const amendment = readAmendmentFromCase() || {};
+    const cancellation = readCancellationDetails() || {};
+    const typeValue = Number(
+      pick(amendment, "amendmentType", "AmendmentType") ||
+      pick(cancellation, "amendmentType", "AmendmentType") ||
+      0
+    );
+    const prev = pick(amendment, "previousValues", "PreviousValues") || {};
+    const next = pick(amendment, "newValues", "NewValues") || {};
+    const auditHistory = pick(amendment, "history", "History") || [];
+    const currentValidityTo = pick(readApplicationFromCase(), "validityTo", "ValidityTo")
+      || pick(state.caseData && (state.caseData.approvalForm || state.caseData.ApprovalForm), "expiryDate", "ExpiryDate")
+      || "";
+    const currentAmount = pick(readApplicationFromCase(), "requestedGuaranteeAmount", "RequestedGuaranteeAmount")
+      || pick(state.caseData && (state.caseData.approvalForm || state.caseData.ApprovalForm), "guaranteeAmount", "GuaranteeAmount")
+      || "";
+
+    renderReadOnlyBlock(card, "اطلاعات اصلاحیه", buildAmendmentInfoRows(
+      amendment,
+      typeValue,
+      status,
+      currentValidityTo,
+      currentAmount
+    ));
+
+    renderIssuedGuaranteeSummary(card);
+
+    if (typeValue) {
+      renderReadOnlyBlock(card, "مقایسه قبل و بعد", [
+        ["تاریخ اعتبار قبل", pick(prev, "validityTo", "ValidityTo") || currentValidityTo || "—"],
+        ["تاریخ اعتبار بعد", pick(next, "validityTo", "ValidityTo") || pickAmendmentValidityTo(amendment) || "—"],
+        ["مبلغ قبل", formatRialAmount(pick(prev, "guaranteeAmount", "GuaranteeAmount") || currentAmount) || "—"],
+        ["مبلغ بعد", formatRialAmount(pick(next, "guaranteeAmount", "GuaranteeAmount") || pickAmendmentAmount(amendment, currentAmount)) || "—"],
+      ]);
+    }
+
+    if (auditHistory.length) {
+      const timeline = el("div", "card portal-card portal-card--nested");
+      timeline.appendChild(el("div", "card__title", "سابقه اصلاحیه"));
+      auditHistory.forEach((item) => {
+        const row = el("div", "portal-thread__item");
+        const createdBy = pick(item, "createdByFullName", "CreatedByFullName") || pick(item, "createdBy", "CreatedBy") || "—";
+        const approvalBy = pick(item, "approvalUserFullName", "ApprovalUserFullName") || pick(item, "approvalUser", "ApprovalUser") || "—";
+        const decisionReason = pick(item, "decisionReason", "DecisionReason") || "—";
+        row.appendChild(el("div", "portal-thread__meta muted", amendmentReviewStateLabel(pick(item, "status", "Status"))));
+        row.appendChild(el("div", "portal-thread__message", "ثبت‌کننده: " + createdBy));
+        row.appendChild(el("div", "portal-thread__message", "علت: " + (pick(item, "reason", "Reason") || "—")));
+        row.appendChild(el("div", "portal-thread__message", "تایید/رد توسط: " + approvalBy));
+        row.appendChild(el("div", "portal-thread__message", "توضیح تصمیم: " + decisionReason));
+        timeline.appendChild(row);
+      });
+      card.appendChild(timeline);
+    }
+
+    if (canAct && canStartNewAmendment(status)) {
+      renderAmendmentCreationForm(card, status, canAct);
+    }
+
+    if (canAct && (status === 18 || status === 19 || status === 20)) {
+      if (status === 18 || status === 20) {
+        card.appendChild(field("توضیح تایید", "gAmendmentApproveComment", "textarea", ""));
+        card.appendChild(field("توضیح داخلی", "gAmendmentInternalComment", "textarea", ""));
+        card.appendChild(field("علت رد / برگشت", "gAmendmentRejectReason", "textarea", ""));
+      } else if (status === 19) {
+        card.appendChild(field("توضیح تأیید / رد", "gAmendmentApproveComment", "textarea", ""));
+      }
+      if (status === 20 && typeValue === 3) {
+        card.appendChild(checkboxField("تایید کنترل تعهد فعال توسط حقوقی", "gCancellationLegalOverride", false));
+      }
+      const actionsWrap = el("div", "card portal-card portal-card--nested");
+      actionsWrap.appendChild(el("div", "card__title", status === 19 ? "تأیید مدیرعامل" : "بررسی اصلاحیه"));
+      const row = el("div", "row");
+      if (status === 19) {
+        const approveBtn = el("button", "btn btn--primary", "تایید اصلاحیه");
+        approveBtn.type = "button";
+        approveBtn.addEventListener("click", () => void handleAction({
+          id: "ceo-amendment-approve",
+          method: "POST",
+          path: "/ceo/amendment/approve",
+        }));
+        row.appendChild(approveBtn);
+        const rejectBtn = el("button", "btn btn--warn", "رد اصلاحیه");
+        rejectBtn.type = "button";
+        rejectBtn.addEventListener("click", () => void handleAction({
+          id: "ceo-amendment-reject",
+          method: "POST",
+          path: "/ceo/amendment/reject",
+        }));
+        row.appendChild(rejectBtn);
+      } else {
+        const approveBtn = el("button", "btn btn--primary", "تایید اصلاحیه");
+        approveBtn.type = "button";
+        approveBtn.addEventListener("click", () => {
+          void handleAction({
+          id: status === 20 && typeValue === 3 ? "approve-cancellation" : "approve-amendment",
+          method: "POST",
+          path: status === 20 && typeValue === 3 ? "/amendment/cancellation/approve" : "/amendment/approve",
+        });
+        });
+        row.appendChild(approveBtn);
+        const rejectBtn = el("button", "btn btn--warn", "رد اصلاحیه");
+        rejectBtn.type = "button";
+        rejectBtn.addEventListener("click", () => void handleAction({ id: "reject-amendment", method: "POST", path: "/amendment/reject" }));
+        row.appendChild(rejectBtn);
+        const revisionBtn = el("button", "btn", "درخواست اصلاح");
+        revisionBtn.type = "button";
+        revisionBtn.addEventListener("click", () => {
+          void handleAction({ id: "amendment-revision", method: "POST", path: "/amendment/revision-request" });
+        });
+        row.appendChild(revisionBtn);
+      }
+      actionsWrap.appendChild(row);
+      card.appendChild(actionsWrap);
+    }
+  }
+
   function renderPrimaryActions(parent) {
     const status = pickStatus(state.caseData);
     const step = model.stepForStatus(status);
@@ -1048,7 +1833,8 @@
       return Number.isFinite(n) ? n : null;
     };
     const gt = qs("#gGuaranteeType")?.value;
-    return {
+    const baseContractAmount = num("gBaseContractAmount");
+    const payload = {
       guaranteeType: gt ? Number(gt) : null,
       contractSubject: text("gContractSubject"),
       isKnowledgeBasedProduct: qs("#gKnowledgeBased")?.value === "true",
@@ -1058,10 +1844,10 @@
       applicantCategory: Number(qs("#gApplicantCategory")?.value || 0),
       applicantCategoryOther: text("gApplicantCategoryOther"),
       applicantLegalForm: num("gApplicantLegalForm"),
-      facilitySubject: text("gFacilitySubject"),
       baseContractNumber: text("gBaseContractNumber"),
-      baseContractAmount: num("gBaseContractAmount"),
-      baseContractAmountInWords: text("gBaseContractAmountWords"),
+      baseContractAmount,
+      baseContractAmountInWords:
+        text("gBaseContractAmountWords") || resolveAmountInWords(null, baseContractAmount),
       priceAdjustmentRatePercent: num("gPriceAdjustmentRate"),
       executionProvince: text("gExecutionProvince"),
       requestedGuaranteeAmount: num("gRequestedAmount"),
@@ -1070,6 +1856,7 @@
       validityTo: text("gValidityTo") || null,
       collateralDescription: text("gCollateral"),
     };
+    return payload;
   }
 
   function fillApplicationForm(app) {
@@ -1088,10 +1875,15 @@
     set("gApplicantCategory", pick(app, "applicantCategory", "ApplicantCategory"));
     set("gApplicantCategoryOther", pick(app, "applicantCategoryOther", "ApplicantCategoryOther"));
     set("gApplicantLegalForm", pick(app, "applicantLegalForm", "ApplicantLegalForm"));
-    set("gFacilitySubject", pick(app, "facilitySubject", "FacilitySubject"));
     set("gBaseContractNumber", pick(app, "baseContractNumber", "BaseContractNumber"));
     set("gBaseContractAmount", pick(app, "baseContractAmount", "BaseContractAmount"));
-    set("gBaseContractAmountWords", pick(app, "baseContractAmountInWords", "BaseContractAmountInWords"));
+    set(
+      "gBaseContractAmountWords",
+      resolveAmountInWords(
+        pick(app, "baseContractAmountInWords", "BaseContractAmountInWords"),
+        pick(app, "baseContractAmount", "BaseContractAmount")
+      )
+    );
     set("gPriceAdjustmentRate", pick(app, "priceAdjustmentRatePercent", "PriceAdjustmentRatePercent"));
     set("gExecutionProvince", pick(app, "executionProvince", "ExecutionProvince"));
     set("gRequestedAmount", pick(app, "requestedGuaranteeAmount", "RequestedGuaranteeAmount"));
@@ -1103,6 +1895,17 @@
 
   function renderApplicationForm(card) {
     const app = state.caseData.application || state.caseData.Application;
+    const formGuaranteeType = qs("#gGuaranteeType")?.value ?? pick(app, "guaranteeType", "GuaranteeType");
+    const formApplicantCategory = qs("#gApplicantCategory")?.value ?? pick(app, "applicantCategory", "ApplicantCategory");
+    const ctx = model.applicationFieldContext(app, formGuaranteeType);
+    ctx.applicantCategory = Number(formApplicantCategory || ctx.applicantCategory || 0);
+    const show = (fieldKey) => model.isApplicationFieldApplicable(fieldKey, ctx);
+    const baseContractAmount = pick(app, "baseContractAmount", "BaseContractAmount");
+    const baseContractAmountWords = resolveAmountInWords(
+      pick(app, "baseContractAmountInWords", "BaseContractAmountInWords"),
+      baseContractAmount
+    );
+
     const box = el("div", "portal-form");
     box.appendChild(el("div", "portal-stage__subtitle", "اطلاعات درخواست ضمانت‌نامه"));
     box.appendChild(
@@ -1136,23 +1939,50 @@
     box.appendChild(
       selectField("دسته‌بندی متقاضی", "gApplicantCategory", model.APPLICANT_CATEGORIES, pick(app, "applicantCategory", "ApplicantCategory"))
     );
-    box.appendChild(field("دسته‌بندی سایر (توضیح)", "gApplicantCategoryOther", "text", pick(app, "applicantCategoryOther", "ApplicantCategoryOther")));
+    const categorySelect = card.querySelector("#gApplicantCategory");
+    if (categorySelect && !categorySelect.dataset.wiredChange) {
+      categorySelect.dataset.wiredChange = "1";
+      categorySelect.addEventListener("change", () => render());
+    }
+    if (show("applicantCategoryOther")) {
+      box.appendChild(field("دسته‌بندی سایر (توضیح)", "gApplicantCategoryOther", "text", pick(app, "applicantCategoryOther", "ApplicantCategoryOther")));
+    }
     box.appendChild(
       selectField("نوع شرکت متقاضی (حقوقی)", "gApplicantLegalForm", model.APPLICANT_LEGAL_FORMS, pick(app, "applicantLegalForm", "ApplicantLegalForm"))
     );
-    box.appendChild(field("موضوع تسهیلات درخواستی", "gFacilitySubject", "text", pick(app, "facilitySubject", "FacilitySubject")));
-    box.appendChild(field("شماره قرارداد پایه / مناقصه", "gBaseContractNumber", "text", pick(app, "baseContractNumber", "BaseContractNumber")));
-    box.appendChild(field("مبلغ قرارداد پایه (ریال)", "gBaseContractAmount", "number", pick(app, "baseContractAmount", "BaseContractAmount")));
-    box.appendChild(field("مبلغ قرارداد پایه (حروف)", "gBaseContractAmountWords", "text", pick(app, "baseContractAmountInWords", "BaseContractAmountInWords")));
-    box.appendChild(
-      field("نرخ تعدیل قرارداد (٪ — نه مبلغ ریالی)", "gPriceAdjustmentRate", "number", pick(app, "priceAdjustmentRatePercent", "PriceAdjustmentRatePercent"), {
-        min: 0,
-        max: 999.99,
-        step: 0.01,
-        placeholder: "مثلاً 15.5",
-      })
-    );
-    box.appendChild(field("استان محل اجرا", "gExecutionProvince", "text", pick(app, "executionProvince", "ExecutionProvince")));
+    if (show("baseContractNumber")) {
+      box.appendChild(
+        field(
+          model.applicationFieldLabel("baseContractNumber", "شماره قرارداد پایه / مناقصه", ctx),
+          "gBaseContractNumber",
+          "text",
+          pick(app, "baseContractNumber", "BaseContractNumber")
+        )
+      );
+    }
+    if (show("baseContractAmount")) {
+      box.appendChild(field("مبلغ قرارداد پایه (ریال)", "gBaseContractAmount", "number", pick(app, "baseContractAmount", "BaseContractAmount")));
+    }
+    if (show("baseContractAmountInWords")) {
+      box.appendChild(
+        field("مبلغ قرارداد پایه (حروف)", "gBaseContractAmountWords", "text", baseContractAmountWords, {
+          placeholder: "در صورت خالی بودن، هنگام ذخیره از مبلغ ریالی محاسبه می‌شود",
+        })
+      );
+    }
+    if (show("priceAdjustmentRatePercent")) {
+      box.appendChild(
+        field("نرخ تعدیل قرارداد (٪ — نه مبلغ ریالی)", "gPriceAdjustmentRate", "number", pick(app, "priceAdjustmentRatePercent", "PriceAdjustmentRatePercent"), {
+          min: 0,
+          max: 999.99,
+          step: 0.01,
+          placeholder: "مثلاً 15.5",
+        })
+      );
+    }
+    if (show("executionProvince")) {
+      box.appendChild(field("استان محل اجرا", "gExecutionProvince", "text", pick(app, "executionProvince", "ExecutionProvince")));
+    }
     box.appendChild(field("مبلغ ضمانت‌نامه درخواستی (ریال)", "gRequestedAmount", "number", pick(app, "requestedGuaranteeAmount", "RequestedGuaranteeAmount")));
     box.appendChild(field("مدت اعتبار اولیه (روز)", "gInitialValidityDays", "number", pick(app, "initialValidityDays", "InitialValidityDays")));
     box.appendChild(field("اعتبار از تاریخ", "gValidityFrom", "date", pick(app, "validityFrom", "ValidityFrom")));
@@ -1289,6 +2119,36 @@
     card.appendChild(wrap);
   }
 
+  function renderCancellationUploads(parent) {
+    const docs = model.CANCELLATION_DOCUMENTS || [];
+    if (!docs.length) return;
+
+    const wrap = el("div", "card portal-card portal-card--nested");
+    wrap.appendChild(el("div", "card__title", "مدارک ابطال"));
+    wrap.appendChild(el("div", "muted", "پس از انتخاب فایل، بارگذاری (presign → S3 → confirm) خودکار انجام می‌شود."));
+
+    docs.forEach((doc) => {
+      const existing = documentForType(doc.type);
+      const fileName = existing && pick(existing, "fileName", "FileName");
+      appendFileUploadRow(wrap, {
+        id: "g-cancel-doc-" + doc.type,
+        title: doc.label,
+        hint: doc.hint || "",
+        uploadType: doc.type,
+        required: !!doc.required,
+        uploadedLabel: existing ? "✓ بارگذاری شده" + (fileName ? ": " + fileName : "") : null,
+      });
+    });
+
+    parent.appendChild(wrap);
+  }
+
+  function cancellationDocumentsComplete() {
+    return (model.CANCELLATION_DOCUMENTS || [])
+      .filter((doc) => doc.required)
+      .every((doc) => documentForType(doc.type));
+  }
+
   function documentsForType(documentType) {
     const t = model.normalizeDocumentType(documentType);
     return state.documents.filter(
@@ -1362,7 +2222,7 @@
 
   async function uploadDocument(documentType, file) {
     const mimeType = file.type || "application/octet-stream";
-    const presignRes = await state.panel.apiRequest({
+    const presignRes = await apiCall({
       method: "POST",
       path: gPath("/" + state.caseId + "/documents/presign"),
       body: {
@@ -1377,14 +2237,15 @@
     const s3Key = presign.s3Key || presign.S3Key;
     if (!uploadUrl || !s3Key) throw new Error("پاسخ presign فاقد url یا s3Key است.");
 
-    await fetch(uploadUrl, {
+    const putRes = await fetch(uploadUrl, {
       method: "PUT",
       body: file,
       headers: { "Content-Type": mimeType },
     });
+    if (!putRes.ok) throw new Error("بارگذاری فایل در فضای ذخیره‌سازی ناموفق بود.");
 
-   await state.panel.apiRequest({
-     method: "POST",
+    await apiCall({
+      method: "POST",
       path: gPath("/" + state.caseId + "/documents/confirm?s3Key=" + encodeURIComponent(s3Key) + "&originalFileName=" + encodeURIComponent(file.name)),
       body: null,
       json: false,
@@ -1392,6 +2253,11 @@
   }
 
   async function handleUpload(input) {
+    if (state.busy) {
+      setInfo("عملیات قبلی هنوز در حال انجام است. لطفاً چند ثانیه صبر کنید.");
+      scrollToPortalMessage();
+      return;
+    }
     if (!state.caseId) throw new Error("شناسه پرونده تنظیم نشده است.");
     const file = input.files && input.files[0];
     if (!file) return;
@@ -1399,15 +2265,28 @@
     if (!Number.isFinite(documentType) || documentType <= 0) {
       throw new Error("نوع مدرک نامعتبر است.");
     }
-    await uploadDocument(documentType, file);
-    input.value = "";
-    const status = input.closest(".portal-upload-row__control")?.querySelector(".portal-upload-row__status");
-    if (status) {
-      status.textContent = "✓ بارگذاری شد: " + file.name;
-      status.classList.add("is-uploaded");
-      status.closest(".portal-upload-row")?.classList.add("portal-upload-row--done");
+
+    state.busy = true;
+    setError("");
+    setInfo("در حال بارگذاری مدرک…");
+    const statusBefore = pickStatus(state.caseData);
+    try {
+      await uploadDocument(documentType, file);
+      input.value = "";
+      const status = input.closest(".portal-upload-row__control")?.querySelector(".portal-upload-row__status");
+      if (status) {
+        status.textContent = "✓ بارگذاری شد: " + file.name;
+        status.classList.add("is-uploaded");
+        status.closest(".portal-upload-row")?.classList.add("portal-upload-row--done");
+      }
+    } catch (e) {
+      setError(e.message || String(e));
+      scrollToPortalMessage();
+      throw e;
+    } finally {
+      state.busy = false;
     }
-    await refreshCase();
+    finishPortalMutation("مدرک با موفقیت بارگذاری شد.", statusBefore);
   }
 
   function renderStage() {
@@ -1425,7 +2304,7 @@
     card.appendChild(el("div", "portal-stage__meta muted", "نقش جاری: " + (role || "نامشخص")));
 
     const canAct = model.canActOnCase(role, step.unit);
-    const reviewWithComments = status === 3 || status === 8;
+    const reviewWithComments = status === 3 || status === 8 || status === 18 || status === 20;
     const approvalFormStage = status === 4;
 
     if (!canAct) {
@@ -1442,7 +2321,12 @@
       renderFundCreditCapacityBlock(card);
     }
 
-    const workflowUploadStatus = status === 6 || status === 7 || status === 9 || status === 11;
+    const workflowUploadStatus =
+      status === 6 ||
+      status === 7 ||
+      status === 9 ||
+      status === 11 ||
+      (status === 20 && currentAmendmentType() !== 3);
     if (workflowUploadStatus) {
       renderWorkflowStageUploads(card, status, canAct, step);
     }
@@ -1474,12 +2358,30 @@
       renderFinancialReviewStage(card, canAct);
     } else if (status === 4) {
       renderApprovalFormStage(card, canAct);
+    } else if (status === 12) {
+      const role = getSessionRole();
+      const canEditAmendment = canAct && (role === "Applicant" || role === "Admin");
+      if (canEditAmendment) {
+        renderAmendmentCreationForm(card, status, true);
+      }
+    } else if (status === 14 || status === 16 || status === 17 || status === 18 || status === 19 || status === 20 || status === 22 || status === 23) {
+      const role = getSessionRole();
+      const canEditAmendment = canAct && (role === "Applicant" || role === "Admin");
+      const canReviewAmendment =
+        canAct &&
+        (
+          (status === 18 && (role === "CreditExpert" || role === "CreditManager" || role === "Admin")) ||
+          (status === 19 && (role === "CEO" || role === "Admin")) ||
+          (status === 20 && (role === "LegalExpert" || role === "LegalManager" || role === "Admin"))
+        );
+      renderAmendmentStage(card, status, (status === 18 || status === 19 || status === 20) ? canReviewAmendment : canEditAmendment);
     }
 
     host.appendChild(card);
   }
 
   function actionsForStatus(status) {
+    if (status >= 16 && status <= 23) return [];
     const map = {
       1: [{ id: "begin-de", label: "شروع ورود اطلاعات", method: "POST", path: "/application/begin" }],
       2: [
@@ -1527,7 +2429,11 @@
   }
 
   async function handleAction(action) {
-    if (state.busy) return;
+    if (state.busy) {
+      setInfo("عملیات قبلی هنوز در حال انجام است. لطفاً چند ثانیه صبر کنید.");
+      scrollToPortalMessage();
+      return;
+    }
     if (!state.caseId) {
       setError("شناسه پرونده تنظیم نشده است.");
       scrollToPortalMessage();
@@ -1541,17 +2447,28 @@
 
     state.busy = true;
     setError("");
-    setInfo("");
+    setInfo("در حال انجام عملیات…");
+    const statusBefore = pickStatus(state.caseData);
+    let successMessage = "";
     try {
       let body = null;
       if (action.needsMessage) {
         const msg = prompt("پیام / توضیح:");
-        if (!msg) return;
+        if (!msg) {
+          cancelPortalAction();
+          return;
+        }
         body = { message: msg, comment: msg };
       } else if (action.needsReason) {
         const reason = prompt("دلیل لغو پرونده:");
-        if (!reason) return;
-        if (!confirm("آیا از لغو این پرونده اطمینان دارید؟")) return;
+        if (!reason) {
+          cancelPortalAction();
+          return;
+        }
+        if (!confirm("آیا از لغو این پرونده اطمینان دارید؟")) {
+          cancelPortalAction();
+          return;
+        }
         body = { reason };
       } else if (action.id === "credit-approve") {
         body = { internalComment: readValue("gCreditInternalComment") || null };
@@ -1565,12 +2482,81 @@
         const message = readValue("gFinRevision");
         if (!message) throw new Error("پیام اصلاح برای متقاضی الزامی است.");
         body = { message };
+      } else if (action.id === "save-amendment") {
+        body = readAmendmentForm();
+        if (!body.amendmentType) throw new Error("نوع اصلاحیه الزامی است.");
+        if (body.amendmentType === 3) {
+          body = readCancellationForm();
+          if (!body.reason) throw new Error("علت ابطال الزامی است.");
+          action.path = "/amendment/cancellation/create";
+        } else {
+          if (body.amendmentType === 1 && !body.newValidityTo) throw new Error("تاریخ اعتبار جدید الزامی است.");
+          if (body.amendmentType === 2 && !(body.newGuaranteeAmount > 0)) throw new Error("مبلغ جدید باید بزرگ‌تر از صفر باشد.");
+          if (!body.reason) throw new Error("علت اصلاحیه الزامی است.");
+        }
+      } else if (action.id === "submit-amendment") {
+        const payload = readAmendmentForm();
+        if (!payload.amendmentType) throw new Error("نوع اصلاحیه الزامی است.");
+        if (payload.amendmentType === 3) {
+          const cancellationPayload = readCancellationForm();
+          if (!cancellationPayload.reason) throw new Error("علت ابطال الزامی است.");
+          if (!cancellationDocumentsComplete()) throw new Error("مدارک الزامی ابطال ناقص است.");
+          await apiCall({
+            method: "POST",
+            path: gPath("/" + state.caseId + "/amendment/cancellation/create"),
+            body: cancellationPayload,
+          });
+          action.path = "/amendment/cancellation/submit";
+          action.submitCancellation = true;
+          body = readCancellationSubmitForm();
+        } else {
+          if (payload.amendmentType === 1 && !payload.newValidityTo) throw new Error("تاریخ اعتبار جدید الزامی است.");
+          if (payload.amendmentType === 2 && !(payload.newGuaranteeAmount > 0)) throw new Error("مبلغ جدید باید بزرگ‌تر از صفر باشد.");
+          if (!payload.reason) throw new Error("علت اصلاحیه الزامی است.");
+          await apiCall({
+            method: "POST",
+            path: gPath("/" + state.caseId + "/amendment/create"),
+            body: payload,
+          });
+          body = {};
+        }
+      } else if (action.id === "ceo-amendment-reject") {
+        const message = readValue("gAmendmentApproveComment");
+        if (!message) throw new Error("علت رد اصلاحیه الزامی است.");
+        body = { message };
+      } else if (action.id === "ceo-amendment-approve") {
+        body = { comment: readValue("gAmendmentApproveComment") || null };
+      } else if (action.id === "approve-amendment") {
+        if (pickStatus(state.caseData) === 20 && currentAmendmentType() !== 3 && !documentForType(32)) {
+          throw new Error("قرارداد اصلاحیه بارگذاری نشده است.");
+        }
+        body = {
+          comment: readValue("gAmendmentApproveComment") || null,
+          internalComment: readValue("gAmendmentInternalComment") || null,
+        };
+      } else if (action.id === "approve-cancellation") {
+        body = {
+          comment: readValue("gAmendmentApproveComment") || null,
+          internalComment: readValue("gAmendmentInternalComment") || null,
+          legalOverrideActiveObligationCheck: !!qs("#gCancellationLegalOverride")?.checked,
+        };
+      } else if (action.id === "reject-amendment") {
+        const message = readValue("gAmendmentRejectReason");
+        if (!message) throw new Error("علت رد اصلاحیه الزامی است.");
+        body = { message };
+      } else if (action.id === "amendment-revision") {
+        const message = readValue("gAmendmentRejectReason");
+        if (!message) throw new Error("توضیح درخواست اصلاح الزامی است.");
+        body = { message };
       } else if (action.id === "approval-save" || action.id === "approval-submit") {
         body = readApprovalForm();
       }
       if (action.id === "approval-submit") {
-        if (!confirm("آیا از ارسال فرم تصویب به مدیرعامل اطمینان دارید؟")) return;
-        await state.panel.apiRequest({
+        if (!confirm("آیا از ارسال فرم تصویب به مدیرعامل اطمینان دارید؟")) {
+          cancelPortalAction();
+          return;
+        }
+        await apiCall({
           method: "PUT",
           path: gPath("/" + state.caseId + "/approval-form"),
           body: readApprovalForm(),
@@ -1589,7 +2575,10 @@
         }
       }
       if (action.id === "submit-app") {
-        if (!confirm("آیا از ارسال پرونده به واحد اعتبارات اطمینان دارید؟")) return;
+        if (!confirm("آیا از ارسال پرونده به واحد اعتبارات اطمینان دارید؟")) {
+          cancelPortalAction();
+          return;
+        }
         const saveBody = readApplicationForm();
         if (
           saveBody.priceAdjustmentRatePercent != null &&
@@ -1599,17 +2588,17 @@
             "نرخ تعدیل باید بین ۰ تا ۹۹۹٫۹۹ (درصد) باشد — مبلغ ریالی را در فیلد مبلغ ضمانت‌نامه وارد کنید."
           );
         }
-        await state.panel.apiRequest({
+        await apiCall({
           method: "PUT",
           path: gPath("/" + state.caseId + "/application"),
           body: saveBody,
         });
-        const caseRes = await state.panel.apiRequest({
+        const caseRes = await apiCall({
           method: "GET",
           path: gPath("/" + state.caseId),
         });
         state.caseData = unwrap(caseRes.body);
-        const docsRes = await state.panel.apiRequest({
+        const docsRes = await apiCall({
           method: "GET",
           path: gPath("/" + state.caseId + "/documents"),
         });
@@ -1620,52 +2609,36 @@
         }
       }
 
-      const res = await state.panel.apiRequest({
+      const res = await apiCall({
         method: action.method,
         path: gPath("/" + state.caseId + action.path),
-        body: action.id === "submit-app" || action.id === "approval-submit" ? {} : body,
+        body: action.id === "submit-app" || action.id === "approval-submit" || (action.id === "submit-amendment" && !action.submitCancellation) ? {} : body,
       });
-      if (!res.ok) {
-        const msg =
-          (res.body && (res.body.message || res.body.Message)) ||
-          "درخواست با کد " + res.status + " ناموفق بود.";
-        throw new Error(msg);
-      }
-
-      await refreshCase();
-
-      if (action.id === "submit-app") {
-        setInfo("پرونده با موفقیت به واحد اعتبارات ارسال شد — وضعیت: بررسی اعتبارات.");
-      } else if (action.id === "save-app") {
-        setInfo("درخواست ذخیره شد.");
-      } else if (action.id === "credit-approve") {
-        setInfo("بررسی اعتبارات تأیید شد.");
-      } else if (action.id === "credit-revision") {
-        setInfo("درخواست اصلاح برای متقاضی ثبت شد.");
-      } else if (action.id === "fin-approve") {
-        setInfo("مدارک مالی تأیید شد.");
-      } else if (action.id === "fin-revision") {
-        setInfo("درخواست اصلاح برای متقاضی ثبت شد.");
-      } else if (action.id === "approval-save") {
-        setInfo("فرم تصویب ذخیره شد.");
-      } else if (action.id === "approval-submit") {
-        setInfo("فرم تصویب ارسال شد — پرونده به تأیید مدیرعامل رفت.");
-      } else if (action.id === "cancel-case" || action.id === "ceo-cancel" || action.id === "ceo-final-cancel") {
-        setInfo("پرونده لغو شد.");
-      }
+      void res;
+      successMessage = resolveActionSuccessMessage(action.id) || "عملیات با موفقیت انجام شد.";
     } catch (e) {
       setError(e.message || String(e));
       scrollToPortalMessage();
     } finally {
       state.busy = false;
     }
+    if (successMessage) {
+      finishPortalMutation(successMessage, statusBefore);
+    }
   }
 
   function render() {
-    renderSummary();
-    renderStepper();
-    renderStage();
-    renderActionHint();
+    try {
+      renderSummary();
+      renderActionBar();
+      renderStepper();
+      renderStage();
+      renderActionHint();
+    } catch (err) {
+      console.error("[guarantee-portal] render failed", err);
+      setError("خطا در نمایش فرم: " + (err.message || String(err)));
+      scrollToPortalMessage();
+    }
   }
 
   function wire() {

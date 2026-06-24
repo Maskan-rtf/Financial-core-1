@@ -16,7 +16,7 @@ public sealed class GuaranteeCaseStateManager : IGuaranteeCaseStateManager
         GuaranteeCaseStatus.Rejected,
         GuaranteeCaseStatus.Cancelled,
         GuaranteeCaseStatus.Archived,
-        GuaranteeCaseStatus.Completed
+        GuaranteeCaseStatus.AmendmentCompleted
     ];
 
     private static readonly Dictionary<(GuaranteeCaseStatus Current, GuaranteeWorkflowAction Action, string Role), GuaranteeCaseStatus> Transitions = new()
@@ -55,7 +55,22 @@ public sealed class GuaranteeCaseStateManager : IGuaranteeCaseStateManager
         { (GuaranteeCaseStatus.CeoApprovalFinal, GuaranteeWorkflowAction.Cancel, UserRoleClaims.Ceo), GuaranteeCaseStatus.Cancelled },
 
         { (GuaranteeCaseStatus.WaitingIssuanceDocuments, GuaranteeWorkflowAction.UploadIssuanceDocuments, UserRoleClaims.FinancialExpert), GuaranteeCaseStatus.Completed },
-        { (GuaranteeCaseStatus.WaitingIssuanceDocuments, GuaranteeWorkflowAction.Reject, UserRoleClaims.FinancialExpert), GuaranteeCaseStatus.Rejected }
+        { (GuaranteeCaseStatus.WaitingIssuanceDocuments, GuaranteeWorkflowAction.Reject, UserRoleClaims.FinancialExpert), GuaranteeCaseStatus.Rejected },
+
+        { (GuaranteeCaseStatus.Completed, GuaranteeWorkflowAction.BeginAmendment, UserRoleClaims.Applicant), GuaranteeCaseStatus.AmendmentDraft },
+        { (GuaranteeCaseStatus.AmendmentApproved, GuaranteeWorkflowAction.BeginAmendment, UserRoleClaims.Applicant), GuaranteeCaseStatus.AmendmentDraft },
+        { (GuaranteeCaseStatus.AmendmentRejected, GuaranteeWorkflowAction.BeginAmendment, UserRoleClaims.Applicant), GuaranteeCaseStatus.AmendmentDraft },
+        { (GuaranteeCaseStatus.AmendmentDraft, GuaranteeWorkflowAction.Submit, UserRoleClaims.Applicant), GuaranteeCaseStatus.AmendmentDataEntry },
+        { (GuaranteeCaseStatus.AmendmentDataEntry, GuaranteeWorkflowAction.Submit, UserRoleClaims.Applicant), GuaranteeCaseStatus.AmendmentCreditReview },
+        { (GuaranteeCaseStatus.AmendmentDataEntry, GuaranteeWorkflowAction.Cancel, UserRoleClaims.Applicant), GuaranteeCaseStatus.AmendmentRejected },
+        { (GuaranteeCaseStatus.AmendmentCreditReview, GuaranteeWorkflowAction.Approve, UserRoleClaims.CreditExpert), GuaranteeCaseStatus.AmendmentCeoApproval },
+        { (GuaranteeCaseStatus.AmendmentCreditReview, GuaranteeWorkflowAction.RequestRevision, UserRoleClaims.CreditExpert), GuaranteeCaseStatus.AmendmentDataEntry },
+        { (GuaranteeCaseStatus.AmendmentCreditReview, GuaranteeWorkflowAction.Reject, UserRoleClaims.CreditExpert), GuaranteeCaseStatus.AmendmentRejected },
+        { (GuaranteeCaseStatus.AmendmentCeoApproval, GuaranteeWorkflowAction.Approve, UserRoleClaims.Ceo), GuaranteeCaseStatus.AmendmentLegalReview },
+        { (GuaranteeCaseStatus.AmendmentCeoApproval, GuaranteeWorkflowAction.Reject, UserRoleClaims.Ceo), GuaranteeCaseStatus.AmendmentRejected },
+        { (GuaranteeCaseStatus.AmendmentLegalReview, GuaranteeWorkflowAction.Approve, UserRoleClaims.LegalExpert), GuaranteeCaseStatus.AmendmentApproved },
+        { (GuaranteeCaseStatus.AmendmentLegalReview, GuaranteeWorkflowAction.RequestRevision, UserRoleClaims.LegalExpert), GuaranteeCaseStatus.AmendmentDataEntry },
+        { (GuaranteeCaseStatus.AmendmentLegalReview, GuaranteeWorkflowAction.Reject, UserRoleClaims.LegalExpert), GuaranteeCaseStatus.AmendmentRejected }
     };
 
     static GuaranteeCaseStateManager()
@@ -151,7 +166,7 @@ public sealed class GuaranteeCaseStateManager : IGuaranteeCaseStateManager
         if (nextStatus == caseEntity.CurrentStatus)
             return Task.FromResult(Result.Ok());
 
-        if (!ValidateBusinessRules(caseEntity, action, nextStatus, out var businessError))
+        if (!ValidateBusinessRules(caseEntity, action, ref nextStatus, out var businessError))
             return Task.FromResult(Result.Fail(Error.Conflict(businessError)));
 
         if (action == GuaranteeWorkflowAction.RequestRevision)
@@ -167,11 +182,28 @@ public sealed class GuaranteeCaseStateManager : IGuaranteeCaseStateManager
     private static bool ValidateBusinessRules(
         GuaranteeCase caseEntity,
         GuaranteeWorkflowAction action,
-        GuaranteeCaseStatus nextStatus,
+        ref GuaranteeCaseStatus nextStatus,
         out string errorMessage)
     {
         switch (action)
         {
+            case GuaranteeWorkflowAction.BeginAmendment:
+                if (caseEntity.CurrentStatus is not (
+                        GuaranteeCaseStatus.Completed or
+                        GuaranteeCaseStatus.AmendmentApproved or
+                        GuaranteeCaseStatus.AmendmentRejected))
+                {
+                    errorMessage = GuaranteeAmendmentMessages.OnlyForCompletedCases;
+                    return false;
+                }
+
+                if (HasActiveAmendmentWorkflow(caseEntity))
+                {
+                    errorMessage = ApiMessages.GuaranteeCancellationAlreadyActive;
+                    return false;
+                }
+                break;
+
             case GuaranteeWorkflowAction.Submit when caseEntity.CurrentStatus == GuaranteeCaseStatus.DataEntry:
                 if (!GuaranteeApplicationCompleteness.IsComplete(caseEntity.Application))
                 {
@@ -196,6 +228,107 @@ public sealed class GuaranteeCaseStateManager : IGuaranteeCaseStateManager
                     errorMessage = ApiMessages.GuaranteeApprovalFormIncomplete;
                     return false;
                 }
+                break;
+
+            case GuaranteeWorkflowAction.Submit when caseEntity.CurrentStatus == GuaranteeCaseStatus.AmendmentDataEntry:
+                if (!GuaranteeAmendmentCompleteness.IsComplete(caseEntity))
+                {
+                    errorMessage = caseEntity.AmendmentType == AmendmentType.Cancellation
+                        ? ApiMessages.GuaranteeCancellationDataIncomplete
+                        : GuaranteeAmendmentMessages.Incomplete;
+                    return false;
+                }
+
+                if (caseEntity.AmendmentType == AmendmentType.Cancellation)
+                {
+                    var missingCancellationDocs = GuaranteeDocumentRequirements.GetMissingForCancellation(caseEntity);
+                    if (missingCancellationDocs.Count > 0)
+                    {
+                        errorMessage = ApiMessages.GuaranteeCancellationDocumentsIncomplete;
+                        return false;
+                    }
+
+                    nextStatus = caseEntity.AmendmentRequiresCreditReview
+                        ? GuaranteeCaseStatus.AmendmentCreditReview
+                        : GuaranteeCaseStatus.AmendmentCeoApproval;
+                    break;
+                }
+
+                if (caseEntity.AmendmentType == AmendmentType.Extension)
+                {
+                    if (caseEntity.AmendmentRequestedAmount.HasValue)
+                    {
+                        errorMessage = GuaranteeAmendmentMessages.ReductionAmountInvalid;
+                        return false;
+                    }
+
+                    var currentValidityTo = caseEntity.Application?.ValidityTo ?? caseEntity.ApprovalForm?.ExpiryDate;
+                    if (!caseEntity.AmendmentRequestedValidityTo.HasValue)
+                    {
+                        errorMessage = GuaranteeAmendmentMessages.ExtensionDateRequired;
+                        return false;
+                    }
+
+                    if (currentValidityTo.HasValue && caseEntity.AmendmentRequestedValidityTo.Value <= currentValidityTo.Value)
+                    {
+                        errorMessage = GuaranteeAmendmentMessages.ExtensionDateMustExtend;
+                        return false;
+                    }
+                }
+
+                if (caseEntity.AmendmentType == AmendmentType.Reduction)
+                {
+                    if (caseEntity.AmendmentRequestedValidityTo.HasValue)
+                    {
+                        errorMessage = GuaranteeAmendmentMessages.ExtensionDateMustExtend;
+                        return false;
+                    }
+
+                    var originalAmount = caseEntity.ApprovalForm?.GuaranteeAmount
+                                         ?? caseEntity.Application?.RequestedGuaranteeAmount
+                                         ?? 0m;
+
+                    if (caseEntity.AmendmentRequestedAmount is not > 0)
+                    {
+                        errorMessage = GuaranteeAmendmentMessages.ReductionAmountRequired;
+                        return false;
+                    }
+
+                    if (originalAmount <= 0 || caseEntity.AmendmentRequestedAmount > originalAmount)
+                    {
+                        errorMessage = GuaranteeAmendmentMessages.ReductionAmountInvalid;
+                        return false;
+                    }
+                }
+                break;
+
+            case GuaranteeWorkflowAction.Approve when caseEntity.CurrentStatus == GuaranteeCaseStatus.AmendmentLegalReview:
+                if (caseEntity.AmendmentType == AmendmentType.Cancellation)
+                {
+                    if (caseEntity.AmendmentRequiresCreditReview
+                        && !caseEntity.LegalOverrideApproved)
+                    {
+                        errorMessage = ApiMessages.GuaranteeCancellationRequiresLegalOverride;
+                        return false;
+                    }
+
+                    nextStatus = GuaranteeCaseStatus.Cancelled;
+                    break;
+                }
+
+                if (caseEntity.AmendmentType is not (AmendmentType.Extension or AmendmentType.Reduction))
+                {
+                    errorMessage = ApiMessages.InvalidTransition;
+                    return false;
+                }
+
+                if (!GuaranteeDocumentRequirements.HasAmendmentContract(caseEntity.Documents))
+                {
+                    errorMessage = ApiMessages.GuaranteeAmendmentContractMissing;
+                    return false;
+                }
+
+                nextStatus = GuaranteeCaseStatus.AmendmentApproved;
                 break;
 
             case GuaranteeWorkflowAction.UploadDraftContract:
@@ -237,6 +370,14 @@ public sealed class GuaranteeCaseStateManager : IGuaranteeCaseStateManager
         errorMessage = string.Empty;
         return true;
     }
+
+    private static bool HasActiveAmendmentWorkflow(GuaranteeCase caseEntity)
+        => caseEntity.CurrentStatus is
+            GuaranteeCaseStatus.AmendmentDraft or
+            GuaranteeCaseStatus.AmendmentDataEntry or
+            GuaranteeCaseStatus.AmendmentCreditReview or
+            GuaranteeCaseStatus.AmendmentCeoApproval or
+            GuaranteeCaseStatus.AmendmentLegalReview;
 
     public IEnumerable<GuaranteeWorkflowAction> GetAllowedActions(GuaranteeCaseStatus currentStatus, string userRole)
     {

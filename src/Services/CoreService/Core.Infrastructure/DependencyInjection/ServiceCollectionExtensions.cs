@@ -54,10 +54,15 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDocumentStorage, LiaraDocumentStorage>();
 
         services.Configure<SmsOptions>(configuration.GetSection("Sms"));
-        services.Configure<LoanSettingsOptions>(configuration.GetSection(LoanSettingsOptions.SectionName));
+        services.Configure<WorkflowSmsOptions>(configuration.GetSection(WorkflowSmsOptions.SectionName));
         services.AddSingleton<SmsDispatchQueue>();
+        services.AddSingleton<IWorkflowSmsCatalog, WorkflowSmsCatalog>();
         services.AddScoped<ISmsDispatcher, SmsDispatcher>();
-        services.AddScoped<ICaseWorkflowSmsNotifier, CaseWorkflowSmsNotifier>();
+        services.AddScoped<WorkflowSmsNotifier>();
+        services.AddScoped<IWorkflowSmsNotifier>(sp => sp.GetRequiredService<WorkflowSmsNotifier>());
+        services.AddScoped<ICaseWorkflowSmsNotifier>(sp => sp.GetRequiredService<WorkflowSmsNotifier>());
+
+        services.Configure<LoanSettingsOptions>(configuration.GetSection(LoanSettingsOptions.SectionName));
 
         var smsMongoEnabled = configuration.GetValue("Sms:MongoLogging:Enabled", false);
         if (smsMongoEnabled)

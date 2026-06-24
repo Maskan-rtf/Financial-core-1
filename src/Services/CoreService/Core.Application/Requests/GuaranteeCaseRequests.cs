@@ -47,6 +47,27 @@ public sealed record UpdateGuaranteeApprovalFormRequest(
     string? GuarantorsDescription,
     string? OtherNotes);
 
+public sealed record CreateGuaranteeAmendmentRequest(
+    AmendmentType AmendmentType,
+    DateOnly? NewValidityTo,
+    decimal? NewGuaranteeAmount,
+    string? Reason);
+
+public sealed record CreateGuaranteeCancellationRequest(
+    string? Reason,
+    string? OriginalGuaranteeReference,
+    bool SettlementConfirmationRequired = false);
+
+public sealed record SubmitGuaranteeCancellationRequest(
+    string? OriginalGuaranteeReference,
+    bool SettlementConfirmationRequired = false,
+    string? Comment = null);
+
+public sealed record ApproveGuaranteeCancellationRequest(
+    string? Comment,
+    string? InternalComment = null,
+    bool LegalOverrideActiveObligationCheck = false);
+
 public sealed record PresignGuaranteeUploadRequest(
     GuaranteeDocumentType DocumentType,
     string FileName,

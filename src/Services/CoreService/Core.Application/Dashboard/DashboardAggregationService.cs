@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Core.Application.Abstractions;
+using Core.Application.Common;
 using Core.Application.Kanban;
 using Core.Domain.Entities;
 using Core.Domain.Enums;
@@ -24,7 +25,7 @@ public sealed class DashboardAggregationService(
 
     private static readonly int[] GuaranteeTerminal =
     [
-        (int)GuaranteeCaseStatus.Completed, (int)GuaranteeCaseStatus.Rejected,
+        (int)GuaranteeCaseStatus.Completed, (int)GuaranteeCaseStatus.AmendmentCompleted, (int)GuaranteeCaseStatus.Rejected,
         (int)GuaranteeCaseStatus.Cancelled, (int)GuaranteeCaseStatus.Archived
     ];
 
@@ -69,7 +70,7 @@ public sealed class DashboardAggregationService(
 
         var statusDistribution = new List<StatusBucketDto>
         {
-            new("InProgress", "در جریان", pendingCount),
+            new("InProgress", "پرونده‌های جاری", pendingCount),
             new("Completed", "تکمیل‌شده", completedCount),
             new("Rejected", "رد شده", rejectedCount),
             new("Cancelled", "لغو شده", cancelledCount),
@@ -190,13 +191,15 @@ public sealed class DashboardAggregationService(
         var loanCount = await moduleAggregators.CountDepartmentQueueAsync(departmentKey, "Loan", ct);
         var renewalCount = await moduleAggregators.CountDepartmentQueueAsync(departmentKey, "GuaranteeRenewal", ct);
 
-        var queueByModule = new List<ModuleQueueCountDto>
-        {
-            new("Investment", "سرمایه‌گذاری", investmentCount),
-            new("Guarantee", "ضمانت‌نامه", guaranteeCount),
-            new("Loan", "تسهیلات", loanCount),
-            new("GuaranteeRenewal", "تمدید ضمانت", renewalCount)
-        };
+        var queueByModule = DashboardDepartmentModuleFilter.FilterQueue(
+            departmentKey,
+            new List<ModuleQueueCountDto>
+            {
+                new("Investment", "سرمایه‌گذاری", investmentCount),
+                new("Guarantee", "ضمانت‌نامه", guaranteeCount),
+                new("Loan", "تسهیلات", loanCount),
+                new("GuaranteeRenewal", "تمدید ضمانت", renewalCount)
+            });
 
         var totalQueue = queueByModule.Sum(x => x.Count);
         var revisionRate = await ComputeRevisionRateAsync(departmentKey, totalQueue, ct);
@@ -277,7 +280,7 @@ public sealed class DashboardAggregationService(
                 c.Id, c.CaseNumber, "Guarantee", "ضمانت‌نامه",
                 (int)c.CurrentStatus, GuaranteeKanbanRules.GetStatusTitle(c.CurrentStatus),
                 GuaranteeKanbanRules.GetPhaseTitle(c.CurrentPhase),
-                ComputeProgressPercent((int)c.CurrentStatus, GuaranteeTerminal, (int)GuaranteeCaseStatus.Completed),
+                ComputeGuaranteeProgressPercent((int)c.CurrentStatus),
                 c.UpdatedAt ?? c.CreatedAt));
         }
 
@@ -472,6 +475,21 @@ public sealed class DashboardAggregationService(
 
         var denominator = Math.Max(queueCount, 1);
         return Math.Round(revisionCount * 100.0 / denominator, 1);
+    }
+
+    private static int ComputeGuaranteeProgressPercent(int status)
+    {
+        if (CaseStageOrder.TryGetRank(CaseModuleType.Guarantee, status, out var rank))
+        {
+            const int maxRank = 18;
+            if (status == (int)GuaranteeCaseStatus.AmendmentApproved)
+                return 100;
+            if (status == (int)GuaranteeCaseStatus.Completed)
+                return 100;
+            return Math.Clamp((int)Math.Round(rank * 100.0 / maxRank), 5, 95);
+        }
+
+        return Math.Clamp(status * 5, 5, 95);
     }
 
     private static int ComputeProgressPercent(int status, int[] terminalStatuses, int completedStatus)

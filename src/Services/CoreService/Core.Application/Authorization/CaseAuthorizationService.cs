@@ -9,20 +9,7 @@ namespace Core.Application.Authorization;
 
 public sealed class CaseAuthorizationService(IUserContext userContext) : ICaseAuthorizationService
 {
-    private static readonly string[] InvestmentExpertPermissions =
-    [
-        CasePermissions.ReadAll,
-        CasePermissions.ViewInternalComments,
-        CasePermissions.CreateInternalComment,
-        CasePermissions.ViewEvaluations,
-        CasePermissions.UpsertEvaluations,
-        CasePermissions.ManageFinancialWorksheet,
-        CasePermissions.UploadDocuments,
-        CasePermissions.DownloadDocuments,
-        CasePermissions.UploadCommentAttachments
-    ];
-
-    private static readonly string[] InvestmentManagerPermissions =
+    private static readonly string[] InvestmentDepartmentPermissions =
     [
         CasePermissions.ReadAll,
         CasePermissions.ViewInternalComments,
@@ -31,11 +18,12 @@ public sealed class CaseAuthorizationService(IUserContext userContext) : ICaseAu
         CasePermissions.ViewEvaluations,
         CasePermissions.UpsertEvaluations,
         CasePermissions.ManageFinancialWorksheet,
+        CasePermissions.UploadDocuments,
         CasePermissions.DownloadDocuments,
         CasePermissions.UploadCommentAttachments
     ];
 
-    private static readonly string[] LegalUnitPermissions =
+    private static readonly string[] LegalDepartmentPermissions =
     [
         CasePermissions.ReadAll,
         CasePermissions.ViewInternalComments,
@@ -46,23 +34,13 @@ public sealed class CaseAuthorizationService(IUserContext userContext) : ICaseAu
         CasePermissions.UploadCommentAttachments
     ];
 
-    private static readonly string[] FinancialUnitPermissions =
+    private static readonly string[] FinancialDepartmentPermissions =
     [
         CasePermissions.ReadAll,
         CasePermissions.ViewInternalComments,
         CasePermissions.CreateInternalComment,
         CasePermissions.ManagePayments,
         CasePermissions.ManageFinancialWorksheet,
-        CasePermissions.DownloadDocuments,
-        CasePermissions.UploadCommentAttachments
-    ];
-
-    private static readonly string[] TechnicalUnitPermissions =
-    [
-        CasePermissions.ReadAll,
-        CasePermissions.ViewInternalComments,
-        CasePermissions.CreateInternalComment,
-        CasePermissions.ViewEvaluations,
         CasePermissions.DownloadDocuments,
         CasePermissions.UploadCommentAttachments
     ];
@@ -87,6 +65,16 @@ public sealed class CaseAuthorizationService(IUserContext userContext) : ICaseAu
         CasePermissions.UploadCommentAttachments
     ];
 
+    private static readonly IReadOnlyDictionary<UserDepartment, IReadOnlyCollection<string>> DepartmentPermissions =
+        new Dictionary<UserDepartment, IReadOnlyCollection<string>>
+        {
+            [UserDepartment.Investment] = InvestmentDepartmentPermissions,
+            [UserDepartment.Legal] = LegalDepartmentPermissions,
+            [UserDepartment.Financial] = FinancialDepartmentPermissions,
+            // Preserve the current technical expert access level by keeping the union of expert/manager permissions.
+            [UserDepartment.Technical] = AllCasePermissions
+        };
+
     private static readonly IReadOnlyDictionary<string, IReadOnlyCollection<string>> RolePermissions =
         new Dictionary<string, IReadOnlyCollection<string>>(StringComparer.OrdinalIgnoreCase)
         {
@@ -98,15 +86,6 @@ public sealed class CaseAuthorizationService(IUserContext userContext) : ICaseAu
                 CasePermissions.DownloadDocuments,
                 CasePermissions.UploadCommentAttachments
             ],
-            [UserRoleClaims.InvestmentExpert] = InvestmentExpertPermissions,
-            [UserRoleClaims.InvestmentManager] = InvestmentManagerPermissions,
-            [UserRoleClaims.LegalExpert] = LegalUnitPermissions,
-            [UserRoleClaims.LegalManager] = LegalUnitPermissions,
-            [UserRoleClaims.FinancialExpert] = FinancialUnitPermissions,
-            [UserRoleClaims.FinancialManager] = FinancialUnitPermissions,
-            // Sample: full case permissions. Revert to TechnicalUnitPermissions for production.
-            [UserRoleClaims.TechnicalExpert] = AllCasePermissions,
-            [UserRoleClaims.TechnicalManager] = TechnicalUnitPermissions,
             [UserRoleClaims.Ceo] =
             [
                 CasePermissions.ReadAll,
@@ -120,21 +99,7 @@ public sealed class CaseAuthorizationService(IUserContext userContext) : ICaseAu
 
     public string? UserId => userContext.UserId;
 
-    public bool IsInternalUser =>
-        userContext.Roles.Contains(UserRoleClaims.Admin) ||
-        userContext.Roles.Contains(UserRoleClaims.InvestmentExpert) ||
-        userContext.Roles.Contains(UserRoleClaims.InvestmentManager) ||
-        userContext.Roles.Contains(UserRoleClaims.LegalExpert) ||
-        userContext.Roles.Contains(UserRoleClaims.LegalManager) ||
-        userContext.Roles.Contains(UserRoleClaims.FinancialExpert) ||
-        userContext.Roles.Contains(UserRoleClaims.FinancialManager) ||
-        userContext.Roles.Contains(UserRoleClaims.TechnicalExpert) ||
-        userContext.Roles.Contains(UserRoleClaims.TechnicalManager) ||
-        userContext.Roles.Contains(UserRoleClaims.Ceo) ||
-        userContext.Roles.Contains(UserRoleClaims.LegalUnit, StringComparer.OrdinalIgnoreCase) ||
-        userContext.Roles.Contains(UserRoleClaims.FinancialUnit, StringComparer.OrdinalIgnoreCase) ||
-        userContext.Roles.Contains(UserRoleClaims.InvestmentUnit, StringComparer.OrdinalIgnoreCase) ||
-        userContext.Roles.Contains("CEO", StringComparer.OrdinalIgnoreCase);
+    public bool IsInternalUser => DepartmentPermissionEvaluator.IsInternalUser(userContext.Roles);
 
     public Result EnsureAuthenticated()
     {
@@ -155,27 +120,10 @@ public sealed class CaseAuthorizationService(IUserContext userContext) : ICaseAu
         if (string.Equals(permission, CasePermissions.ReadAll, StringComparison.OrdinalIgnoreCase))
             return IsInternalUser;
 
-        foreach (var role in userContext.Roles)
-        {
-            foreach (var permissionRole in ResolvePermissionRoles(role))
-            {
-                if (!RolePermissions.TryGetValue(permissionRole, out var permissions))
-                    continue;
-
-                if (permissions.Contains(permission, StringComparer.OrdinalIgnoreCase))
-                    return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static IEnumerable<string> ResolvePermissionRoles(string role)
-    {
-        yield return role;
-
-        var normalized = UserRoleClaims.Normalize(role);
-        if (!string.Equals(normalized, role, StringComparison.OrdinalIgnoreCase))
-            yield return normalized;
+        return DepartmentPermissionEvaluator.HasPermission(
+            userContext.Roles,
+            permission,
+            RolePermissions,
+            DepartmentPermissions);
     }
 }

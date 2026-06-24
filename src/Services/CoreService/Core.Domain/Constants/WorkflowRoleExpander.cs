@@ -52,10 +52,7 @@ public static class WorkflowRoleExpander
         string fromRole,
         string toRole)
     {
-        if (!map.TryGetValue(fromRole, out var statuses))
-            return;
-
-        map[toRole] = statuses.ToHashSet();
+        MergeKanbanRoleStatuses(map, fromRole, toRole);
     }
 
     public static void MirrorKanbanRole(
@@ -63,10 +60,7 @@ public static class WorkflowRoleExpander
         string fromRole,
         string toRole)
     {
-        if (!map.TryGetValue(fromRole, out var statuses))
-            return;
-
-        map[toRole] = statuses.ToHashSet();
+        MergeKanbanRoleStatuses(map, fromRole, toRole);
     }
 
     public static void MirrorKanbanRole(
@@ -74,9 +68,24 @@ public static class WorkflowRoleExpander
         string fromRole,
         string toRole)
     {
+        MergeKanbanRoleStatuses(map, fromRole, toRole);
+    }
+
+    private static void MergeKanbanRoleStatuses<TStatus>(
+        IDictionary<string, HashSet<TStatus>> map,
+        string fromRole,
+        string toRole)
+    {
         if (!map.TryGetValue(fromRole, out var statuses))
             return;
 
-        map[toRole] = statuses.ToHashSet();
+        if (!map.TryGetValue(toRole, out var target))
+        {
+            map[toRole] = statuses.ToHashSet();
+            return;
+        }
+
+        foreach (var status in statuses)
+            target.Add(status);
     }
 }

@@ -17,6 +17,7 @@ public static class GuaranteeSuccessMessages
     public const string ApprovalFormSubmitted = "فرم تصویب ارسال شد.";
     public const string CeoInitialApproved = "تأیید اولیه مدیرعامل ثبت شد.";
     public const string CeoFinalApproved = "تأیید نهایی مدیرعامل ثبت شد.";
+    public const string CeoAmendmentApproved = "تأیید مدیرعامل برای اصلاحیه ثبت شد.";
     public const string CaseRejected = "پرونده رد شد.";
     public const string CaseCancelled = "پرونده لغو شد.";
     public const string SignedPackageSubmitted = "قرارداد امضاشده و پیوست‌ها ارسال شد.";
@@ -36,6 +37,10 @@ public static class GuaranteeSuccessMessages
     public const string RenewalCeoApproved = "تمدید توسط مدیرعامل تأیید شد.";
     public const string RenewalCeoRejected = "تمدید رد شد.";
     public const string RenewalDatesUpdated = "تاریخ تمدید به‌روزرسانی شد.";
+    public const string CancellationCreated = "فرایند ابطال ضمانت‌نامه ایجاد شد.";
+    public const string CancellationSubmitted = "فرایند ابطال ضمانت‌نامه برای بررسی ارسال شد.";
+    public const string CancellationApproved = "مرحله ابطال ضمانت‌نامه تایید شد.";
+    public const string CancellationDetailsRetrieved = "جزئیات ابطال ضمانت‌نامه دریافت شد.";
     public const string KanbanActionRequiredRetrieved = "کارتابل — منتظر اقدام من";
     public const string KanbanWatchingRetrieved = "کارتابل — پیگیری";
 }

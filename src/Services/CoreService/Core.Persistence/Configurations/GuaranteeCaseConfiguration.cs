@@ -22,6 +22,11 @@ public sealed class GuaranteeCaseConfiguration : IEntityTypeConfiguration<Guaran
         builder.Property(x => x.ApplicantType).HasConversion<int>().IsRequired();
         builder.Property(x => x.CurrentPhase).HasConversion<int>().IsRequired();
         builder.Property(x => x.CurrentStatus).HasConversion<int>().IsRequired();
+        builder.Property(x => x.AmendmentType).HasConversion<int?>();
+        builder.Property(x => x.AmendmentReason).HasMaxLength(2000);
+        builder.Property(x => x.AmendmentOriginalGuaranteeReference).HasMaxLength(128);
+        builder.Property(x => x.AmendmentRequestedAmount).HasPrecision(18, 2);
+        builder.Property(x => x.AmendmentApprovedAmount).HasPrecision(18, 2);
         builder.HasIndex(x => x.CurrentStatus);
         builder.HasIndex(x => x.CreatedAt);
         builder.HasIndex(x => new { x.CurrentStatus, x.CreatedAt });
@@ -53,6 +58,10 @@ public sealed class GuaranteeCaseConfiguration : IEntityTypeConfiguration<Guaran
         builder.HasOne(x => x.ApprovalForm)
             .WithOne(x => x.Case)
             .HasForeignKey<GuaranteeApprovalForm>(x => x.CaseId);
+
+        builder.HasMany(x => x.AmendmentHistoryRecords)
+            .WithOne(x => x.GuaranteeCase)
+            .HasForeignKey(x => x.GuaranteeCaseId);
 
         builder.HasMany(x => x.Documents).WithOne(x => x.Case).HasForeignKey(x => x.CaseId);
         builder.HasMany(x => x.Comments).WithOne(x => x.Case).HasForeignKey(x => x.CaseId);

@@ -7,8 +7,8 @@
   ];
 
   const ROLE_SECTIONS = [
-    { key: "executive", title: "مدیرعامل / اجرایی", icon: "👔", color: "#6366f1" },
-    { key: "ceo", title: "داشبورد CEO", icon: "📊", color: "#3b82f6" },
+    { key: "executive", title: "نمای اجرایی", icon: "👔", color: "#6366f1" },
+    { key: "ceo", title: "مدیرعامل", icon: "📊", color: "#3b82f6" },
     { key: "board", title: "هیئت مدیره", icon: "🏛", color: "#8b5cf6" },
     { key: "departments", title: "واحدهای سازمانی", icon: "🏢", color: "#06b6d4" },
     { key: "applicant", title: "متقاضیان", icon: "👤", color: "#22c55e" },
@@ -85,10 +85,25 @@
   }
 
   function createChart(canvas, config) {
-    if (!canvas || typeof Chart === "undefined") return null;
+    if (window.DashboardUi?.createChart) return window.DashboardUi.createChart(canvas, config, state.charts);
+    if (!canvas || typeof Chart === "undefined" || !config) return null;
     const chart = new Chart(canvas, config);
     state.charts.push(chart);
     return chart;
+  }
+
+  function formatPersianMonth(year, month) {
+    return window.DashboardUi?.formatPersianMonth
+      ? window.DashboardUi.formatPersianMonth(year, month)
+      : String(year) + "/" + String(month);
+  }
+
+  function formatPercent(n) {
+    return window.DashboardUi?.formatPercent ? window.DashboardUi.formatPercent(n) : String(n) + "%";
+  }
+
+  function formatDays(n) {
+    return window.DashboardUi?.formatDays ? window.DashboardUi.formatDays(n) : String(n) + " روز";
   }
 
   function doughnutConfig(labels, data, colors) {
@@ -192,17 +207,17 @@
 
     const health = pick(data, "systemHealth", "SystemHealth") || pick(ex, "systemHealth", "SystemHealth");
     const kpis = [
-      { label: "کل پرونده‌ها", value: formatNum(pick(board, "totalCases", "TotalCases")), accent: true },
-      { label: "پرونده فعال", value: formatNum(pick(ex, "totalActiveCases", "TotalActiveCases")), accent: true },
-      { label: "ریسک کل", value: formatMoney(pick(ceo, "totalRiskExposure", "TotalRiskExposure")), accent: true },
-      { label: "نرخ تکمیل", value: (pick(board, "completionRate", "CompletionRate") || 0) + "%", accent: false },
-      { label: "ضمانت فعال", value: formatMoney(pick(ex, "activeGuaranteesVolume", "ActiveGuaranteesVolume")), accent: true },
-      { label: "سرمایه‌گذاری فعال", value: formatMoney(pick(ex, "activeInvestmentsVolume", "ActiveInvestmentsVolume")), accent: true },
-      { label: "تسهیلات فعال", value: formatMoney(pick(ex, "activeLoansVolume", "ActiveLoansVolume")), accent: true },
+      { label: "تعداد کل پرونده‌ها", value: formatNum(pick(board, "totalCases", "TotalCases")), accent: true },
+      { label: "پرونده‌های جاری", value: formatNum(pick(ex, "totalActiveCases", "TotalActiveCases")), accent: true },
+      { label: "مجموع مبلغ پرونده‌های جاری", value: formatMoney(pick(ceo, "totalRiskExposure", "TotalRiskExposure")), accent: true },
+      { label: "نرخ تکمیل", value: formatPercent(pick(board, "completionRate", "CompletionRate") || 0), accent: false },
+      { label: "مبلغ ضمانت‌نامه‌های جاری", value: formatMoney(pick(ex, "activeGuaranteesVolume", "ActiveGuaranteesVolume")), accent: true },
+      { label: "مبلغ سرمایه‌گذاری‌های جاری", value: formatMoney(pick(ex, "activeInvestmentsVolume", "ActiveInvestmentsVolume")), accent: true },
+      { label: "مبلغ تسهیلات جاری", value: formatMoney(pick(ex, "activeLoansVolume", "ActiveLoansVolume")), accent: true },
       { label: "کاربران آنلاین", value: formatNum(pick(health, "onlineUsersCount", "OnlineUsersCount") ?? pick(ex, "onlineUsersCount", "OnlineUsersCount")), accent: false },
-      { label: "نشست فعال", value: formatNum(pick(health, "activeSessionsCount", "ActiveSessionsCount")), accent: false },
-      { label: "در انتظار CEO", value: formatNum(pick(ceo, "pendingCeoApprovals", "PendingCeoApprovals")), accent: false },
-      { label: "متقاضیان", value: formatNum(pick(app, "applicantCount", "ApplicantCount")), accent: false },
+      { label: "نشست‌های فعال", value: formatNum(pick(health, "activeSessionsCount", "ActiveSessionsCount")), accent: false },
+      { label: "در انتظار تأیید مدیرعامل", value: formatNum(pick(ceo, "pendingCeoApprovals", "PendingCeoApprovals")), accent: false },
+      { label: "تعداد متقاضیان", value: formatNum(pick(app, "applicantCount", "ApplicantCount")), accent: false },
     ];
 
     const host = qs("#adminKpiStrip");
@@ -246,47 +261,77 @@
     const monthly = pick(ex, "monthlyFinancialOutput", "MonthlyFinancialOutput") || [];
     createChart(
       qs("#adminChartMonthlyBar"),
-      barConfig(
-        monthly.map((m) => (pick(m, "year", "Year") || "") + "/" + (pick(m, "month", "Month") || "")),
-        monthly.map((m) => pick(m, "amount", "Amount") || 0),
-        "خروجی مالی (ریال)"
-      )
+      window.DashboardUi?.verticalBarConfig
+        ? window.DashboardUi.verticalBarConfig(
+            monthly.map((m) => formatPersianMonth(pick(m, "year", "Year"), pick(m, "month", "Month"))),
+            monthly.map((m) => pick(m, "amount", "Amount") || 0),
+            "مبلغ (ریال)",
+            null,
+            true
+          )
+        : barConfig(
+            monthly.map((m) => formatPersianMonth(pick(m, "year", "Year"), pick(m, "month", "Month"))),
+            monthly.map((m) => pick(m, "amount", "Amount") || 0),
+            "مبلغ (ریال)"
+          )
     );
 
     const trend = pick(board, "monthlyTrend", "MonthlyTrend") || [];
     createChart(
       qs("#adminChartTrendLine"),
-      lineConfig(
-        trend.map((m) => (pick(m, "year", "Year") || "") + "/" + (pick(m, "month", "Month") || "")),
-        trend.map((m) => pick(m, "count", "Count") || 0),
-        "پرونده جدید"
-      )
+      window.DashboardUi?.lineConfig
+        ? window.DashboardUi.fixLineConfig(
+            window.DashboardUi.lineConfig(
+              trend.map((m) => formatPersianMonth(pick(m, "year", "Year"), pick(m, "month", "Month"))),
+              trend.map((m) => pick(m, "count", "Count") || 0),
+              "تعداد پرونده جدید"
+            ),
+            "#6366f1"
+          )
+        : lineConfig(
+            trend.map((m) => formatPersianMonth(pick(m, "year", "Year"), pick(m, "month", "Month"))),
+            trend.map((m) => pick(m, "count", "Count") || 0),
+            "تعداد پرونده جدید"
+          )
     );
 
     const pipeline = pick(ex, "pipelineByStatus", "PipelineByStatus") || pick(board, "countsByStatus", "CountsByStatus") || [];
-    const topPipeline = pipeline.slice(0, 8);
+    const topPipeline = pipeline.slice().sort((a, b) => (pick(b, "count", "Count") || 0) - (pick(a, "count", "Count") || 0)).slice(0, 10);
     createChart(
       qs("#adminChartPipelineBar"),
-      barConfig(
-        topPipeline.map((x) => pick(x, "statusTitle", "StatusTitle") || ""),
-        topPipeline.map((x) => pick(x, "count", "Count") || 0),
-        "تعداد",
-        true
-      )
+      window.DashboardUi?.horizontalBarConfig
+        ? window.DashboardUi.horizontalBarConfig(
+            topPipeline.map((x) => pick(x, "statusTitle", "StatusTitle") || ""),
+            topPipeline.map((x) => pick(x, "count", "Count") || 0),
+            "تعداد پرونده"
+          )
+        : barConfig(
+            topPipeline.map((x) => pick(x, "statusTitle", "StatusTitle") || ""),
+            topPipeline.map((x) => pick(x, "count", "Count") || 0),
+            "تعداد",
+            true
+          )
     );
 
     const volumes = [
-      { label: "ضمانت", value: Number(pick(ex, "activeGuaranteesVolume", "ActiveGuaranteesVolume")) || 0 },
+      { label: "ضمانت‌نامه", value: Number(pick(ex, "activeGuaranteesVolume", "ActiveGuaranteesVolume")) || 0 },
       { label: "سرمایه‌گذاری", value: Number(pick(ex, "activeInvestmentsVolume", "ActiveInvestmentsVolume")) || 0 },
       { label: "تسهیلات", value: Number(pick(ex, "activeLoansVolume", "ActiveLoansVolume")) || 0 },
     ];
     createChart(
       qs("#adminChartVolumePie"),
-      pieConfig(
-        volumes.map((v) => v.label),
-        volumes.map((v) => v.value),
-        ["#6366f1", "#22c55e", "#f59e0b"]
-      )
+      window.DashboardUi?.horizontalBarConfig
+        ? window.DashboardUi.horizontalBarConfig(
+            volumes.map((v) => v.label),
+            volumes.map((v) => v.value),
+            "مبلغ (ریال)"
+          )
+        : barConfig(
+            volumes.map((v) => v.label),
+            volumes.map((v) => v.value),
+            "مبلغ (ریال)",
+            true
+          )
     );
   }
 
@@ -308,25 +353,29 @@
         const revision = pick(dept, "revisionRatePercent", "RevisionRatePercent") || 0;
         const key = pick(dept, "departmentKey", "DepartmentKey") || idx;
         const sm = pick(dept, "specificMetrics", "SpecificMetrics");
-        const metricsHtml =
+        const specificHtml =
           window.DashboardUi && sm
-            ? '<div class="admin-dept-card__metrics">' +
-              window.DashboardUi.renderDepartmentMetrics(sm, key) +
-              "</div>"
+            ? window.DashboardUi.renderMetricRows
+              ? window.DashboardUi.renderMetricRows(window.DashboardUi.getDepartmentMetricItems(sm, key), "dept-metric-rows dept-metric-rows--specific")
+              : '<div class="admin-dept-card__metrics">' + window.DashboardUi.renderDepartmentMetrics(sm, key) + "</div>"
             : "";
         return (
-          '<div class="admin-dept-card">' +
-          '<div class="admin-dept-card__head">' +
-          "<strong>" +
+          '<div class="admin-dept-card dept-summary-card">' +
+          '<div class="admin-dept-card__head dept-summary-card__head">' +
+          "<strong class=\"dept-summary-card__title\">" +
           title +
           "</strong>" +
           '<span class="admin-dept-card__badge">' +
           formatNum(queue) +
           " در صف</span></div>" +
-          '<div class="admin-dept-card__meta"><span class="muted">نرخ بازگشت: </span>' +
-          revision +
-          "%</div>" +
-          metricsHtml +
+          '<div class="dept-metric-row dept-metric-row--core">' +
+          '<span class="dept-metric-row__label">شاخص درخواست اصلاح</span>' +
+          '<strong class="dept-metric-row__value">' +
+          formatPercent(revision) +
+          "</strong>" +
+          '<span class="dept-metric-row__hint muted">درخواست‌های اصلاح ÷ پرونده‌های صف (۶ ماه)</span>' +
+          "</div>" +
+          specificHtml +
           '<div class="admin-dept-card__chart"><canvas id="adminDeptChart_' +
           key +
           '"></canvas></div></div>"
@@ -341,10 +390,18 @@
       if (!canvas || !queue.length) return;
       createChart(
         canvas,
-        doughnutConfig(
-          queue.map((q) => pick(q, "moduleTitle", "ModuleTitle") || ""),
-          queue.map((q) => pick(q, "count", "Count") || 0)
-        )
+        window.DashboardUi?.horizontalBarConfig
+          ? window.DashboardUi.horizontalBarConfig(
+              queue.map((q) => pick(q, "moduleTitle", "ModuleTitle") || ""),
+              queue.map((q) => pick(q, "count", "Count") || 0),
+              "تعداد پرونده"
+            )
+          : barConfig(
+              queue.map((q) => pick(q, "moduleTitle", "ModuleTitle") || ""),
+              queue.map((q) => pick(q, "count", "Count") || 0),
+              "تعداد",
+              true
+            )
       );
     });
 
@@ -354,7 +411,7 @@
         barConfig(
           departments.map((d) => pick(d, "departmentTitle", "DepartmentTitle") || ""),
           departments.map((d) => pick(d, "totalQueueCount", "TotalQueueCount") || 0),
-          "صف انتظار",
+          "تعداد پرونده در صف",
           false,
           departments.map((_, i) => CHART_COLORS[i % CHART_COLORS.length])
         )
@@ -367,35 +424,44 @@
     const metrics = qs("#adminCeoMetrics");
     if (metrics) {
       metrics.innerHTML =
-        '<div class="dashboard-metric dashboard-metric--accent"><span class="muted">ریسک کل</span><strong>' +
+        '<div class="dashboard-metric dashboard-metric--accent"><span class="muted">مجموع مبلغ پرونده‌های جاری</span><strong>' +
         formatMoney(pick(ceo, "totalRiskExposure", "TotalRiskExposure")) +
         "</strong></div>" +
-        '<div class="dashboard-metric"><span class="muted">مبلغ درخواستی</span><strong>' +
+        '<div class="dashboard-metric"><span class="muted">مجموع مبلغ درخواستی</span><strong>' +
         formatMoney(pick(ceo, "totalRequestedAmount", "TotalRequestedAmount")) +
         "</strong></div>" +
-        '<div class="dashboard-metric"><span class="muted">پرداخت تأییدشده</span><strong>' +
+        '<div class="dashboard-metric"><span class="muted">مجموع پرداخت‌های تأییدشده</span><strong>' +
         formatMoney(pick(ceo, "approvedPaymentsSum", "ApprovedPaymentsSum")) +
         "</strong></div>" +
-        '<div class="dashboard-metric"><span class="muted">پرونده این ماه</span><strong>' +
+        '<div class="dashboard-metric"><span class="muted">پرونده‌های ثبت‌شده این ماه</span><strong>' +
         formatNum(pick(ceo, "casesThisMonth", "CasesThisMonth")) +
         "</strong></div>" +
-        '<div class="dashboard-metric"><span class="muted">میانگین روز بررسی</span><strong>' +
-        (pick(ceo, "averageDaysInReview", "AverageDaysInReview") || 0) +
+        '<div class="dashboard-metric"><span class="muted">میانگین روز ماندگاری در بررسی</span><strong>' +
+        formatDays(pick(ceo, "averageDaysInReview", "AverageDaysInReview") || 0) +
         "</strong></div>" +
-        '<div class="dashboard-metric"><span class="muted">رد شده</span><strong>' +
+        '<div class="dashboard-metric"><span class="muted">پرونده‌های رد‌شده</span><strong>' +
         formatNum(pick(ceo, "rejectedCount", "RejectedCount")) +
         "</strong></div>" +
-        '<div class="dashboard-metric"><span class="muted">منتظر پرداخت</span><strong>' +
+        '<div class="dashboard-metric"><span class="muted">در انتظار پرداخت</span><strong>' +
         formatNum(pick(ceo, "waitingPaymentCount", "WaitingPaymentCount")) +
         "</strong></div>";
 
       const pipeline = pick(ceo, "pipelineByStatus", "PipelineByStatus") || [];
+      const topPipeline = pipeline.slice().sort((a, b) => (pick(b, "count", "Count") || 0) - (pick(a, "count", "Count") || 0)).slice(0, 10);
       createChart(
         qs("#adminChartCeoPipeline"),
-        doughnutConfig(
-          pipeline.slice(0, 10).map((x) => pick(x, "statusTitle", "StatusTitle") || ""),
-          pipeline.slice(0, 10).map((x) => pick(x, "count", "Count") || 0)
-        )
+        window.DashboardUi?.horizontalBarConfig
+          ? window.DashboardUi.horizontalBarConfig(
+              topPipeline.map((x) => pick(x, "statusTitle", "StatusTitle") || ""),
+              topPipeline.map((x) => pick(x, "count", "Count") || 0),
+              "تعداد پرونده"
+            )
+          : barConfig(
+              topPipeline.map((x) => pick(x, "statusTitle", "StatusTitle") || ""),
+              topPipeline.map((x) => pick(x, "count", "Count") || 0),
+              "تعداد",
+              true
+            )
       );
     }
   }
@@ -453,11 +519,20 @@
 
     createChart(
       qs("#adminChartBoardTrend"),
-      barConfig(
-        trend.map((m) => (pick(m, "year", "Year") || "") + "/" + (pick(m, "month", "Month") || "")),
-        trend.map((m) => pick(m, "count", "Count") || 0),
-        "پرونده جدید"
-      )
+      window.DashboardUi?.fixLineConfig
+        ? window.DashboardUi.fixLineConfig(
+            window.DashboardUi.lineConfig(
+              trend.map((m) => formatPersianMonth(pick(m, "year", "Year"), pick(m, "month", "Month"))),
+              trend.map((m) => pick(m, "count", "Count") || 0),
+              "تعداد پرونده جدید"
+            ),
+            "#06b6d4"
+          )
+        : lineConfig(
+            trend.map((m) => formatPersianMonth(pick(m, "year", "Year"), pick(m, "month", "Month"))),
+            trend.map((m) => pick(m, "count", "Count") || 0),
+            "تعداد پرونده جدید"
+          )
     );
   }
 
@@ -468,29 +543,33 @@
     if (!host) return;
 
     host.innerHTML =
-      bottlenecks.length
-        ? bottlenecks
-            .map((b) => {
-              const title = pick(b, "departmentTitle", "DepartmentTitle") || "";
-              const days = pick(b, "averageDays", "AverageDays") || 0;
-              const cnt = pick(b, "activeCaseCount", "ActiveCaseCount") || 0;
-              const pct = Math.min(100, Math.round(days * 3));
-              return (
-                '<div class="admin-bottleneck">' +
-                '<div class="admin-bottleneck__head"><span>' +
-                title +
-                ' <span class="muted">(' +
-                cnt +
-                ' پرونده)</span></span><span class="mono">' +
-                days +
-                " روز</span></div>" +
-                '<div class="dashboard-bar__track"><div class="dashboard-bar__fill dashboard-bar__fill--warn" style="width:' +
-                pct +
-                '%"></div></div></div>'
-              );
-            })
-            .join("")
-        : '<p class="muted">داده گلوگاه موجود نیست.</p>';
+      '<div class="card__title">میانگین زمان ماندگاری در واحدها</div>' +
+      '<p class="muted portal-stage__hint">هرچه نوار بلندتر باشد، پرونده‌ها بیشتر در آن واحد معطل می‌مانند.</p>' +
+      (window.DashboardUi?.renderBottleneckBars
+        ? window.DashboardUi.renderBottleneckBars(bottlenecks)
+        : bottlenecks.length
+          ? bottlenecks
+              .map((b) => {
+                const title = pick(b, "departmentTitle", "DepartmentTitle") || "";
+                const days = pick(b, "averageDays", "AverageDays") || 0;
+                const cnt = pick(b, "activeCaseCount", "ActiveCaseCount") || 0;
+                const pct = Math.min(100, Math.round(days * 3));
+                return (
+                  '<div class="admin-bottleneck">' +
+                  '<div class="admin-bottleneck__head"><span>' +
+                  title +
+                  ' <span class="muted">(' +
+                  formatNum(cnt) +
+                  ' پرونده جاری)</span></span><span class="mono">' +
+                  formatDays(days) +
+                  "</span></div>" +
+                  '<div class="dashboard-bar__track"><div class="dashboard-bar__fill dashboard-bar__fill--warn" style="width:' +
+                  pct +
+                  '%"></div></div></div>'
+                );
+              })
+              .join("")
+          : '<p class="muted">داده‌ای موجود نیست.</p>');
   }
 
   function renderRoleNav() {

@@ -25,6 +25,7 @@ internal static class CorePrincipalSoftDeleteQueryFilters
         modelBuilder.ApplyFilterForSoftDeletePrincipal<GuaranteeCaseComment, GuaranteeCase>(e => e.Case);
         modelBuilder.ApplyFilterForSoftDeletePrincipal<GuaranteeCaseWorkflowHistory, GuaranteeCase>(e => e.Case);
         modelBuilder.ApplyFilterForSoftDeletePrincipal<GuaranteeCaseDocument, GuaranteeCase>(e => e.Case);
+        modelBuilder.ApplyFilterForSoftDeletePrincipal<GuaranteeAmendmentHistoryRecord, GuaranteeCase>(e => e.GuaranteeCase);
         modelBuilder.ApplyFilterForSoftDeletePrincipal<GuaranteeRenewalCase, GuaranteeCase>(e => e.ParentGuaranteeCase);
 
         modelBuilder.ApplyFilterForSoftDeletePrincipal<LoanApprovalDetail, LoanCase>(e => e.Case);

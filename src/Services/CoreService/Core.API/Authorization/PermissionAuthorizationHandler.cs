@@ -58,7 +58,7 @@ public sealed class PermissionAuthorizationHandler(IIdentityClient identityClien
 
         foreach (var role in roles)
         {
-            if (!RolePermissions.RolePermissionMappings.TryGetValue(role, out var permissions))
+            if (!RolePermissions.TryGetPermissionsForRole(role, out var permissions))
                 continue;
 
             if (permissions.Contains(requirement.Permission, StringComparer.OrdinalIgnoreCase))
@@ -71,4 +71,3 @@ public sealed class PermissionAuthorizationHandler(IIdentityClient identityClien
         return false;
     }
 }
-

@@ -16,7 +16,7 @@
   function moduleLabel(item) {
     const m = Number(pick(item, "module", "Module") || 1);
     if (m === 2) return "ضمانت‌نامه";
-    if (m === 3) return "تمدید";
+    if (m === 3) return "اصلاحیه";
     if (m === 4) return "تسهیلات";
     return "سرمایه‌گذاری";
   }
@@ -138,7 +138,6 @@
     const apiBase = card?.dataset?.apiBase || "";
     if (module === "4" || apiBase.indexOf("loancases") >= 0) return "loan";
     if (module === "2" || apiBase.indexOf("guaranteecases") >= 0) return "guarantee";
-    if (module === "3" || apiBase.indexOf("guarantee-renewals") >= 0) return "guarantee";
     return "investment";
   }
 

@@ -18,12 +18,12 @@
   const CHART_COLORS = ui().CHART_COLORS || ["#6366f1", "#22c55e", "#f59e0b", "#ef4444", "#06b6d4"];
 
   const ROLE_VIEWS = [
-    { id: "admin", label: "Admin", endpoint: "/api/v1/dashboard/admin-overview", roles: ["Admin"] },
-    { id: "ceo", label: "CEO", endpoint: "/api/v1/dashboard/ceo", roles: ["Admin", "CEO"] },
-    { id: "board", label: "Board", endpoint: "/api/v1/dashboard/board", roles: ["Admin", "CEO", "BoardMember", "InvestmentManager"] },
-    { id: "executive", label: "Executive", endpoint: "/api/v1/dashboard/executive", roles: ["Admin", "CEO", "InvestmentManager", "FinancialManager", "TechnicalExpert", "TechnicalManager", "BoardMember"] },
-    { id: "department", label: "Department", endpoint: "/api/v1/dashboard/department", roles: ["Admin", "InvestmentExpert", "InvestmentManager", "LegalExpert", "LegalManager", "FinancialExpert", "FinancialManager", "CreditExpert", "CreditManager", "TechnicalExpert", "TechnicalManager"] },
-    { id: "applicant", label: "Applicant", endpoint: "/api/v1/dashboard/applicant", roles: ["Admin", "Applicant"] },
+    { id: "admin", label: "مدیریت سیستم", endpoint: "/api/v1/dashboard/admin-overview", roles: ["Admin"] },
+    { id: "ceo", label: "مدیرعامل", endpoint: "/api/v1/dashboard/ceo", roles: ["Admin", "CEO"] },
+    { id: "board", label: "هیئت مدیره", endpoint: "/api/v1/dashboard/board", roles: ["Admin", "CEO", "BoardMember", "InvestmentManager"] },
+    { id: "executive", label: "نمای اجرایی", endpoint: "/api/v1/dashboard/executive", roles: ["Admin", "CEO", "InvestmentManager", "FinancialManager", "TechnicalExpert", "TechnicalManager", "BoardMember"] },
+    { id: "department", label: "واحد سازمانی", endpoint: "/api/v1/dashboard/department", roles: ["Admin", "InvestmentExpert", "InvestmentManager", "LegalExpert", "LegalManager", "FinancialExpert", "FinancialManager", "CreditExpert", "CreditManager", "TechnicalExpert", "TechnicalManager"] },
+    { id: "applicant", label: "متقاضی", endpoint: "/api/v1/dashboard/applicant", roles: ["Admin", "Applicant"] },
   ];
 
   const ROLE_DEFAULT_MAP = {
@@ -140,29 +140,9 @@
     return chart;
   }
 
-  function barConfig(labels, data, label, horizontal) {
-    return {
-      type: "bar",
-      data: {
-        labels,
-        datasets: [{
-          label: label || "",
-          data,
-          backgroundColor: CHART_COLORS.slice(0, labels.length).map((c) => c + "cc"),
-          borderRadius: 6,
-          borderSkipped: false,
-        }],
-      },
-      options: {
-        ...chartDefaults(),
-        indexAxis: horizontal ? "y" : "x",
-        plugins: { ...chartDefaults().plugins, legend: { display: !!label, labels: { color: "#cbd5e1" } } },
-        scales: {
-          x: { ticks: { color: "#94a3b8", font: { size: 11 } }, grid: { color: "rgba(255,255,255,0.05)" } },
-          y: { ticks: { color: "#94a3b8", font: { size: 11 } }, grid: { color: "rgba(255,255,255,0.05)" } },
-        },
-      },
-    };
+  function buildChartFromSpec(spec) {
+    if (ui().buildChartConfig) return ui().buildChartConfig(spec);
+    return null;
   }
 
   function extractModules(roleId, raw) {
@@ -212,12 +192,12 @@
         meta: { computedAt: pick(raw, "computedAtUtc", "ComputedAtUtc"), isStale: pick(raw, "isStale", "IsStale") },
         systemHealth,
         metrics: [
-          { label: "کل پرونده‌ها", value: formatNum(pick(board, "totalCases", "TotalCases")), accent: true },
-          { label: "پرونده فعال", value: formatNum(pick(ex, "totalActiveCases", "TotalActiveCases")), accent: true },
-          { label: "نرخ تکمیل", value: (pick(board, "completionRate", "CompletionRate") || 0) + "%" },
-          { label: "ریسک کل (حجم فعال)", value: formatMoney(pick(ceo, "totalRiskExposure", "TotalRiskExposure")), accent: true },
-          { label: "در انتظار CEO", value: formatNum(pick(ceo, "pendingCeoApprovals", "PendingCeoApprovals")) },
-          { label: "متقاضیان", value: formatNum(pick(app, "applicantCount", "ApplicantCount")) },
+          { label: "تعداد کل پرونده‌ها", value: formatNum(pick(board, "totalCases", "TotalCases")), accent: true },
+          { label: "پرونده‌های جاری", value: formatNum(pick(ex, "totalActiveCases", "TotalActiveCases")), accent: true },
+          { label: "نرخ تکمیل", value: (ui().formatPercent ? ui().formatPercent(pick(board, "completionRate", "CompletionRate") || 0) : (pick(board, "completionRate", "CompletionRate") || 0) + "%") },
+          { label: "مجموع مبلغ پرونده‌های جاری", value: formatMoney(pick(ceo, "totalRiskExposure", "TotalRiskExposure")), accent: true },
+          { label: "در انتظار تأیید مدیرعامل", value: formatNum(pick(ceo, "pendingCeoApprovals", "PendingCeoApprovals")) },
+          { label: "تعداد متقاضیان", value: formatNum(pick(app, "applicantCount", "ApplicantCount")) },
         ],
         modules: modules.length ? modules : pick(ex, "modules", "Modules") || [],
         charts: [],
@@ -236,13 +216,13 @@
         meta: {},
         systemHealth: null,
         metrics: [
-          { label: "ریسک کل", value: formatMoney(pick(raw, "totalRiskExposure", "TotalRiskExposure")), accent: true },
-          { label: "پرونده فعال", value: formatNum(pick(raw, "totalActiveCases", "TotalActiveCases")), accent: true },
+          { label: "مجموع مبلغ پرونده‌های جاری", value: formatMoney(pick(raw, "totalRiskExposure", "TotalRiskExposure")), accent: true },
+          { label: "پرونده‌های جاری", value: formatNum(pick(raw, "totalActiveCases", "TotalActiveCases")), accent: true },
           { label: "در انتظار تأیید مدیرعامل", value: formatNum(pick(raw, "pendingCeoApprovals", "PendingCeoApprovals")), accent: true },
-          { label: "مبلغ درخواستی", value: formatMoney(pick(raw, "totalRequestedAmount", "TotalRequestedAmount")) },
-          { label: "پرداخت تأییدشده", value: formatMoney(pick(raw, "approvedPaymentsSum", "ApprovedPaymentsSum")) },
-          { label: "نرخ تکمیل", value: (pick(raw, "completionRate", "CompletionRate") || 0) + "%" },
-          { label: "ردشده", value: formatNum(pick(raw, "rejectedCount", "RejectedCount")) },
+          { label: "مجموع مبلغ درخواستی", value: formatMoney(pick(raw, "totalRequestedAmount", "TotalRequestedAmount")) },
+          { label: "مجموع پرداخت‌های تأییدشده", value: formatMoney(pick(raw, "approvedPaymentsSum", "ApprovedPaymentsSum")) },
+          { label: "نرخ تکمیل", value: (ui().formatPercent ? ui().formatPercent(pick(raw, "completionRate", "CompletionRate") || 0) : (pick(raw, "completionRate", "CompletionRate") || 0) + "%") },
+          { label: "پرونده‌های رد‌شده", value: formatNum(pick(raw, "rejectedCount", "RejectedCount")) },
         ],
         modules,
         charts: [],
@@ -259,9 +239,9 @@
         roleId,
         meta: {},
         metrics: [
-          { label: "کل پرونده‌ها", value: formatNum(pick(raw, "totalCases", "TotalCases")), accent: true },
-          { label: "حجم فعال کل", value: formatMoney(pick(raw, "totalActiveVolume", "TotalActiveVolume")), accent: true },
-          { label: "نرخ تکمیل", value: (pick(raw, "completionRate", "CompletionRate") || 0) + "%" },
+          { label: "تعداد کل پرونده‌ها", value: formatNum(pick(raw, "totalCases", "TotalCases")), accent: true },
+          { label: "مجموع مبلغ پرونده‌های جاری", value: formatMoney(pick(raw, "totalActiveVolume", "TotalActiveVolume")), accent: true },
+          { label: "نرخ تکمیل", value: (ui().formatPercent ? ui().formatPercent(pick(raw, "completionRate", "CompletionRate") || 0) : (pick(raw, "completionRate", "CompletionRate") || 0) + "%") },
         ],
         modules,
         charts: [],
@@ -289,23 +269,43 @@
         },
         systemHealth: pick(ex, "systemHealth", "SystemHealth"),
         metrics: [
-          { label: "ضمانت فعال", value: formatMoney(pick(ex, "activeGuaranteesVolume", "ActiveGuaranteesVolume")), accent: true },
-          { label: "سرمایه‌گذاری فعال", value: formatMoney(pick(ex, "activeInvestmentsVolume", "ActiveInvestmentsVolume")), accent: true },
-          { label: "تسهیلات فعال", value: formatMoney(pick(ex, "activeLoansVolume", "ActiveLoansVolume")), accent: true },
-          { label: "پرونده فعال", value: formatNum(pick(ex, "totalActiveCases", "TotalActiveCases")) },
-          { label: "نرخ تکمیل", value: (pick(ex, "completionRate", "CompletionRate") || 0) + "%" },
+          { label: "مبلغ ضمانت‌نامه‌های جاری", value: formatMoney(pick(ex, "activeGuaranteesVolume", "ActiveGuaranteesVolume")), accent: true },
+          { label: "مبلغ سرمایه‌گذاری‌های جاری", value: formatMoney(pick(ex, "activeInvestmentsVolume", "ActiveInvestmentsVolume")), accent: true },
+          { label: "مبلغ تسهیلات جاری", value: formatMoney(pick(ex, "activeLoansVolume", "ActiveLoansVolume")), accent: true },
+          { label: "پرونده‌های جاری", value: formatNum(pick(ex, "totalActiveCases", "TotalActiveCases")) },
+          { label: "نرخ تکمیل", value: (ui().formatPercent ? ui().formatPercent(pick(ex, "completionRate", "CompletionRate") || 0) : (pick(ex, "completionRate", "CompletionRate") || 0) + "%") },
           { label: "کاربران آنلاین", value: formatNum(pick(ex, "onlineUsersCount", "OnlineUsersCount")) },
-          { label: "در انتظار مدیرعامل", value: formatNum(pick(ex, "pendingCeoApprovals", "PendingCeoApprovals")) },
+          { label: "در انتظار تأیید مدیرعامل", value: formatNum(pick(ex, "pendingCeoApprovals", "PendingCeoApprovals")) },
         ],
         modules: modules.length ? modules : pick(ex, "modules", "Modules") || [],
         charts: [
           {
+            id: "execStatus",
+            title: "ترکیب وضعیت پرونده‌ها",
+            type: "doughnut",
+            labels: (pick(ex, "statusDistribution", "StatusDistribution") || []).map((x) => pick(x, "categoryTitle", "CategoryTitle") || ""),
+            data: (pick(ex, "statusDistribution", "StatusDistribution") || []).map((x) => pick(x, "count", "Count") || 0),
+          },
+          {
             id: "execMonthly",
-            title: "خروجی مالی ماهانه (کل)",
+            title: "خروجی مالی ماهانه",
             type: "bar",
-            labels: (pick(ex, "monthlyFinancialOutput", "MonthlyFinancialOutput") || []).map((m) => (pick(m, "year", "Year") || "") + "/" + (pick(m, "month", "Month") || "")),
+            moneyAxis: true,
+            labels: (pick(ex, "monthlyFinancialOutput", "MonthlyFinancialOutput") || []).map((m) =>
+              ui().formatPersianMonth ? ui().formatPersianMonth(pick(m, "year", "Year"), pick(m, "month", "Month")) : (pick(m, "year", "Year") || "") + "/" + (pick(m, "month", "Month") || "")
+            ),
             data: (pick(ex, "monthlyFinancialOutput", "MonthlyFinancialOutput") || []).map((m) => pick(m, "amount", "Amount") || 0),
-            datasetLabel: "خروجی مالی (ریال)",
+            datasetLabel: "مبلغ (ریال)",
+          },
+          {
+            id: "execTrend",
+            title: "روند ثبت پرونده (ماهانه)",
+            type: "line",
+            labels: (pick(ex, "monthlyTrend", "MonthlyTrend") || pick(raw, "monthlyTrend", "MonthlyTrend") || []).map((m) =>
+              ui().formatPersianMonth ? ui().formatPersianMonth(pick(m, "year", "Year"), pick(m, "month", "Month")) : (pick(m, "year", "Year") || "") + "/" + (pick(m, "month", "Month") || "")
+            ),
+            data: (pick(ex, "monthlyTrend", "MonthlyTrend") || []).map((m) => pick(m, "count", "Count") || 0),
+            datasetLabel: "تعداد پرونده جدید",
           },
         ],
         panels: [
@@ -331,10 +331,10 @@
           isStale: pick(raw, "isStale", "IsStale"),
         },
         metrics: [
-          { label: "اقدام لازم", value: formatNum(pick(app, "pendingActionsCount", "PendingActionsCount")), accent: true },
-          { label: "بدهی باقی‌مانده", value: formatMoney(pick(app, "totalRemainingDebt", "TotalRemainingDebt")), accent: true },
+          { label: "اقدام‌های در انتظار شما", value: formatNum(pick(app, "pendingActionsCount", "PendingActionsCount")), accent: true },
+          { label: "مانده بدهی", value: formatMoney(pick(app, "totalRemainingDebt", "TotalRemainingDebt")), accent: true },
           { label: "اقساط پرداخت‌نشده", value: formatNum(pick(app, "unpaidInstallmentsCount", "UnpaidInstallmentsCount")) },
-          { label: "پرونده‌های فعال", value: formatNum((pick(app, "activeCases", "ActiveCases") || []).length) },
+          { label: "پرونده‌های در جریان", value: formatNum((pick(app, "activeCases", "ActiveCases") || []).length) },
         ],
         modules: [],
         charts: [],
@@ -350,6 +350,15 @@
   }
 
   function mapDepartmentView(raw, dept, modules) {
+    const departmentKey = pick(dept, "departmentKey", "DepartmentKey");
+    const filteredModules = ui().filterModulesForDepartment
+      ? ui().filterModulesForDepartment(modules, departmentKey)
+      : modules;
+    const queueByModule = ui().filterQueueForDepartment
+      ? ui().filterQueueForDepartment(pick(dept, "queueByModule", "QueueByModule") || [], departmentKey)
+      : pick(dept, "queueByModule", "QueueByModule") || [];
+    const totalQueue = queueByModule.reduce((sum, q) => sum + (pick(q, "count", "Count") || 0), 0);
+
     return {
       roleId: "department",
       meta: {
@@ -358,20 +367,20 @@
       },
       metrics: [
         { label: "واحد", value: pick(dept, "departmentTitle", "DepartmentTitle") || "—", accent: true },
-        { label: "صف انتظار", value: formatNum(pick(dept, "totalQueueCount", "TotalQueueCount")) },
-        { label: "نرخ بازگشت", value: (pick(dept, "revisionRatePercent", "RevisionRatePercent") || 0) + "%" },
+        { label: "پرونده در صف کاری", value: formatNum(totalQueue) },
+        { label: "نرخ درخواست اصلاح", value: (ui().formatPercent ? ui().formatPercent(pick(dept, "revisionRatePercent", "RevisionRatePercent") || 0) : (pick(dept, "revisionRatePercent", "RevisionRatePercent") || 0) + "%") },
       ],
-      modules,
-      departmentKey: pick(dept, "departmentKey", "DepartmentKey"),
+      modules: filteredModules,
+      departmentKey,
       specificMetrics: pick(dept, "specificMetrics", "SpecificMetrics"),
       charts: [
         {
           id: "deptQueue",
-          title: "صف انتظار به تفکیک ماژول",
-          type: "bar",
+          title: "صف کاری به تفکیک ماژول",
+          type: "horizontalBar",
           horizontal: true,
-          labels: (pick(dept, "queueByModule", "QueueByModule") || []).map((q) => pick(q, "moduleTitle", "ModuleTitle") || ""),
-          data: (pick(dept, "queueByModule", "QueueByModule") || []).map((q) => pick(q, "count", "Count") || 0),
+          labels: queueByModule.map((q) => pick(q, "moduleTitle", "ModuleTitle") || ""),
+          data: queueByModule.map((q) => pick(q, "count", "Count") || 0),
           datasetLabel: "تعداد پرونده",
         },
       ],
@@ -423,7 +432,7 @@
         '"></canvas></div>';
       host.appendChild(card);
       const canvas = qs("#homeChart_" + idx);
-      createChart(canvas, barConfig(ch.labels, ch.data, ch.datasetLabel, ch.horizontal));
+      createChart(canvas, buildChartFromSpec(ch));
     });
     if (!host.children.length) host.classList.add("hidden");
     else host.classList.remove("hidden");
@@ -448,30 +457,12 @@
       if (panel.type === "bottlenecks") {
         const el = document.createElement("div");
         el.className = "home-panel card";
-        el.innerHTML = '<div class="card__title">گلوگاه‌های واحدها</div><div class="home-panel__body"></div>';
+        el.innerHTML =
+          '<div class="card__title">میانگین زمان ماندگاری در واحدها</div>' +
+          '<p class="muted portal-stage__hint">هرچه نوار بلندتر باشد، پرونده‌ها بیشتر در آن واحد معطل می‌مانند.</p>' +
+          '<div class="home-panel__body"></div>';
         const body = el.querySelector(".home-panel__body");
-        if (!panel.data?.length) body.innerHTML = '<p class="muted">داده‌ای موجود نیست.</p>';
-        else {
-          body.innerHTML = panel.data
-            .map((b) => {
-              const title = pick(b, "departmentTitle", "DepartmentTitle") || "";
-              const days = pick(b, "averageDays", "AverageDays") || 0;
-              const cnt = pick(b, "activeCaseCount", "ActiveCaseCount") || 0;
-              const pct = Math.min(100, Math.round(days * 3));
-              return (
-                '<div class="dashboard-bar"><div class="dashboard-bar__label"><span>' +
-                title +
-                ' <span class="muted">(' +
-                cnt +
-                ' پرونده)</span></span><span class="mono">' +
-                days +
-                " روز</span></div><div class=\"dashboard-bar__track\"><div class=\"dashboard-bar__fill dashboard-bar__fill--warn\" style=\"width:" +
-                pct +
-                '%"></div></div></div>'
-              );
-            })
-            .join("");
-        }
+        body.innerHTML = ui().renderBottleneckBars ? ui().renderBottleneckBars(panel.data) : '<p class="muted">داده‌ای موجود نیست.</p>';
         host.appendChild(el);
       }
 
@@ -499,7 +490,7 @@
         const el = document.createElement("div");
         el.className = "home-panel card";
         const links = panel.data || [];
-        el.innerHTML = '<div class="card__title">کارتابل — اقدام فوری</div>';
+        el.innerHTML = '<div class="card__title">کارتابل — نیاز به اقدام</div>';
         if (!links.length) el.innerHTML += '<p class="muted">موردی در صف اقدام شما نیست.</p>';
         else {
           const ul = document.createElement("ul");
@@ -609,21 +600,9 @@
           el.innerHTML = '<div class="card__title">واحدهای سازمانی</div><p class="muted">داده واحدها موجود نیست.</p>';
         } else {
           el.innerHTML =
-            '<div class="card__title">واحدهای سازمانی</div><div class="home-dept-grid">' +
-            departments
-              .map((dept) => {
-                const title = pick(dept, "departmentTitle", "DepartmentTitle") || "";
-                const queue = pick(dept, "totalQueueCount", "TotalQueueCount") || 0;
-                const revision = pick(dept, "revisionRatePercent", "RevisionRatePercent") || 0;
-                const sm = pick(dept, "specificMetrics", "SpecificMetrics");
-                let extra = "";
-                if (sm && pick(sm, "pendingFinancialReviews", "PendingFinancialReviews") != null) {
-                  extra = " · بررسی مالی " + formatNum(pick(sm, "pendingFinancialReviews", "PendingFinancialReviews"));
-                }
-                return '<div class="home-dept-card"><strong>' + title + '</strong><span class="muted">' + formatNum(queue) + " در صف · بازگشت " + revision + "%" + extra + "</span></div>";
-              })
-              .join("") +
-            "</div>";
+            '<div class="card__title">واحدهای سازمانی</div>' +
+            '<p class="muted portal-stage__hint dept-panel__hint">هر کارت، صف کاری و شاخص‌های تخصصی همان واحد را جداگانه نشان می‌دهد.</p>' +
+            (ui().renderDepartmentGrid ? ui().renderDepartmentGrid(departments) : "");
         }
         host.appendChild(el);
       }
@@ -673,7 +652,7 @@
     renderMetrics(vm.metrics);
 
     if (ui().renderModuleSections) {
-      ui().renderModuleSections(qs("#homeModuleSections"), vm.modules, state.charts, "homeMod");
+      ui().renderModuleSections(qs("#homeModuleSections"), vm.modules, state.charts, "homeMod", vm.departmentKey);
       qs("#homeModuleSections")?.classList.toggle("hidden", !(vm.modules && vm.modules.length));
     }
 
@@ -688,14 +667,17 @@
     const metaEl = qs("#homeDashboardMeta");
     const roleLabel =
       vm.roleId === "me"
-        ? "شخصی"
+        ? (ui().roleViewLabel ? ui().roleViewLabel("me") : "شخصی")
         : ROLE_VIEWS.find((r) => r.id === vm.roleId)?.label || vm.roleId;
     if (metaEl) {
-      let text = "نمای " + roleLabel;
-      if (vm.meta?.viewType) text += " (" + vm.meta.viewType + ")";
-      if (vm.meta?.computedAt) text += " · به‌روزرسانی: " + formatDate(vm.meta.computedAt);
-      if (vm.meta?.isStale) text += " · (داده قدیمی)";
-      metaEl.textContent = text;
+      metaEl.textContent = ui().buildMetaText
+        ? ui().buildMetaText({
+            roleLabel,
+            viewType: vm.meta?.viewType,
+            computedAt: vm.meta?.computedAt,
+            isStale: vm.meta?.isStale,
+          })
+        : "نمای " + roleLabel;
     }
   }
 

@@ -226,6 +226,12 @@ public sealed class DashboardAnalyticsService(
 
 
 
+            var filteredQueue = DashboardDepartmentModuleFilter.FilterQueue(cached.DepartmentKey, cached.QueueByModule);
+
+            var filteredModules = DashboardDepartmentModuleFilter.FilterModules(cached.DepartmentKey, cached.Modules);
+
+
+
             departments.Add(new DepartmentDashboardViewDto
 
             {
@@ -234,11 +240,11 @@ public sealed class DashboardAnalyticsService(
 
                 DepartmentTitle = cached.DepartmentTitle,
 
-                TotalQueueCount = cached.TotalQueueCount,
+                TotalQueueCount = filteredQueue.Sum(x => x.Count),
 
-                QueueByModule = cached.QueueByModule,
+                QueueByModule = filteredQueue,
 
-                Modules = cached.Modules,
+                Modules = filteredModules,
 
                 SpecificMetrics = cached.SpecificMetrics,
 
@@ -358,9 +364,15 @@ public sealed class DashboardAnalyticsService(
 
         var inboxLinks = departmentKey is null || resolvedKey == DashboardRoleResolver.ResolveDepartmentKey(userContext.Roles)
 
-            ? await LoadInboxQuickLinksAsync(ct)
+            ? await LoadInboxQuickLinksAsync(resolvedKey, ct)
 
             : [];
+
+
+
+        var filteredQueue = DashboardDepartmentModuleFilter.FilterQueue(resolvedKey, cached.QueueByModule);
+
+        var filteredModules = DashboardDepartmentModuleFilter.FilterModules(resolvedKey, cached.Modules);
 
 
 
@@ -382,11 +394,11 @@ public sealed class DashboardAnalyticsService(
 
                 DepartmentTitle = cached.DepartmentTitle,
 
-                TotalQueueCount = cached.TotalQueueCount,
+                TotalQueueCount = filteredQueue.Sum(x => x.Count),
 
-                QueueByModule = cached.QueueByModule,
+                QueueByModule = filteredQueue,
 
-                Modules = cached.Modules,
+                Modules = filteredModules,
 
                 SpecificMetrics = cached.SpecificMetrics,
 
@@ -624,7 +636,7 @@ public sealed class DashboardAnalyticsService(
 
 
 
-    private async Task<IReadOnlyList<InboxQuickLinkDto>> LoadInboxQuickLinksAsync(CancellationToken ct)
+    private async Task<IReadOnlyList<InboxQuickLinkDto>> LoadInboxQuickLinksAsync(string departmentKey, CancellationToken ct)
 
     {
 
@@ -637,6 +649,8 @@ public sealed class DashboardAnalyticsService(
 
 
         return kanban.Value
+
+            .Where(c => DashboardDepartmentModuleFilter.IsModuleVisible(departmentKey, c.Module.ToString()))
 
             .Take(8)
 

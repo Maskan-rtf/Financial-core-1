@@ -24,6 +24,7 @@ public interface IGuaranteeCaseDtoMapper
         FundCreditCapacitySnapshotDto? fundCreditCapacity = null);
     GuaranteeApplicationDto? MapApplication(GuaranteeCaseApplication? application);
     GuaranteeApprovalFormDto? MapApprovalForm(GuaranteeApprovalForm? form);
+    GuaranteeAmendmentDto? MapAmendment(GuaranteeCase entity);
     GuaranteeCaseDocumentDto MapDocument(GuaranteeCaseDocument document);
     GuaranteeCaseCommentDto MapComment(GuaranteeCaseComment comment, string? senderFullName = null);
     GuaranteeCaseCommentDto MapComment(GuaranteeCaseCommentListProjection projection);
@@ -57,6 +58,7 @@ public sealed class GuaranteeCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) :
         string? applicantPhoneNumber = null)
     {
         var companyDto = companyDtoMapper.Map(company);
+        var amendment = MapAmendment(entity);
 
         if (isInternalView)
         {
@@ -77,6 +79,7 @@ public sealed class GuaranteeCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) :
                 companyDto,
                 MapApplication(entity.Application),
                 MapApprovalForm(entity.ApprovalForm),
+                amendment,
                 applicantCreditSnapshot,
                 fundCreditCapacity);
         }
@@ -94,6 +97,7 @@ public sealed class GuaranteeCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) :
             companyDto,
             MapApplication(entity.Application),
             MapApprovalForm(entity.ApprovalForm),
+            amendment,
             applicantCreditSnapshot,
             fundCreditCapacity);
     }
@@ -150,6 +154,17 @@ public sealed class GuaranteeCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) :
             form.GuarantorsDescription,
             form.OtherNotes);
     }
+
+    public GuaranteeAmendmentDto? MapAmendment(GuaranteeCase entity)
+        => MapAmendment(
+            entity.AmendmentType,
+            entity.AmendmentReason,
+            entity.AmendmentRequestedValidityTo,
+            entity.AmendmentRequestedAmount,
+            entity.AmendmentApprovedValidityTo,
+            entity.AmendmentApprovedAmount,
+            entity.AmendmentCreatedAt,
+            entity.AmendmentCompletedAt);
 
     public GuaranteeCaseDto MapFromDetailProjection(
         GuaranteeCaseDetailProjection projection,
@@ -220,6 +235,16 @@ public sealed class GuaranteeCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) :
                 projection.ApprovalGuarantorsDescription,
                 projection.ApprovalOtherNotes);
 
+        var amendment = MapAmendment(
+            projection.AmendmentType,
+            projection.AmendmentReason,
+            projection.AmendmentRequestedValidityTo,
+            projection.AmendmentRequestedAmount,
+            projection.AmendmentApprovedValidityTo,
+            projection.AmendmentApprovedAmount,
+            projection.AmendmentCreatedAt,
+            projection.AmendmentCompletedAt);
+
         if (isInternalView)
         {
             return new GuaranteeCaseInternalDto(
@@ -239,6 +264,7 @@ public sealed class GuaranteeCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) :
                 companyDto,
                 application,
                 approvalForm,
+                amendment,
                 applicantCreditSnapshot,
                 fundCreditCapacity);
         }
@@ -256,6 +282,7 @@ public sealed class GuaranteeCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) :
             companyDto,
             application,
             approvalForm,
+            amendment,
             applicantCreditSnapshot,
             fundCreditCapacity);
     }
@@ -300,6 +327,16 @@ public sealed class GuaranteeCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) :
                 projection.CollateralDescription,
                 projection.FacilitySubject);
 
+        var amendment = MapAmendment(
+            projection.AmendmentType,
+            projection.AmendmentReason,
+            projection.AmendmentRequestedValidityTo,
+            projection.AmendmentRequestedAmount,
+            projection.AmendmentApprovedValidityTo,
+            projection.AmendmentApprovedAmount,
+            projection.AmendmentCreatedAt,
+            projection.AmendmentCompletedAt);
+
         if (isInternalView)
         {
             return new GuaranteeCaseInternalDto(
@@ -317,7 +354,9 @@ public sealed class GuaranteeCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) :
                 projection.UpdatedAt,
                 projection.CompletedAt,
                 companyDto,
-                application);
+                application,
+                null,
+                amendment);
         }
 
         return new GuaranteeCaseApplicantDto(
@@ -331,7 +370,9 @@ public sealed class GuaranteeCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) :
             projection.UpdatedAt,
             projection.CompletedAt,
             companyDto,
-            application);
+            application,
+            null,
+            amendment);
     }
 
     public GuaranteeCaseDocumentDto MapDocument(GuaranteeCaseDocument document)
@@ -443,4 +484,35 @@ public sealed class GuaranteeCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) :
             lastSetByUserId,
             lastSetByFullName,
             updatedAt);
+
+    private static GuaranteeAmendmentDto? MapAmendment(
+        Core.Domain.Enums.AmendmentType? amendmentType,
+        string? reason,
+        DateOnly? requestedValidityTo,
+        decimal? requestedAmount,
+        DateOnly? approvedValidityTo,
+        decimal? approvedAmount,
+        DateTimeOffset? createdAt,
+        DateTimeOffset? completedAt)
+    {
+        if (!amendmentType.HasValue
+            && string.IsNullOrWhiteSpace(reason)
+            && !requestedValidityTo.HasValue
+            && !requestedAmount.HasValue
+            && !approvedValidityTo.HasValue
+            && !approvedAmount.HasValue)
+        {
+            return null;
+        }
+
+        return new GuaranteeAmendmentDto(
+            amendmentType,
+            reason,
+            requestedValidityTo,
+            requestedAmount,
+            approvedValidityTo,
+            approvedAmount,
+            createdAt,
+            completedAt);
+    }
 }

@@ -14,5 +14,6 @@ public enum WorkflowAction
     CompletePayment = 10,
     Reject = 11,
     Cancel = 12,
-    Archive = 13
+    Archive = 13,
+    StageRollback = 14
 }

@@ -26,12 +26,19 @@ public interface ICaseDtoMapper
         ApplicantContactDto? applicantContact = null,
         string? applicantFullName = null,
         string? applicantPhoneNumber = null);
-    InvestmentCaseDto MapFromListProjection(InvestmentCaseListProjection projection, DateTimeOffset now, bool isInternalView);
+    InvestmentCaseDto MapFromListProjection(
+        InvestmentCaseListProjection projection,
+        DateTimeOffset now,
+        bool isInternalView,
+        CaseFinancialWorksheetDto? financialWorksheet = null,
+        IReadOnlyList<CaseValuationDto>? valuations = null);
     InvestmentCaseDto MapFromDetailProjection(
         InvestmentCaseListProjection projection,
         DateTimeOffset now,
         bool isInternalView,
-        ApplicantContactDto? applicantContact = null);
+        ApplicantContactDto? applicantContact = null,
+        CaseFinancialWorksheetDto? financialWorksheet = null,
+        IReadOnlyList<CaseValuationDto>? valuations = null);
     CaseCommentDto MapComment(InvestmentCaseComment comment, string? senderFullName = null);
     CaseWorkflowHistoryDto MapHistory(InvestmentCaseWorkflowHistory history, string? changedByFullName = null);
     CaseEvaluationDto MapEvaluation(InvestmentCaseEvaluation evaluation);
@@ -132,7 +139,9 @@ public sealed class CaseDtoMapper(
                 entity.CompletedAt,
                 company,
                 MapDataEntry1(entity.ApplicantProfile),
-                MapDataEntry2(entity.AttractionBasis));
+                MapDataEntry2(entity.AttractionBasis),
+                MapFinancialWorksheet(entity.FinancialWorksheet),
+                MapValuations(entity.Valuations));
         }
 
         var applicant = mapper.Map<InvestmentCaseApplicantDto>(entity);
@@ -142,7 +151,9 @@ public sealed class CaseDtoMapper(
             Company = company,
             Applicant = applicantContact,
             ApplicantProfile = MapDataEntry1(entity.ApplicantProfile),
-            AttractionBasis = MapDataEntry2(entity.AttractionBasis)
+            AttractionBasis = MapDataEntry2(entity.AttractionBasis),
+            FinancialWorksheet = MapFinancialWorksheet(entity.FinancialWorksheet),
+            Valuations = MapValuations(entity.Valuations)
         };
     }
 
@@ -150,21 +161,26 @@ public sealed class CaseDtoMapper(
         InvestmentCaseListProjection projection,
         DateTimeOffset now,
         bool isInternalView,
-        ApplicantContactDto? applicantContact = null)
+        ApplicantContactDto? applicantContact = null,
+        CaseFinancialWorksheetDto? financialWorksheet = null,
+        IReadOnlyList<CaseValuationDto>? valuations = null)
     {
         if (!isInternalView)
         {
-            var applicantDto = (InvestmentCaseApplicantDto)MapFromListProjection(projection, now, isInternalView: false);
+            var applicantDto = (InvestmentCaseApplicantDto)MapFromListProjection(
+                projection, now, isInternalView: false, financialWorksheet, valuations);
             return applicantDto with { Applicant = applicantContact };
         }
 
-        return MapFromListProjection(projection, now, isInternalView: true);
+        return MapFromListProjection(projection, now, isInternalView: true, financialWorksheet, valuations);
     }
 
     public InvestmentCaseDto MapFromListProjection(
         InvestmentCaseListProjection projection,
         DateTimeOffset now,
-        bool isInternalView)
+        bool isInternalView,
+        CaseFinancialWorksheetDto? financialWorksheet = null,
+        IReadOnlyList<CaseValuationDto>? valuations = null)
     {
         var company = companyDtoMapper.MapFlat(
             projection.CompanyId,
@@ -211,7 +227,9 @@ public sealed class CaseDtoMapper(
                 projection.CompletedAt,
                 company,
                 applicantProfile,
-                attractionBasis);
+                attractionBasis,
+                financialWorksheet,
+                valuations);
         }
 
         return new InvestmentCaseApplicantDto(
@@ -226,7 +244,36 @@ public sealed class CaseDtoMapper(
             projection.CompletedAt,
             company,
             ApplicantProfile: applicantProfile,
-            AttractionBasis: attractionBasis);
+            AttractionBasis: attractionBasis,
+            FinancialWorksheet: financialWorksheet,
+            Valuations: valuations);
+    }
+
+    private static CaseFinancialWorksheetDto? MapFinancialWorksheet(InvestmentCaseFinancialWorksheet? worksheet)
+        => worksheet is null
+            ? null
+            : new CaseFinancialWorksheetDto(
+                worksheet.BankName,
+                worksheet.Iban,
+                worksheet.ApprovedAmount,
+                worksheet.PaymentSchedule,
+                worksheet.Notes);
+
+    private static IReadOnlyList<CaseValuationDto>? MapValuations(IEnumerable<InvestmentCaseValuation>? valuations)
+    {
+        if (valuations is null)
+            return null;
+
+        var items = valuations
+            .OrderBy(v => v.CreatedAt)
+            .Select(v => new CaseValuationDto(
+                v.Type,
+                v.Amount,
+                string.IsNullOrWhiteSpace(v.Notes) ? null : v.Notes,
+                v.CreatedAt))
+            .ToList();
+
+        return items.Count == 0 ? null : items;
     }
 
     private static DataEntry1Dto? MapDataEntry1(InvestmentCaseApplicantProfile? dataEntry)

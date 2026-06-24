@@ -2,6 +2,7 @@
   const ui = () => window.DashboardUi || {};
   const pick = (...args) => (ui().pick ? ui().pick(...args) : undefined);
   const formatNum = (n) => (ui().formatNum ? ui().formatNum(n) : String(n));
+  const formatDays = (n) => (ui().formatDays ? ui().formatDays(n) : String(n) + " روز");
 
   const KPI_ROLES = ["Admin", "CEO", "BoardMember", "TechnicalExpert"];
 
@@ -55,7 +56,10 @@
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { display: false },
+        legend: {
+          position: "bottom",
+          labels: { color: "#cbd5e1", padding: 10, usePointStyle: true, font: { size: 11 } },
+        },
         tooltip: {
           backgroundColor: "rgba(15,23,42,.92)",
           titleColor: "#f1f5f9",
@@ -83,15 +87,48 @@
     const diffMs = Date.now() - then;
     const hours = Math.floor(diffMs / 3600000);
     if (hours < 1) return "کمتر از ۱ ساعت پیش";
-    if (hours < 24) return hours + " ساعت پیش";
+    if (hours < 24) return formatNum(hours) + " ساعت پیش";
     const days = Math.floor(hours / 24);
-    return days + " روز پیش";
+    return formatNum(days) + " روز پیش";
   }
 
   function hoursToDaysLabel(hours) {
     const h = Number(hours) || 0;
-    if (h >= 48) return (h / 24).toFixed(1) + " روز";
-    return h.toFixed(1) + " ساعت";
+    if (h >= 48) return formatNum((h / 24).toFixed(1)) + " روز";
+    return formatNum(h.toFixed(1)) + " ساعت";
+  }
+
+  function formatAvgDays(value) {
+    const n = Number(value) || 0;
+    return formatNum(n.toFixed(1)) + " روز";
+  }
+
+  function renderDepartmentSummaryChips(employees) {
+    if (!employees.length) return "";
+    const totalActions = employees.reduce((sum, e) => sum + (Number(pick(e, "totalTasksResolved", "TotalTasksResolved")) || 0), 0);
+    const avgAll =
+      employees.reduce((sum, e) => sum + (Number(pick(e, "averageResolutionDays", "AverageResolutionDays")) || 0), 0) /
+      employees.length;
+    return (
+      '<div class="kpi-dept-summary">' +
+      '<span class="kpi-dept-chip"><strong>' +
+      formatNum(employees.length) +
+      "</strong> نفر</span>" +
+      '<span class="kpi-dept-chip">میانگین واحد: <strong>' +
+      formatAvgDays(avgAll) +
+      "</strong></span>" +
+      '<span class="kpi-dept-chip">کل اقدامات: <strong>' +
+      formatNum(totalActions) +
+      "</strong></span>" +
+      "</div>"
+    );
+  }
+
+  function filterSlaDepartments(departments) {
+    return (departments || []).filter((dept) => {
+      const key = String(pick(dept, "departmentKey", "DepartmentKey") || "").toLowerCase();
+      return key !== "management";
+    });
   }
 
   function renderDepartmentSection(dept, idx) {
@@ -111,7 +148,7 @@
           "<tr><td>" +
           name +
           "</td><td>" +
-          avg +
+          formatAvgDays(avg) +
           "</td><td>" +
           hoursToDaysLabel(min) +
           "</td><td>" +
@@ -129,21 +166,24 @@
       '">' +
       '<div class="kpi-dept-section__head"><h3>' +
       title +
-      '</h3><span class="muted">' +
-      formatNum(employees.length) +
-      " نفر</span></div>" +
+      '</h3></div>' +
+      renderDepartmentSummaryChips(employees) +
       '<div class="kpi-dept-section__charts">' +
-      '<div class="kpi-chart-card"><div class="kpi-chart-card__title">میانگین زمان رسیدگی (روز)</div>' +
+      '<div class="kpi-chart-card">' +
+      '<div class="kpi-chart-card__title">میانگین زمان رسیدگی هر کارمند</div>' +
+      '<p class="kpi-chart-card__hint muted">هر میله = میانگین روزهای رسیدگی به اقدامات در بازه انتخاب‌شده</p>' +
       '<div class="kpi-chart-card__canvas"><canvas id="kpiBar_' +
       idx +
       '"></canvas></div></div>' +
-      '<div class="kpi-chart-card"><div class="kpi-chart-card__title">پراکندگی زمان رسیدگی</div>' +
-      '<div class="kpi-chart-card__canvas"><canvas id="kpiScatter_' +
+      '<div class="kpi-chart-card">' +
+      '<div class="kpi-chart-card__title">محدوده زمان رسیدگی (حداقل / میانگین / حداکثر)</div>' +
+      '<p class="kpi-chart-card__hint muted">مقایسه سریع پراکندگی SLA بین کارمندان — همان داده جدول</p>' +
+      '<div class="kpi-chart-card__canvas"><canvas id="kpiRange_' +
       idx +
       '"></canvas></div></div>' +
       "</div>" +
       '<div class="kpi-table-wrap"><table class="kpi-table"><thead><tr>' +
-      "<th>کارمند</th><th>میانگین (روز)</th><th>حداقل</th><th>حداکثر</th><th>تعداد اقدام</th>" +
+      "<th>کارمند</th><th>میانگین رسیدگی</th><th>کوتاه‌ترین</th><th>طولانی‌ترین</th><th>تعداد اقدام</th>" +
       "</tr></thead><tbody>" +
       rows +
       "</tbody></table></div></section>"
@@ -159,7 +199,9 @@
       const labels = employees.map(
         (e) => pick(e, "fullName", "FullName") || pick(e, "userId", "UserId") || "—"
       );
-      const avgDays = employees.map((e) => pick(e, "averageResolutionDays", "AverageResolutionDays") || 0);
+      const avgDays = employees.map((e) => Number(pick(e, "averageResolutionDays", "AverageResolutionDays")) || 0);
+      const minDays = employees.map((e) => Number(pick(e, "minResolutionHours", "MinResolutionHours") || 0) / 24);
+      const maxDays = employees.map((e) => Number(pick(e, "maxResolutionHours", "MaxResolutionHours") || 0) / 24);
 
       const barCanvas = document.getElementById("kpiBar_" + idx);
       if (barCanvas && labels.length) {
@@ -179,71 +221,78 @@
           options: {
             ...chartDefaults(),
             indexAxis: "y",
-            scales: {
-              x: { ticks: { color: "#94a3b8" }, grid: { color: "rgba(255,255,255,0.05)" } },
-              y: { ticks: { color: "#94a3b8", font: { size: 11 } }, grid: { display: false } },
-            },
-          },
-        });
-      }
-
-      const scatterPoints = [];
-      employees.forEach((emp, empIdx) => {
-        const name = pick(emp, "fullName", "FullName") || pick(emp, "userId", "UserId") || "—";
-        const samples = pick(emp, "resolutionHoursSamples", "ResolutionHoursSamples") || [];
-        samples.forEach((h) => {
-          scatterPoints.push({ x: empIdx + 1, y: Number(h) / 24, label: name });
-        });
-      });
-
-      const scatterCanvas = document.getElementById("kpiScatter_" + idx);
-      if (scatterCanvas && scatterPoints.length) {
-        createChart(scatterCanvas, {
-          type: "scatter",
-          data: {
-            datasets: [
-              {
-                label: "نمونه رسیدگی (روز)",
-                data: scatterPoints,
-                backgroundColor: colors[idx % colors.length] + "aa",
-                pointRadius: 4,
-                pointHoverRadius: 6,
-              },
-            ],
-          },
-          options: {
-            ...chartDefaults(),
             plugins: {
               ...chartDefaults().plugins,
+              legend: { display: false },
               tooltip: {
                 ...chartDefaults().plugins.tooltip,
                 callbacks: {
                   label(ctx) {
-                    const p = ctx.raw || {};
-                    return (p.label || "") + ": " + (Number(p.y) || 0).toFixed(2) + " روز";
+                    return "میانگین: " + formatAvgDays(ctx.parsed.x);
                   },
                 },
               },
             },
             scales: {
               x: {
-                type: "linear",
-                ticks: {
-                  color: "#94a3b8",
-                  callback(v) {
-                    const emp = employees[v - 1];
-                    if (!emp) return "";
-                    const n = pick(emp, "fullName", "FullName") || "";
-                    return n.length > 10 ? n.slice(0, 10) + "…" : n;
+                ticks: { color: "#94a3b8", callback: (v) => formatNum(v) + " روز" },
+                grid: { color: "rgba(255,255,255,0.05)" },
+                title: { display: true, text: "روز", color: "#94a3b8" },
+              },
+              y: { ticks: { color: "#94a3b8", font: { size: 11 } }, grid: { display: false } },
+            },
+          },
+        });
+      }
+
+      const rangeCanvas = document.getElementById("kpiRange_" + idx);
+      if (rangeCanvas && labels.length) {
+        createChart(rangeCanvas, {
+          type: "bar",
+          data: {
+            labels,
+            datasets: [
+              {
+                label: "حداقل (روز)",
+                data: minDays,
+                backgroundColor: "rgba(34,197,94,.75)",
+                borderRadius: 4,
+              },
+              {
+                label: "میانگین (روز)",
+                data: avgDays,
+                backgroundColor: colors[idx % colors.length] + "cc",
+                borderRadius: 4,
+              },
+              {
+                label: "حداکثر (روز)",
+                data: maxDays,
+                backgroundColor: "rgba(239,68,68,.75)",
+                borderRadius: 4,
+              },
+            ],
+          },
+          options: {
+            ...chartDefaults(),
+            indexAxis: "y",
+            plugins: {
+              ...chartDefaults().plugins,
+              tooltip: {
+                ...chartDefaults().plugins.tooltip,
+                callbacks: {
+                  label(ctx) {
+                    return (ctx.dataset.label || "") + ": " + formatNum(Number(ctx.parsed.x).toFixed(2)) + " روز";
                   },
                 },
-                grid: { color: "rgba(255,255,255,0.05)" },
               },
-              y: {
+            },
+            scales: {
+              x: {
+                ticks: { color: "#94a3b8", callback: (v) => formatNum(v) + " روز" },
+                grid: { color: "rgba(255,255,255,0.05)" },
                 title: { display: true, text: "روز", color: "#94a3b8" },
-                ticks: { color: "#94a3b8" },
-                grid: { color: "rgba(255,255,255,0.05)" },
               },
+              y: { ticks: { color: "#94a3b8", font: { size: 11 } }, grid: { display: false } },
             },
           },
         });
@@ -271,7 +320,7 @@
 
   async function runKpiJob() {
     const meta = qs("#employeeKpiMeta");
-    if (meta) meta.textContent = "در حال محاسبه KPI — لطفاً صبر کنید…";
+    if (meta) meta.textContent = "در حال محاسبه شاخص‌های SLA — لطفاً صبر کنید…";
     await state.panel.apiRequest({
       method: "POST",
       path: "/api/v1/analytics/employee-kpis/run-job",
@@ -300,24 +349,24 @@
       const meta = qs("#employeeKpiMeta");
       if (meta) {
         meta.textContent =
-          "آخرین به‌روزرسانی: " +
+          "زمان رسیدگی از تاریخچه گردش کار محاسبه شده است · آخرین به‌روزرسانی: " +
           formatRelativeTime(computedAt) +
-          (isStale ? " (داده قدیمی — در حال محاسبه مجدد)" : "");
+          (isStale ? " · (داده قدیمی — «اجرای محاسبه» را بزنید)" : "");
       }
 
-      const departments = pick(raw, "departments", "Departments") || [];
+      const departments = filterSlaDepartments(pick(raw, "departments", "Departments"));
       const host = qs("#employeeKpiDepartments");
       if (host) {
         if (!departments.length) {
           host.innerHTML =
-            '<p class="muted">داده KPI برای این بازه موجود نیست. برای محاسبه فوری روی «اجرای محاسبه» کلیک کنید یا منتظر job پس‌زمینه بمانید.</p>';
+            '<p class="muted">برای این بازه داده‌ای ثبت نشده است. با «اجرای محاسبه» می‌توانید محاسبه را فوری انجام دهید.</p>';
         } else {
           host.innerHTML = departments.map(renderDepartmentSection).join("");
           renderCharts(departments);
         }
       }
     } catch (err) {
-      setError(err?.message || "بارگذاری KPI ناموفق بود.");
+      setError(err?.message || "بارگذاری شاخص‌های SLA ناموفق بود.");
       qs("#employeeKpiDepartments").innerHTML = "";
       destroyCharts();
     } finally {

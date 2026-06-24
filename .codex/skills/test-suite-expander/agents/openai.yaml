@@ -1,4 +1,0 @@
-interface:
-  display_name: "Test Suite Expander"
-  short_description: "Add targeted unit, integration, and E2E tests"
-  default_prompt: "Use $test-suite-expander to add high-value unit, integration, and end-to-end tests for a change."

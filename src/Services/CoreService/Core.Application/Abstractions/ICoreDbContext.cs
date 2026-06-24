@@ -24,6 +24,7 @@ public interface ICoreDbContext
     DbSet<GuaranteeCase> GuaranteeCases { get; }
     DbSet<GuaranteeCaseApplication> GuaranteeCaseApplications { get; }
     DbSet<GuaranteeApprovalForm> GuaranteeApprovalForms { get; }
+    DbSet<GuaranteeAmendmentHistoryRecord> GuaranteeAmendmentHistoryRecords { get; }
     DbSet<GuaranteeCaseDocument> GuaranteeCaseDocuments { get; }
     DbSet<GuaranteeCaseComment> GuaranteeCaseComments { get; }
     DbSet<GuaranteeCaseWorkflowHistory> GuaranteeCaseWorkflowHistories { get; }

@@ -34,6 +34,7 @@ public sealed class CoreDbContext : DbContextBase, ICoreDbContext
     public DbSet<GuaranteeCase> GuaranteeCases => Set<GuaranteeCase>();
     public DbSet<GuaranteeCaseApplication> GuaranteeCaseApplications => Set<GuaranteeCaseApplication>();
     public DbSet<GuaranteeApprovalForm> GuaranteeApprovalForms => Set<GuaranteeApprovalForm>();
+    public DbSet<GuaranteeAmendmentHistoryRecord> GuaranteeAmendmentHistoryRecords => Set<GuaranteeAmendmentHistoryRecord>();
     public DbSet<GuaranteeCaseDocument> GuaranteeCaseDocuments => Set<GuaranteeCaseDocument>();
     public DbSet<GuaranteeCaseComment> GuaranteeCaseComments => Set<GuaranteeCaseComment>();
     public DbSet<GuaranteeCaseWorkflowHistory> GuaranteeCaseWorkflowHistories => Set<GuaranteeCaseWorkflowHistory>();

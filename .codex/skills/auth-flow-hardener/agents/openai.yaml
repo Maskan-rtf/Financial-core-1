@@ -1,4 +1,0 @@
-interface:
-  display_name: "Auth Flow Hardener"
-  short_description: "Implement or repair auth and authorization"
-  default_prompt: "Use $auth-flow-hardener to implement or fix JWT, cookie, role, and route-protection flows."

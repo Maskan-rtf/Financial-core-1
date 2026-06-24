@@ -38,10 +38,18 @@ public sealed class DashboardModuleAggregators(ICoreDbContext dbContext)
         CancellationToken ct)
     {
         var sixMonthsAgo = computedAt.AddMonths(-6);
-        var investment = await AggregateInvestmentAsync(sixMonthsAgo, queueDepartmentKey, ct);
-        var guarantee = await AggregateGuaranteeAsync(sixMonthsAgo, queueDepartmentKey, ct);
-        var loan = await AggregateLoanAsync(sixMonthsAgo, queueDepartmentKey, ct);
-        return [investment, guarantee, loan];
+        var modules = new List<ModuleDashboardMetricsDto>(3);
+
+        if (DashboardDepartmentModuleFilter.IsModuleVisible(queueDepartmentKey, "Investment"))
+            modules.Add(await AggregateInvestmentAsync(sixMonthsAgo, queueDepartmentKey, ct));
+
+        if (DashboardDepartmentModuleFilter.IsModuleVisible(queueDepartmentKey, "Guarantee"))
+            modules.Add(await AggregateGuaranteeAsync(sixMonthsAgo, queueDepartmentKey, ct));
+
+        if (DashboardDepartmentModuleFilter.IsModuleVisible(queueDepartmentKey, "Loan"))
+            modules.Add(await AggregateLoanAsync(sixMonthsAgo, queueDepartmentKey, ct));
+
+        return modules;
     }
 
     public async Task<SystemHealthDto> AggregateSystemHealthAsync(DateTimeOffset computedAt, CancellationToken ct)
@@ -235,14 +243,7 @@ public sealed class DashboardModuleAggregators(ICoreDbContext dbContext)
         }
 
         if (module.Equals("GuaranteeRenewal", StringComparison.OrdinalIgnoreCase))
-        {
-            var repRole = DashboardRoleResolver.GetDepartmentRepresentativeRole(departmentKey);
-            if (!repRole.Equals(UserRoleClaims.Ceo, StringComparison.OrdinalIgnoreCase))
-                return 0;
-
-            return await dbContext.GuaranteeRenewalCases.AsNoTracking()
-                .CountAsync(c => !c.IsDeleted && c.CurrentStatus == GuaranteeRenewalStatus.CeoReview, ct);
-        }
+            return 0;
 
         return 0;
     }
@@ -369,13 +370,18 @@ public sealed class DashboardModuleAggregators(ICoreDbContext dbContext)
         var pendingCeo = await dbContext.GuaranteeCases.AsNoTracking()
             .CountAsync(c => !c.IsDeleted &&
                 (c.CurrentStatus == GuaranteeCaseStatus.CeoApprovalInitial ||
-                 c.CurrentStatus == GuaranteeCaseStatus.CeoApprovalFinal), ct);
+                 c.CurrentStatus == GuaranteeCaseStatus.CeoApprovalFinal ||
+                 c.CurrentStatus == GuaranteeCaseStatus.AmendmentCeoApproval), ct);
 
         var rejected = await dbContext.GuaranteeCases.AsNoTracking()
             .CountAsync(c => !c.IsDeleted && c.CurrentStatus == GuaranteeCaseStatus.Rejected, ct);
 
         var cancelled = await dbContext.GuaranteeCases.AsNoTracking()
-            .CountAsync(c => !c.IsDeleted && c.CurrentStatus == GuaranteeCaseStatus.Cancelled, ct);
+            .CountAsync(
+                c => !c.IsDeleted
+                    && (c.CurrentStatus == GuaranteeCaseStatus.Cancelled
+                        || c.CurrentStatus == GuaranteeCaseStatus.AmendmentCompleted),
+                ct);
 
         var archived = await dbContext.GuaranteeCases.AsNoTracking()
             .CountAsync(c => !c.IsDeleted && c.CurrentStatus == GuaranteeCaseStatus.Archived, ct);

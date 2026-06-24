@@ -169,6 +169,7 @@ public sealed class EmployeeKpiAggregationService(
                     .ThenBy(e => e.UserId)
                     .ToList()
             })
+            .Where(d => EmployeeKpiDepartmentFilter.IncludeInSlaDashboard(d.DepartmentKey))
             .OrderBy(d => d.DepartmentKey)
             .ToList();
 

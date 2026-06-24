@@ -85,4 +85,26 @@ public sealed class GuaranteeApprovalForm : Entity<Guid>, IAuditableEntity
         OtherNotes = otherNotes;
         UpdatedAt = DateTimeOffset.UtcNow;
     }
+
+    public void ApplyAmendmentExtension(DateOnly? expiryDate)
+    {
+        if (!expiryDate.HasValue)
+            return;
+
+        ExpiryDate = expiryDate;
+
+        if (IssuanceDate.HasValue)
+            ActiveDurationDays = Math.Max(0, expiryDate.Value.DayNumber - IssuanceDate.Value.DayNumber);
+
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    public void ApplyAmendmentReduction(decimal? guaranteeAmount)
+    {
+        if (!guaranteeAmount.HasValue)
+            return;
+
+        GuaranteeAmount = guaranteeAmount;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
 }

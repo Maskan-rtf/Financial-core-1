@@ -88,4 +88,26 @@ public sealed class GuaranteeCaseApplication : Entity<Guid>, IAuditableEntity
         FacilitySubject = facilitySubject;
         UpdatedAt = DateTimeOffset.UtcNow;
     }
+
+    public void ApplyAmendmentExtension(DateOnly? validityTo)
+    {
+        if (!validityTo.HasValue)
+            return;
+
+        ValidityTo = validityTo;
+
+        if (ValidityFrom.HasValue)
+            InitialValidityDays = Math.Max(0, validityTo.Value.DayNumber - ValidityFrom.Value.DayNumber);
+
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    public void ApplyAmendmentReduction(decimal? requestedGuaranteeAmount)
+    {
+        if (!requestedGuaranteeAmount.HasValue)
+            return;
+
+        RequestedGuaranteeAmount = requestedGuaranteeAmount;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
 }

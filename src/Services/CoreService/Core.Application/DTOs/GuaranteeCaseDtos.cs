@@ -30,6 +30,7 @@ public sealed record GuaranteeCaseApplicantDto(
     CompanyDto? Company,
     GuaranteeApplicationDto? Application = null,
     GuaranteeApprovalFormDto? ApprovalForm = null,
+    GuaranteeAmendmentDto? Amendment = null,
     GuaranteeApplicantCreditSnapshotDto? ApplicantCreditSnapshot = null,
     FundCreditCapacitySnapshotDto? FundCreditCapacity = null)
     : GuaranteeCaseDto(Id, CaseNumber, Title, ApplicantType, CurrentPhase, CurrentStatus, CreatedAt, UpdatedAt, CompletedAt);
@@ -51,6 +52,7 @@ public sealed record GuaranteeCaseInternalDto(
     CompanyDto? Company,
     GuaranteeApplicationDto? Application = null,
     GuaranteeApprovalFormDto? ApprovalForm = null,
+    GuaranteeAmendmentDto? Amendment = null,
     GuaranteeApplicantCreditSnapshotDto? ApplicantCreditSnapshot = null,
     FundCreditCapacitySnapshotDto? FundCreditCapacity = null)
     : GuaranteeCaseDto(Id, CaseNumber, Title, ApplicantType, CurrentPhase, CurrentStatus, CreatedAt, UpdatedAt, CompletedAt);
@@ -128,6 +130,38 @@ public sealed record GuaranteeApprovalFormDto(
     string? GuarantorsDescription,
     string? OtherNotes);
 
+public sealed record GuaranteeAmendmentDto(
+    AmendmentType? AmendmentType,
+    string? Reason,
+    DateOnly? RequestedValidityTo,
+    decimal? RequestedAmount,
+    DateOnly? ApprovedValidityTo,
+    decimal? ApprovedAmount,
+    DateTimeOffset? CreatedAt,
+    DateTimeOffset? CompletedAt,
+    GuaranteeAmendmentValueSnapshotDto? PreviousValues = null,
+    GuaranteeAmendmentValueSnapshotDto? NewValues = null,
+    IReadOnlyList<GuaranteeAmendmentHistoryRecordDto>? History = null);
+
+public sealed record GuaranteeAmendmentValueSnapshotDto(
+    DateOnly? ValidityTo,
+    decimal? GuaranteeAmount);
+
+public sealed record GuaranteeAmendmentHistoryRecordDto(
+    Guid Id,
+    AmendmentType AmendmentType,
+    GuaranteeAmendmentHistoryStatus Status,
+    GuaranteeAmendmentValueSnapshotDto? PreviousValues,
+    GuaranteeAmendmentValueSnapshotDto? NewValues,
+    string Reason,
+    string CreatedBy,
+    string? CreatedByFullName,
+    DateTimeOffset CreatedAt,
+    string? ApprovalUser,
+    string? ApprovalUserFullName,
+    DateTimeOffset? ApprovedAt,
+    string? DecisionReason);
+
 public sealed record GuaranteeCaseDocumentDto(
     Guid Id,
     GuaranteeDocumentType DocumentType,
@@ -177,3 +211,32 @@ public sealed record GuaranteeRenewalDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset? UpdatedAt,
     DateTimeOffset? CompletedAt);
+
+public sealed record GuaranteeSourceSnapshotDto(
+    Guid CaseId,
+    string CaseNumber,
+    decimal? GuaranteeAmount,
+    string? BeneficiaryName,
+    DateOnly? IssuanceDate,
+    DateOnly? ExpiryDate,
+    decimal? CommissionAmount,
+    decimal? DepositAmount,
+    decimal? ActiveCommitments,
+    bool SettlementConfirmationRequired,
+    bool HasIssuanceDocument,
+    string? IssuanceDocumentFileName);
+
+public sealed record GuaranteeCancellationDetailsDto(
+    Guid CaseId,
+    string CaseNumber,
+    GuaranteeCaseStatus CurrentStatus,
+    AmendmentType? AmendmentType,
+    string? AmendmentReason,
+    string? OriginalGuaranteeReference,
+    bool SettlementConfirmationRequired,
+    bool RequiresCreditReview,
+    bool LegalOverrideApproved,
+    DateTimeOffset? AmendmentCreatedAt,
+    DateTimeOffset? AmendmentCompletedAt,
+    GuaranteeSourceSnapshotDto Source,
+    IReadOnlyList<GuaranteeCaseDocumentDto> Documents);

@@ -61,6 +61,7 @@ public sealed class GuaranteeRenewalCaseRepository(CoreDbContext dbContext) : IG
             .OrderByDescending(x => x.UpdatedAt ?? x.CreatedAt)
             .Select(x => new GuaranteeRenewalKanbanProjection(
                 x.Id,
+                x.ParentGuaranteeCaseId,
                 x.CaseNumber,
                 x.CurrentStatus,
                 x.CreatedAt,

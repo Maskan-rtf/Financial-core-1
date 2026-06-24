@@ -78,6 +78,24 @@
     return model.normalizeRole(session.userRoleText, session.userRoleNumber);
   }
 
+  async function refreshStageRollback() {
+    if (!window.CaseStageRollback) return;
+    await window.CaseStageRollback.refresh({
+      panel: state.panel,
+      module: "investment",
+      host: "portalStageRollback",
+      getCaseId: function () {
+        return state.caseId;
+      },
+      getRole: getSessionRole,
+      onSuccess: async function (msg) {
+        setPortalInfo(msg);
+        await refreshCase();
+      },
+      onError: setPortalError,
+    });
+  }
+
   function isInternalSession() {
     return model.isInternalRole(getSessionRole());
   }
@@ -166,12 +184,22 @@
 
   function pickDataEntry1(obj) {
     if (!obj || typeof obj !== "object") return null;
-    return obj.dataEntry1 || obj.DataEntry1 || null;
+    return obj.dataEntry1 || obj.DataEntry1 || obj.applicantProfile || obj.ApplicantProfile || null;
   }
 
   function pickDataEntry2(obj) {
     if (!obj || typeof obj !== "object") return null;
-    return obj.dataEntry2 || obj.DataEntry2 || null;
+    return obj.dataEntry2 || obj.DataEntry2 || obj.attractionBasis || obj.AttractionBasis || null;
+  }
+
+  function pickFinancialWorksheet(obj) {
+    if (!obj || typeof obj !== "object") return null;
+    return obj.financialWorksheet || obj.FinancialWorksheet || null;
+  }
+
+  function pickValuations(obj) {
+    if (!obj || typeof obj !== "object") return [];
+    return obj.valuations || obj.Valuations || [];
   }
 
   function pickProp(obj, camel, pascal) {
@@ -392,22 +420,7 @@
     });
   }
 
-  async function refreshCase() {
-    const caseId = readCaseId();
-    state.caseId = caseId;
-    if (!caseId) {
-      state.caseData = null;
-      state.history = [];
-      state.documents = [];
-      state.documentsLatest = [];
-      state.documentVersionGroups = [];
-      state.comments = [];
-      state.payments = [];
-      state.paymentsSummary = null;
-      render();
-      return;
-    }
-
+  async function fetchInvestmentCaseData(caseId) {
     const session = state.panel.getActiveSession();
     if (!session) throw new Error("ابتدا وارد سامانه شوید.");
 
@@ -427,7 +440,7 @@
         state.payments = [];
         state.paymentsSummary = null;
         render();
-        return;
+        return false;
       }
       throw error;
     }
@@ -494,13 +507,51 @@
     }
 
     await refreshPayments(caseId);
+    return true;
+  }
 
-    state.panel.setCurrentCaseId(caseId);
-    render();
+  async function refreshCase(previousStatus) {
+    const caseId = readCaseId();
+    state.caseId = caseId;
+    if (!caseId) {
+      state.caseData = null;
+      state.history = [];
+      state.documents = [];
+      state.documentsLatest = [];
+      state.documentVersionGroups = [];
+      state.comments = [];
+      state.payments = [];
+      state.paymentsSummary = null;
+      render();
+      await refreshStageRollback();
+      return;
+    }
+
+    const applyRefresh = async function () {
+      const loaded = await fetchInvestmentCaseData(caseId);
+      if (loaded === false) return;
+      state.panel.setCurrentCaseId(caseId);
+      render();
+    };
+
+    if (previousStatus != null && window.PortalCaseRefresh) {
+      await window.PortalCaseRefresh.refreshUntilChanged(
+        applyRefresh,
+        function () {
+          return pickStatus(state.caseData);
+        },
+        previousStatus
+      );
+    } else {
+      await applyRefresh();
+    }
+    await refreshStageRollback();
   }
 
   async function refreshPayments(caseId) {
-    if (!isInternalSession()) {
+    const status = pickStatus(state.caseData);
+    const allowPayments = isInternalSession() || status === 16 || status === 19;
+    if (!allowPayments) {
       state.payments = [];
       state.paymentsSummary = null;
       return;
@@ -1012,6 +1063,289 @@
     card.appendChild(wrap);
   }
 
+  function valuationTypeLabel(type) {
+    const n = Number(type);
+    if (n === 1) return "ارزش‌گذاری اولیه";
+    if (n === 2) return "ارزش‌گذاری ثانویه";
+    return String(type || "—");
+  }
+
+  function formatCaseDate(iso) {
+    if (!iso) return "—";
+    try {
+      return new Date(iso).toLocaleString("fa-IR");
+    } catch {
+      return String(iso);
+    }
+  }
+
+  function renderAllDocumentsArchive(parent) {
+    const wrap = el("div", "portal-doc-archive");
+    if (!state.documents.length) {
+      wrap.appendChild(el("div", "muted", "هنوز مدرکی بارگذاری نشده است."));
+      parent.appendChild(wrap);
+      return;
+    }
+
+    const byType = new Map();
+    state.documents.forEach((doc) => {
+      const type = Number(doc.documentType ?? doc.DocumentType);
+      if (!byType.has(type)) byType.set(type, []);
+      byType.get(type).push(doc);
+    });
+
+    Array.from(byType.keys())
+      .sort((a, b) => a - b)
+      .forEach((type) => {
+        const versions = byType
+          .get(type)
+          .slice()
+          .sort((a, b) => Number(b.version ?? b.Version ?? 0) - Number(a.version ?? a.Version ?? 0));
+        const block = el("div", "portal-doc-archive__type");
+        block.appendChild(el("div", "portal-doc-archive__type-title", documentTypeLabel(type)));
+        versions.forEach((doc) => {
+          const id = doc.id || doc.Id;
+          const ver = doc.version ?? doc.Version ?? 1;
+          const name = doc.fileName || doc.FileName || "فایل";
+          const size = doc.fileSize || doc.FileSize;
+          const row = el("div", "portal-doc-archive__row");
+          const meta = el("div", "portal-doc-archive__meta");
+          meta.textContent =
+            "نسخه " +
+            ver +
+            " — " +
+            name +
+            (size ? " · " + Math.round(Number(size) / 1024) + " KB" : "") +
+            (formatUploadedAt(doc) ? " · " + formatUploadedAt(doc) : "");
+          row.appendChild(meta);
+          if (id) row.appendChild(createButton("دانلود", "btn--sm", "download-document", { documentId: id }));
+          block.appendChild(row);
+        });
+        wrap.appendChild(block);
+      });
+    parent.appendChild(wrap);
+  }
+
+  function renderAllCommentsHistory(parent) {
+    const items = state.comments
+      .slice()
+      .sort(
+        (a, b) =>
+          new Date(a.createdAt || a.CreatedAt || 0).getTime() -
+          new Date(b.createdAt || b.CreatedAt || 0).getTime()
+      );
+    if (!items.length) {
+      parent.appendChild(el("div", "muted", "نظری ثبت نشده است."));
+      return;
+    }
+    if (window.UIComponents && UIComponents.renderCommentThreadList) {
+      parent.appendChild(
+        UIComponents.renderCommentThreadList(items, {
+          module: "investment",
+          history: state.history,
+          allComments: state.comments,
+        })
+      );
+      return;
+    }
+    const block = el("div", "portal-thread");
+    const list = el("div", "portal-thread__list");
+    items.forEach((comment) => {
+      const row = el("div", "portal-thread__item");
+      const phase = Number(comment.phase ?? comment.Phase);
+      const phaseTitle = model.PHASES[phase] || "فاز " + phase;
+      const role = comment.senderRole || comment.SenderRole || "";
+      const revision = comment.isRevisionRequest || comment.IsRevisionRequest;
+      const internal = comment.isInternal || comment.IsInternal;
+      const parts = [phaseTitle, role];
+      if (revision) parts.push("درخواست اصلاح");
+      else if (internal) parts.push("داخلی");
+      const when = formatUploadedAt(comment);
+      if (when) parts.push(when);
+      row.appendChild(el("div", "portal-thread__meta muted", parts.join(" · ")));
+      row.appendChild(el("div", "portal-thread__message", comment.message || comment.Message || "—"));
+      list.appendChild(row);
+    });
+    block.appendChild(list);
+    parent.appendChild(block);
+  }
+
+  function renderFullWorkflowHistory(parent) {
+    if (!state.history.length) {
+      parent.appendChild(el("div", "muted", "تاریخچه‌ای ثبت نشده است."));
+      return;
+    }
+    const list = el("div", "portal-history");
+    state.history.forEach((item) => {
+      const row = el("div", "portal-history__item");
+      const fromStatus = item.fromStatus ?? item.FromStatus ?? "";
+      const toStatus = item.toStatus ?? item.ToStatus ?? item.status ?? item.Status ?? "";
+      const action = item.action || item.Action || "";
+      const actor = item.actorRole || item.ActorRole || "";
+      const when = formatCaseDate(item.createdAt || item.CreatedAt);
+      row.textContent = [when, action, fromStatus && toStatus ? fromStatus + " → " + toStatus : toStatus, actor]
+        .filter(Boolean)
+        .join(" · ");
+      list.appendChild(row);
+    });
+    parent.appendChild(list);
+  }
+
+  function renderCompletedCaseDossier(card) {
+    const details = document.createElement("details");
+    details.className = "portal-dossier card portal-card portal-card--nested";
+    details.open = true;
+
+    const summary = document.createElement("summary");
+    summary.className = "portal-dossier__summary card__title";
+    summary.textContent = "پرونده کامل — خلاصه اطلاعات ثبت‌شده";
+    details.appendChild(summary);
+
+    const body = el("div", "portal-dossier__body");
+    body.appendChild(
+      el(
+        "div",
+        "muted portal-stage__hint",
+        "تمام اطلاعات فرم‌ها، ارزش‌گذاری، کاربرگ مالی، قراردادها، پرداخت‌ها و مدارک این پرونده."
+      )
+    );
+
+    const metaRows = [
+      ["تاریخ ایجاد", formatCaseDate(pickProp(state.caseData, "createdAt", "CreatedAt"))],
+      ["تاریخ تکمیل", formatCaseDate(pickProp(state.caseData, "completedAt", "CompletedAt"))],
+      ["نوع متقاضی", pickProp(state.caseData, "applicantType", "ApplicantType") || "—"],
+    ];
+    if (isInternalSession()) {
+      metaRows.push(
+        ["متقاضی", pickProp(state.caseData, "applicantFullName", "ApplicantFullName") || "—"],
+        ["موبایل متقاضی", pickProp(state.caseData, "applicantPhoneNumber", "ApplicantPhoneNumber") || "—"]
+      );
+    }
+
+    const metaWrap = el("div", "card portal-card portal-card--nested");
+    metaWrap.appendChild(el("div", "card__title", "اطلاعات پرونده"));
+    metaRows.forEach(([label, value]) => {
+      const row = el("div", "portal-profile-summary__row");
+      row.appendChild(el("span", "portal-profile-summary__label muted", label));
+      row.appendChild(el("span", "portal-profile-summary__value", value || "—"));
+      metaWrap.appendChild(row);
+    });
+    body.appendChild(metaWrap);
+
+    renderProfileSummary(body);
+
+    const de1 = pickDataEntry1(state.caseData);
+    if (de1) {
+      renderReadOnlySummary(body, "فرم اولیه", [
+        ["مرحله کسب‌وکار", businessStageLabel(pickProp(de1, "businessStage", "BusinessStage"))],
+        ["سرمایه مورد نیاز (ریال)", formatMoney(pickProp(de1, "requestedAmount", "RequestedAmount"))],
+        ["نام نماینده", pickProp(de1, "representativeFullName", "RepresentativeFullName")],
+        ["ایمیل", pickProp(de1, "contactEmail", "ContactEmail")],
+      ]);
+      renderApplicantDocumentsReadOnly(body, "مدارک فرم اولیه", model.DATA_ENTRY_1_DOCUMENTS);
+    }
+
+    const de2 = pickDataEntry2(state.caseData);
+    if (de2) {
+      renderReadOnlySummary(body, "فرم تکمیلی", [
+        ["مبنای درخواست جذب سرمایه‌گذاری", pickProp(de2, "investmentAttractionBasis", "InvestmentAttractionBasis")],
+      ]);
+      renderApplicantDocumentsReadOnly(body, "مدارک فرم تکمیلی", model.DATA_ENTRY_2_DOCUMENTS);
+    }
+
+    const valuations = pickValuations(state.caseData);
+    const valWrap = el("div", "card portal-card portal-card--nested");
+    valWrap.appendChild(el("div", "card__title", "ارزش‌گذاری‌ها"));
+    if (!valuations.length) {
+      valWrap.appendChild(el("div", "muted", "ارزش‌گذاری ثبت نشده است."));
+    } else {
+      valuations.forEach((valuation) => {
+        const row = el("div", "portal-profile-summary__row");
+        const label =
+          valuationTypeLabel(pick(valuation, "type", "Type")) +
+          " · " +
+          formatCaseDate(pick(valuation, "createdAt", "CreatedAt"));
+        row.appendChild(el("span", "portal-profile-summary__label muted", label));
+        const value =
+          formatMoney(pick(valuation, "amount", "Amount")) +
+          (pick(valuation, "notes", "Notes") ? " — " + pick(valuation, "notes", "Notes") : "");
+        row.appendChild(el("span", "portal-profile-summary__value", value));
+        valWrap.appendChild(row);
+      });
+    }
+    body.appendChild(valWrap);
+
+    const worksheet = pickFinancialWorksheet(state.caseData);
+    const wsWrap = el("div", "card portal-card portal-card--nested");
+    wsWrap.appendChild(el("div", "card__title", "کاربرگ مالی"));
+    if (!worksheet) {
+      wsWrap.appendChild(el("div", "muted", "کاربرگ مالی ثبت نشده است."));
+    } else {
+      [
+        ["نام بانک", pick(worksheet, "bankName", "BankName")],
+        ["شبا", pick(worksheet, "iban", "Iban")],
+        ["مبلغ مصوب (ریال)", formatMoney(pick(worksheet, "approvedAmount", "ApprovedAmount"))],
+        ["برنامه پرداخت", pick(worksheet, "paymentSchedule", "PaymentSchedule")],
+        ["یادداشت", pick(worksheet, "notes", "Notes")],
+      ].forEach(([label, value]) => {
+        const row = el("div", "portal-profile-summary__row");
+        row.appendChild(el("span", "portal-profile-summary__label muted", label));
+        row.appendChild(el("span", "portal-profile-summary__value", value || "—"));
+        wsWrap.appendChild(row);
+      });
+    }
+    body.appendChild(wsWrap);
+
+    const contractWrap = el("div", "card portal-card portal-card--nested");
+    contractWrap.appendChild(el("div", "card__title", "قراردادها"));
+    const contractTypes = [7, 8, 9];
+    const hasContracts = contractTypes.some((t) => documentForType(t));
+    if (!hasContracts) {
+      contractWrap.appendChild(el("div", "muted", "قراردادی بارگذاری نشده است."));
+    } else {
+      contractTypes.forEach((type) => {
+        const doc = documentForType(type);
+        if (!doc) return;
+        const row = el("div", "portal-doc-readonly__row");
+        row.appendChild(el("div", "portal-doc-readonly__label", documentTypeLabel(type)));
+        const id = doc.id || doc.Id;
+        const name = doc.fileName || doc.FileName || "فایل";
+        row.appendChild(el("div", "portal-doc-readonly__status is-ok", "✓ " + name));
+        if (id) row.appendChild(createButton("دانلود", "btn--sm", "download-document", { documentId: id }));
+        contractWrap.appendChild(row);
+      });
+    }
+    body.appendChild(contractWrap);
+
+    renderPaymentsSection(body);
+
+    const docsWrap = el("div", "card portal-card portal-card--nested");
+    docsWrap.appendChild(el("div", "card__title", "همه مدارک و پیوست‌ها"));
+    renderAllDocumentsArchive(docsWrap);
+    body.appendChild(docsWrap);
+
+    const commentsWrap = el("div", "card portal-card portal-card--nested");
+    commentsWrap.appendChild(el("div", "card__title", "تاریخچه نظرات و درخواست‌های اصلاح"));
+    renderAllCommentsHistory(commentsWrap);
+    body.appendChild(commentsWrap);
+
+    const historyWrap = el("div", "card portal-card portal-card--nested");
+    historyWrap.appendChild(el("div", "card__title", "تاریخچه گردش کار"));
+    renderFullWorkflowHistory(historyWrap);
+    body.appendChild(historyWrap);
+
+    details.appendChild(body);
+    card.appendChild(details);
+  }
+
+  function pick(obj, ...keys) {
+    if (!obj) return "";
+    for (const k of keys) {
+      if (obj[k] !== undefined && obj[k] !== null) return obj[k];
+    }
+    return "";
+  }
+
   function renderDocumentsList(host) {
     const card = el("div", "card portal-card");
     card.appendChild(el("div", "card__title", "اسناد بارگذاری‌شده"));
@@ -1233,6 +1567,21 @@
       return;
     }
 
+    if (status === 16 || status === 19) {
+      card.appendChild(
+        el(
+          "div",
+          "portal-stage__hint muted",
+          status === 16
+            ? "پرونده تکمیل شده است. خلاصه کامل اطلاعات ثبت‌شده در زیر قابل مشاهده است."
+            : "پرونده بایگانی شده است. خلاصه کامل اطلاعات ثبت‌شده در زیر قابل مشاهده است."
+        )
+      );
+      renderCompletedCaseDossier(card);
+      host.appendChild(card);
+      return;
+    }
+
     if (!model.canActOnCase(role, step.unit)) {
       card.appendChild(el("div", "portal-stage__hint", "با نقش فعلی، اقدام این مرحله برای شما فعال نیست. جلسه نقش مناسب را انتخاب کنید."));
       host.appendChild(card);
@@ -1405,7 +1754,7 @@
     const current = pickStatus(state.caseData);
     renderStageForStatus(host, current, true);
 
-    if (!qs("#caseAttachmentsHost")) {
+    if (!qs("#caseAttachmentsHost") && current !== 16 && current !== 19) {
       renderDocumentsList(host);
       renderHistory(host);
     }
@@ -1497,7 +1846,10 @@
   }
 
   async function withBusy(fn) {
-    if (state.busy) return;
+    if (state.busy) {
+      setPortalInfo("عملیات قبلی هنوز در حال انجام است. لطفاً چند ثانیه صبر کنید.");
+      return;
+    }
     state.busy = true;
     setPortalError("");
     try {
@@ -1514,6 +1866,7 @@
   async function handleAction(action, trigger) {
     const caseId = readCaseId();
     if (!caseId) throw new Error("شناسه پرونده تنظیم نشده است.");
+    const statusBefore = pickStatus(state.caseData);
 
     if (action === "post-comment") {
       const phase = Number(trigger.dataset.commentPhase);
@@ -1701,12 +2054,13 @@
       return;
     }
 
-    await refreshCase();
+    await refreshCase(statusBefore);
   }
 
   async function handleUpload(input) {
     const caseId = readCaseId();
     if (!caseId) throw new Error("شناسه پرونده تنظیم نشده است.");
+    const statusBefore = pickStatus(state.caseData);
     const file = input.files && input.files[0];
     if (!file) return;
 
@@ -1724,7 +2078,7 @@
       status.classList.add("is-uploaded");
       status.closest(".portal-upload-row")?.classList.add("portal-upload-row--done");
     }
-    await refreshCase();
+    await refreshCase(statusBefore);
   }
 
   function wireEvents() {

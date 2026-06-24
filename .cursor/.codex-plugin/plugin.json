@@ -1,0 +1,18 @@
+{
+  "name": "financial-core",
+  "version": "1.0.0",
+  "description": "Maskan Financial-Core agent docs, quality gates, and frontend/backend skills. Start with .cursor/AGENTS.md",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Financial-Core",
+    "shortDescription": "Maskan panel engineering skills and quality gates",
+    "longDescription": "Financial-Core monorepo: investment/guarantee/loan case workflows, Elsa, EF Core, vanilla JS test panel. Agent docs in .cursor/ (AGENTS.md, architecture-map, modules-reference, frontend-guide, agent-playbook). Quality gates: validation, mapping, persistence, security, EF, workflow-orchestration, frontend-api.",
+    "category": "Productivity",
+    "capabilities": ["Interactive", "Write"],
+    "defaultPrompt": [
+      "Review my changes against Financial-Core quality gates.",
+      "Implement a new API endpoint following our layered architecture.",
+      "Add a frontend workflow step with loading/error/empty states."
+    ]
+  }
+}

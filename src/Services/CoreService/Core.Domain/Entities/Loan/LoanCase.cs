@@ -86,6 +86,19 @@ public sealed class LoanCase : AggregateRoot<Guid>, IAuditableEntity, ISoftDelet
             comment));
     }
 
+    public void RollbackTo(
+        LoanCaseStatus nextStatus,
+        string changedByUserId,
+        string actorRole,
+        Guid correlationId,
+        string? comment)
+    {
+        if (CurrentStatus is LoanCaseStatus.Completed or LoanCaseStatus.Archived or LoanCaseStatus.CanceledByCeo)
+            CompletedAt = null;
+
+        TransitionTo(nextStatus, changedByUserId, actorRole, LoanWorkflowAction.StageRollback, correlationId, comment);
+    }
+
     public static LoanCasePhase DerivePhaseFromStatus(LoanCaseStatus status) => status switch
     {
         LoanCaseStatus.Draft or LoanCaseStatus.DataEntry or LoanCaseStatus.PendingCreditReview

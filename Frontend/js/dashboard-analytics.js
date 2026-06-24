@@ -1,35 +1,37 @@
 (function () {
   const state = { panel: null, charts: [] };
+  const ui = () => window.DashboardUi || {};
 
   function qs(sel) {
     return document.querySelector(sel);
   }
 
   function pick(obj, ...keys) {
-    if (!obj) return undefined;
-    for (const k of keys) {
-      if (obj[k] !== undefined && obj[k] !== null) return obj[k];
-    }
-    return undefined;
-  }
-
-  function resolveRole() {
-    const s = state.panel?.getActiveSession();
-    return WorkflowModel.normalizeRole(s?.userRoleText, s?.userRoleNumber);
+    return ui().pick ? ui().pick(obj, ...keys) : undefined;
   }
 
   function formatMoney(n) {
-    const v = Number(n) || 0;
-    return v.toLocaleString("fa-IR") + " ریال";
+    return ui().formatMoney ? ui().formatMoney(n) : String(n);
+  }
+
+  function formatNum(n) {
+    return ui().formatNum ? ui().formatNum(n) : String(n);
+  }
+
+  function formatPercent(n) {
+    return ui().formatPercent ? ui().formatPercent(n) : String(n) + "%";
+  }
+
+  function formatDays(n) {
+    return ui().formatDays ? ui().formatDays(n) : String(n) + " روز";
   }
 
   function formatDate(iso) {
-    if (!iso) return "—";
-    try {
-      return new Date(iso).toLocaleString("fa-IR");
-    } catch {
-      return String(iso);
-    }
+    return ui().formatDate ? ui().formatDate(iso) : String(iso || "");
+  }
+
+  function formatPersianMonth(year, month) {
+    return ui().formatPersianMonth ? ui().formatPersianMonth(year, month) : String(year) + "/" + String(month);
   }
 
   function unwrap(body) {
@@ -46,7 +48,8 @@
   }
 
   function createChart(canvas, config) {
-    if (!canvas || typeof Chart === "undefined") return null;
+    if (ui().createChart) return ui().createChart(canvas, config, state.charts);
+    if (!canvas || typeof Chart === "undefined" || !config) return null;
     const chart = new Chart(canvas, config);
     state.charts.push(chart);
     return chart;
@@ -62,109 +65,70 @@
     const metrics = qs("#dashExecMetrics");
     if (!metrics) return;
     metrics.innerHTML =
-      '<div class="dashboard-metric dashboard-metric--accent"><span class="muted">ضمانت فعال</span><strong>' +
+      '<div class="dashboard-metric dashboard-metric--accent"><span class="muted">مبلغ ضمانت‌نامه‌های جاری</span><strong>' +
       formatMoney(pick(ex, "activeGuaranteesVolume", "ActiveGuaranteesVolume")) +
       "</strong></div>" +
-      '<div class="dashboard-metric dashboard-metric--accent"><span class="muted">سرمایه‌گذاری فعال</span><strong>' +
+      '<div class="dashboard-metric dashboard-metric--accent"><span class="muted">مبلغ سرمایه‌گذاری‌های جاری</span><strong>' +
       formatMoney(pick(ex, "activeInvestmentsVolume", "ActiveInvestmentsVolume")) +
       "</strong></div>" +
-      '<div class="dashboard-metric dashboard-metric--accent"><span class="muted">تسهیلات فعال</span><strong>' +
+      '<div class="dashboard-metric dashboard-metric--accent"><span class="muted">مبلغ تسهیلات جاری</span><strong>' +
       formatMoney(pick(ex, "activeLoansVolume", "ActiveLoansVolume")) +
       "</strong></div>" +
-      '<div class="dashboard-metric"><span class="muted">پرونده فعال</span><strong>' +
-      (pick(ex, "totalActiveCases", "TotalActiveCases") || 0) +
+      '<div class="dashboard-metric"><span class="muted">پرونده‌های جاری</span><strong>' +
+      formatNum(pick(ex, "totalActiveCases", "TotalActiveCases") || 0) +
       "</strong></div>" +
-      '<div class="dashboard-metric"><span class="muted">تکمیل‌شده</span><strong>' +
-      (pick(ex, "completedCases", "CompletedCases") || 0) +
+      '<div class="dashboard-metric"><span class="muted">پرونده‌های تکمیل‌شده</span><strong>' +
+      formatNum(pick(ex, "completedCases", "CompletedCases") || 0) +
       "</strong></div>" +
       '<div class="dashboard-metric"><span class="muted">نرخ تکمیل</span><strong>' +
-      (pick(ex, "completionRate", "CompletionRate") || 0) +
-      "%</strong></div>" +
+      formatPercent(pick(ex, "completionRate", "CompletionRate") || 0) +
+      "</strong></div>" +
       '<div class="dashboard-metric"><span class="muted">کاربران آنلاین</span><strong>' +
-      (pick(ex, "onlineUsersCount", "OnlineUsersCount") || 0) +
+      formatNum(pick(ex, "onlineUsersCount", "OnlineUsersCount") || 0) +
       "</strong></div>" +
       '<div class="dashboard-metric"><span class="muted">کاربران فعال امروز</span><strong>' +
-      (pick(ex, "dailyActiveUsers", "DailyActiveUsers") || 0) +
+      formatNum(pick(ex, "dailyActiveUsers", "DailyActiveUsers") || 0) +
       "</strong></div>" +
-      '<div class="dashboard-metric"><span class="muted">در انتظار مدیرعامل</span><strong>' +
-      (pick(ex, "pendingCeoApprovals", "PendingCeoApprovals") || 0) +
+      '<div class="dashboard-metric"><span class="muted">در انتظار تأیید مدیرعامل</span><strong>' +
+      formatNum(pick(ex, "pendingCeoApprovals", "PendingCeoApprovals") || 0) +
       "</strong></div>" +
-      '<div class="dashboard-metric"><span class="muted">میانگین روز بررسی</span><strong>' +
-      (pick(ex, "averageDaysInReview", "AverageDaysInReview") || 0) +
+      '<div class="dashboard-metric"><span class="muted">میانگین روز ماندگاری در بررسی</span><strong>' +
+      formatDays(pick(ex, "averageDaysInReview", "AverageDaysInReview") || 0) +
       "</strong></div>";
 
     const statusDist = pick(ex, "statusDistribution", "StatusDistribution") || [];
-    createChart(qs("#dashExecPie"), {
-      type: "doughnut",
-      data: {
-        labels: statusDist.map((x) => pick(x, "categoryTitle", "CategoryTitle") || ""),
-        datasets: [
-          {
-            data: statusDist.map((x) => pick(x, "count", "Count") || 0),
-            backgroundColor: ["#3b82f6", "#22c55e", "#ef4444"],
-            borderWidth: 0,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { position: "bottom", labels: { color: "#cbd5e1" } } },
-      },
-    });
+    createChart(
+      qs("#dashExecPie"),
+      ui().doughnutConfig
+        ? ui().doughnutConfig(
+            statusDist.map((x) => pick(x, "categoryTitle", "CategoryTitle") || ""),
+            statusDist.map((x) => pick(x, "count", "Count") || 0)
+          )
+        : null
+    );
 
     const monthly = pick(ex, "monthlyFinancialOutput", "MonthlyFinancialOutput") || [];
-    createChart(qs("#dashExecBar"), {
-      type: "bar",
-      data: {
-        labels: monthly.map((m) => (pick(m, "year", "Year") || "") + "/" + (pick(m, "month", "Month") || "")),
-        datasets: [
-          {
-            label: "خروجی مالی (ریال)",
-            data: monthly.map((m) => pick(m, "amount", "Amount") || 0),
-            backgroundColor: "rgba(59,130,246,0.7)",
-            borderRadius: 6,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          x: { ticks: { color: "#94a3b8" }, grid: { color: "rgba(255,255,255,0.06)" } },
-          y: { ticks: { color: "#94a3b8" }, grid: { color: "rgba(255,255,255,0.06)" } },
-        },
-        plugins: { legend: { labels: { color: "#cbd5e1" } } },
-      },
-    });
+    createChart(
+      qs("#dashExecBar"),
+      ui().verticalBarConfig
+        ? ui().verticalBarConfig(
+            monthly.map((m) => formatPersianMonth(pick(m, "year", "Year"), pick(m, "month", "Month"))),
+            monthly.map((m) => pick(m, "amount", "Amount") || 0),
+            "مبلغ (ریال)",
+            null,
+            true
+          )
+        : null
+    );
 
     const bottlenecks = pick(ex, "departmentBottlenecks", "DepartmentBottlenecks") || [];
     const bnEl = qs("#dashExecBottlenecks");
     if (bnEl) {
       bnEl.innerHTML =
-        '<div class="card__title">گلوگاه‌های واحدها (میانگین روز)</div>' +
-        (bottlenecks.length
-          ? bottlenecks
-              .map((b) => {
-                const title = pick(b, "departmentTitle", "DepartmentTitle") || "";
-                const days = pick(b, "averageDays", "AverageDays") || 0;
-                const cnt = pick(b, "activeCaseCount", "ActiveCaseCount") || 0;
-                const pct = Math.min(100, Math.round(days * 3));
-                return (
-                  '<div class="dashboard-bar">' +
-                  '<div class="dashboard-bar__label"><span>' +
-                  title +
-                  ' <span class="muted">(' +
-                  cnt +
-                  ' پرونده)</span></span><span class="mono">' +
-                  days +
-                  " روز</span></div>" +
-                  '<div class="dashboard-bar__track"><div class="dashboard-bar__fill dashboard-bar__fill--warn" style="width:' +
-                  pct +
-                  '%"></div></div></div>'
-                );
-              })
-              .join("")
+        '<div class="card__title">میانگین زمان ماندگاری در واحدها</div>' +
+        '<p class="muted portal-stage__hint">هرچه نوار بلندتر باشد، پرونده‌ها بیشتر در آن واحد معطل می‌مانند.</p>' +
+        (ui().renderBottleneckBars
+          ? ui().renderBottleneckBars(bottlenecks)
           : '<p class="muted">داده‌ای موجود نیست.</p>');
     }
 
@@ -172,7 +136,7 @@
     const actEl = qs("#dashExecActivity");
     if (actEl) {
       actEl.innerHTML =
-        '<div class="card__title">فعالیت اخیر</div><ul class="dashboard-activity">' +
+        '<div class="card__title">آخرین فعالیت‌های سیستم</div><ul class="dashboard-activity">' +
         activity
           .map((r) => {
             const cn = pick(r, "caseNumber", "CaseNumber") || "";
@@ -189,48 +153,39 @@
     const metrics = qs("#dashDeptMetrics");
     if (!metrics) return;
     const title = pick(dept, "departmentTitle", "DepartmentTitle") || "";
+    const departmentKey = pick(dept, "departmentKey", "DepartmentKey");
+    const queue = ui().filterQueueForDepartment
+      ? ui().filterQueueForDepartment(pick(dept, "queueByModule", "QueueByModule") || [], departmentKey)
+      : pick(dept, "queueByModule", "QueueByModule") || [];
+    const totalQueue = queue.reduce((sum, q) => sum + (pick(q, "count", "Count") || 0), 0);
+
     metrics.innerHTML =
       '<div class="dashboard-metric dashboard-metric--accent"><span class="muted">واحد</span><strong>' +
       title +
       "</strong></div>" +
-      '<div class="dashboard-metric"><span class="muted">صف انتظار</span><strong>' +
-      (pick(dept, "totalQueueCount", "TotalQueueCount") || 0) +
+      '<div class="dashboard-metric"><span class="muted">پرونده در صف کاری</span><strong>' +
+      formatNum(totalQueue) +
       "</strong></div>" +
-      '<div class="dashboard-metric"><span class="muted">نرخ بازگشت</span><strong>' +
-      (pick(dept, "revisionRatePercent", "RevisionRatePercent") || 0) +
-      "%</strong></div>";
+      '<div class="dashboard-metric"><span class="muted">نرخ درخواست اصلاح</span><strong>' +
+      formatPercent(pick(dept, "revisionRatePercent", "RevisionRatePercent") || 0) +
+      "</strong></div>";
 
-    const queue = pick(dept, "queueByModule", "QueueByModule") || [];
-    createChart(qs("#dashDeptBar"), {
-      type: "bar",
-      data: {
-        labels: queue.map((q) => pick(q, "moduleTitle", "ModuleTitle") || ""),
-        datasets: [
-          {
-            label: "تعداد پرونده",
-            data: queue.map((q) => pick(q, "count", "Count") || 0),
-            backgroundColor: ["#8b5cf6", "#06b6d4", "#f59e0b", "#10b981"],
-            borderRadius: 6,
-          },
-        ],
-      },
-      options: {
-        indexAxis: "y",
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          x: { ticks: { color: "#94a3b8" }, grid: { color: "rgba(255,255,255,0.06)" } },
-          y: { ticks: { color: "#94a3b8" }, grid: { display: false } },
-        },
-        plugins: { legend: { display: false } },
-      },
-    });
+    createChart(
+      qs("#dashDeptBar"),
+      ui().horizontalBarConfig
+        ? ui().horizontalBarConfig(
+            queue.map((q) => pick(q, "moduleTitle", "ModuleTitle") || ""),
+            queue.map((q) => pick(q, "count", "Count") || 0),
+            "تعداد پرونده"
+          )
+        : null
+    );
 
     const links = pick(dept, "inboxQuickLinks", "InboxQuickLinks") || [];
     const inboxEl = qs("#dashDeptInbox");
     if (inboxEl) {
       inboxEl.innerHTML =
-        '<div class="card__title">کارتابل — اقدام فوری</div>' +
+        '<div class="card__title">کارتابل — نیاز به اقدام</div>' +
         (links.length
           ? '<ul class="dashboard-inbox">' +
             links
@@ -272,18 +227,18 @@
     const metrics = qs("#dashApplicantMetrics");
     if (!metrics) return;
     metrics.innerHTML =
-      '<div class="dashboard-metric"><span class="muted">بدهی باقی‌مانده</span><strong>' +
+      '<div class="dashboard-metric"><span class="muted">مانده بدهی</span><strong>' +
       formatMoney(pick(app, "totalRemainingDebt", "TotalRemainingDebt")) +
       "</strong></div>" +
       '<div class="dashboard-metric"><span class="muted">اقساط پرداخت‌نشده</span><strong>' +
-      (pick(app, "unpaidInstallmentsCount", "UnpaidInstallmentsCount") || 0) +
+      formatNum(pick(app, "unpaidInstallmentsCount", "UnpaidInstallmentsCount") || 0) +
       "</strong></div>";
 
     const cases = pick(app, "activeCases", "ActiveCases") || [];
     const casesEl = qs("#dashApplicantCases");
     if (casesEl) {
       casesEl.innerHTML =
-        '<div class="card__title">پرونده‌های فعال</div>' +
+        '<div class="card__title">پرونده‌های در جریان</div>' +
         (cases.length
           ? cases
               .map((c) => {
@@ -314,8 +269,8 @@
                   pct +
                   '%"></div></div>" +
                   '<div class="muted dash-stepper__label">' +
-                  pct +
-                  "% پیشرفت</div></div>"
+                  formatPercent(pct) +
+                  " پیشرفت</div></div>"
                 );
               })
               .join("")
@@ -396,11 +351,11 @@
           (pick(p, "periodStart", "PeriodStart") || "—") +
           " تا " +
           (pick(p, "expiresAt", "ExpiresAt") || "—") +
-          "<br/>بودجه: " +
+          "<br/>سقف: " +
           formatMoney(budget) +
-          " · مصرف: " +
+          " · مصرف‌شده: " +
           formatMoney(used) +
-          " · مانده: " +
+          " · باقی‌مانده: " +
           formatMoney(remaining) +
           "</div>";
       });
@@ -428,11 +383,13 @@
       const isStale = pick(d, "isStale", "IsStale");
 
       if (metaEl) {
-        metaEl.textContent =
-          "نمای " +
-          viewType +
-          (computedAt ? " · به‌روزرسانی: " + formatDate(computedAt) : "") +
-          (isStale ? " · (داده قدیمی)" : "");
+        metaEl.textContent = ui().buildMetaText
+          ? ui().buildMetaText({
+              roleLabel: ui().viewTypeLabel ? ui().viewTypeLabel(viewType) : viewType,
+              computedAt,
+              isStale,
+            })
+          : "نمای " + viewType;
       }
 
       showSection(viewType);
@@ -470,6 +427,11 @@
     const applicant = role === "Applicant";
     const show = executive || department || applicant || role === "Admin";
     qs("#navDashboard")?.classList.toggle("hidden", !show);
+  }
+
+  function resolveRole() {
+    const s = state.panel?.getActiveSession();
+    return WorkflowModel.normalizeRole(s?.userRoleText, s?.userRoleNumber);
   }
 
   function wire() {

@@ -53,9 +53,6 @@ public sealed class KanbanAppService(
         if (module is null or CaseModuleType.Guarantee)
             cards.AddRange(await LoadGuaranteeActionCardsAsync(userId, role, cancellationToken));
 
-        if (module is null or CaseModuleType.GuaranteeRenewal)
-            cards.AddRange(await LoadRenewalActionCardsAsync(userId, role, cancellationToken));
-
         if (module is null or CaseModuleType.Loan)
             cards.AddRange(await LoadLoanActionCardsAsync(userId, cancellationToken));
 
@@ -80,9 +77,6 @@ public sealed class KanbanAppService(
         if (module is null or CaseModuleType.Guarantee)
             items.AddRange(await LoadGuaranteeWatchAsync(userId, role, cancellationToken));
 
-        if (module is null or CaseModuleType.GuaranteeRenewal)
-            items.AddRange(await LoadRenewalWatchAsync(userId, role, cancellationToken));
-
         if (module is null or CaseModuleType.Loan)
             items.AddRange(await LoadLoanWatchAsync(userId, cancellationToken));
 
@@ -94,19 +88,20 @@ public sealed class KanbanAppService(
         string role,
         CancellationToken ct)
     {
+        var iRole = CaseKanbanRules.ResolveWorkflowRole(userContext.Roles);
         var projections = await unitOfWork.InvestmentCases.ListActiveKanbanProjectionsAsync(
             userId, caseAuthorizationService.IsInternalUser, ct);
 
         return projections
-            .Where(x => CaseKanbanRules.IsActionRequired(x.CurrentStatus, role))
+            .Where(x => CaseKanbanRules.IsActionRequired(x.CurrentStatus, iRole))
             .Select(x =>
             {
                 var allowed = investmentStateManager
-                    .GetAllowedActions(x.CurrentStatus, role)
+                    .GetAllowedActions(x.CurrentStatus, iRole)
                     .Select(a => a.ToString())
                     .ToArray();
 
-                return kanbanDtoMapper.MapInvestmentActionCard(x, role, allowed);
+                return kanbanDtoMapper.MapInvestmentActionCard(x, iRole, allowed);
             });
     }
 
@@ -130,19 +125,6 @@ public sealed class KanbanAppService(
 
                 return kanbanDtoMapper.MapGuaranteeActionCard(x, gRole, allowed);
             });
-    }
-
-    private async Task<IEnumerable<KanbanCaseCardDto>> LoadRenewalActionCardsAsync(
-        string userId,
-        string role,
-        CancellationToken ct)
-    {
-        var projections = await unitOfWork.GuaranteeRenewals.ListActiveKanbanProjectionsAsync(
-            userId, guaranteeAuthorizationService.IsInternalUser, ct);
-
-        return projections
-            .Where(x => IsRenewalActionRequired(x.CurrentStatus, role))
-            .Select(kanbanDtoMapper.MapRenewalActionCard);
     }
 
     private async Task<IEnumerable<KanbanCaseCardDto>> LoadLoanActionCardsAsync(
@@ -171,12 +153,13 @@ public sealed class KanbanAppService(
         string role,
         CancellationToken ct)
     {
+        var iRole = CaseKanbanRules.ResolveWorkflowRole(userContext.Roles);
         var projections = await unitOfWork.InvestmentCases.ListActiveKanbanProjectionsAsync(
             userId, caseAuthorizationService.IsInternalUser, ct);
 
         return projections
-            .Where(x => CaseKanbanRules.IsWatching(x.CurrentStatus, role))
-            .Select(x => kanbanDtoMapper.MapInvestmentWatchCard(x, role));
+            .Where(x => CaseKanbanRules.IsWatching(x.CurrentStatus, iRole))
+            .Select(x => kanbanDtoMapper.MapInvestmentWatchCard(x, iRole));
     }
 
     private async Task<IEnumerable<KanbanCaseSummaryDto>> LoadGuaranteeWatchAsync(
@@ -193,19 +176,6 @@ public sealed class KanbanAppService(
             .Select(x => kanbanDtoMapper.MapGuaranteeWatchCard(x, gRole));
     }
 
-    private async Task<IEnumerable<KanbanCaseSummaryDto>> LoadRenewalWatchAsync(
-        string userId,
-        string role,
-        CancellationToken ct)
-    {
-        var projections = await unitOfWork.GuaranteeRenewals.ListActiveKanbanProjectionsAsync(
-            userId, guaranteeAuthorizationService.IsInternalUser, ct);
-
-        return projections
-            .Where(x => IsRenewalWatching(x.CurrentStatus, role))
-            .Select(kanbanDtoMapper.MapRenewalWatchCard);
-    }
-
     private async Task<IEnumerable<KanbanCaseSummaryDto>> LoadLoanWatchAsync(
         string userId,
         CancellationToken ct)
@@ -218,18 +188,6 @@ public sealed class KanbanAppService(
             .Where(x => LoanKanbanRules.IsWatching(x.CurrentStatus, lRole))
             .Select(x => kanbanDtoMapper.MapLoanWatchCard(x, lRole));
     }
-
-    private static bool IsRenewalActionRequired(GuaranteeRenewalStatus status, string role) => (status, role) switch
-    {
-        (GuaranteeRenewalStatus.Draft, UserRoleClaims.Applicant) => true,
-        (GuaranteeRenewalStatus.CeoReview, UserRoleClaims.Ceo) => true,
-        (GuaranteeRenewalStatus.CreditDateUpdate, UserRoleClaims.CreditExpert) => true,
-        (GuaranteeRenewalStatus.CreditDateUpdate, UserRoleClaims.CreditManager) => true,
-        _ => string.Equals(role, UserRoleClaims.Admin, StringComparison.OrdinalIgnoreCase) && status is not (GuaranteeRenewalStatus.Completed or GuaranteeRenewalStatus.Rejected or GuaranteeRenewalStatus.Cancelled)
-    };
-
-    private static bool IsRenewalWatching(GuaranteeRenewalStatus status, string role)
-        => !IsRenewalActionRequired(status, role) && status is GuaranteeRenewalStatus.CeoReview or GuaranteeRenewalStatus.CreditDateUpdate;
 
     private Result<(string UserId, string Role)> EnsureKanbanAccess()
     {
@@ -246,10 +204,9 @@ public sealed class KanbanAppService(
         if (!canRead)
             return Result<(string, string)>.Fail(Error.Forbidden(ApiMessages.NotAllowed));
 
-        var role = GuaranteeKanbanRules.ResolveWorkflowRole(userContext.Roles);
+        var role = CaseKanbanRules.ResolveWorkflowRole(userContext.Roles);
         if (string.IsNullOrWhiteSpace(role))
-            role = CaseKanbanRules.ResolveWorkflowRole(userContext.Roles);
-
+            role = GuaranteeKanbanRules.ResolveWorkflowRole(userContext.Roles);
         if (string.IsNullOrWhiteSpace(role))
             role = LoanKanbanRules.ResolveWorkflowRole(userContext.Roles);
 

@@ -10,7 +10,6 @@ public sealed class KanbanDtoMapper : IKanbanDtoMapper
 {
     private const string InvestmentApiBase = "/api/v1/investmentcases";
     private const string GuaranteeApiBase = "/api/v1/guaranteecases";
-    private const string RenewalApiBase = "/api/v1/guarantee-renewals";
     private const string LoanApiBase = "/api/v1/loancases";
 
     public KanbanCaseCardDto MapInvestmentActionCard(
@@ -59,10 +58,10 @@ public sealed class KanbanDtoMapper : IKanbanDtoMapper
 
     public KanbanCaseCardDto MapRenewalActionCard(GuaranteeRenewalKanbanProjection projection)
         => new(
-            projection.Id,
+            projection.ParentGuaranteeCaseId,
             projection.CaseNumber,
-            CaseModuleType.GuaranteeRenewal,
-            RenewalApiBase,
+            CaseModuleType.Guarantee,
+            GuaranteeApiBase,
             nameof(GuaranteeRenewalStatus),
             (int)projection.CurrentStatus,
             "تمدید",
@@ -128,10 +127,10 @@ public sealed class KanbanDtoMapper : IKanbanDtoMapper
 
     public KanbanCaseSummaryDto MapRenewalWatchCard(GuaranteeRenewalKanbanProjection projection)
         => new(
-            projection.Id,
+            projection.ParentGuaranteeCaseId,
             projection.CaseNumber,
-            CaseModuleType.GuaranteeRenewal,
-            RenewalApiBase,
+            CaseModuleType.Guarantee,
+            GuaranteeApiBase,
             nameof(GuaranteeRenewalStatus),
             (int)projection.CurrentStatus,
             "تمدید",

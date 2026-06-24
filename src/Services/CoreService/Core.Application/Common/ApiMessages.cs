@@ -69,9 +69,17 @@ public static class ApiMessages
     public const string GuaranteeDraftContractMissing = "پیش‌قرارداد بارگذاری نشده است.";
     public const string GuaranteeSignedContractMissing = "قرارداد امضاشده بارگذاری نشده است.";
     public const string GuaranteeFinalContractMissing = "قرارداد نهایی بارگذاری نشده است.";
+    public const string GuaranteeAmendmentContractMissing = "قرارداد اصلاحیه بارگذاری نشده است.";
     public const string GuaranteeIssuanceDocumentsIncomplete = "ضمانت‌نامه یا رسید صدور بارگذاری نشده است.";
     public const string GuaranteeApplicationNotEditable = "در وضعیت فعلی امکان ویرایش درخواست وجود ندارد.";
+    public const string GuaranteeCancellationNotEligible = "ابطال ضمانت‌نامه فقط برای پرونده ضمانت‌نامه تکمیل‌شده مجاز است.";
+    public const string GuaranteeCancellationAlreadyActive = "برای این پرونده یک فرایند اصلاحیه/ابطال فعال یا تکمیل‌شده ثبت شده است.";
+    public const string GuaranteeCancellationDataIncomplete = "اطلاعات ابطال ضمانت‌نامه کامل نیست.";
+    public const string GuaranteeCancellationDocumentsIncomplete = "مدارک الزامی ابطال ضمانت‌نامه کامل نیست.";
+    public const string GuaranteeCancellationOriginalReferenceRequired = "مرجع ضمانت‌نامه اصلی برای ابطال ضمانت‌نامه الزامی است.";
+    public const string GuaranteeCancellationRequiresLegalOverride = "ابطال ضمانت‌نامه دارای تعهد فعال است و بدون تایید حقوقی با گزینه رفع تعهد قابل انجام نیست.";
     public const string ParentGuaranteeNotEligibleForRenewal = "پرونده والد برای تمدید واجد شرایط نیست.";
+    public const string GuaranteeRenewalDeprecatedUseAmendment = "فرآیند تمدید مستقل غیرفعال شده است. برای تمدید یا تقلیل از اصلاحیه پرونده ضمانت‌نامه استفاده کنید.";
     public const string ApplicantCreditLimitNotSet = "سقف اعتبار برای این متقاضی هنوز توسط مدیرعامل تعیین نشده است.";
     public const string FundCreditLimitNotSet = "سقف اعتبار کل صندوق هنوز توسط مدیرعامل تعیین نشده است.";
     public const string FundCreditLimitExpired = "سقف اعتبار صندوق منقضی شده است. مدیرعامل باید سقف جدید با بازه جدید تعیین کند.";
@@ -105,4 +113,12 @@ public static class ApiMessages
     public const string LoanApprovalDetailNotEditable = "در وضعیت فعلی امکان ویرایش فرم تصویب وجود ندارد.";
     public const string LoanInstallmentsNotEditable = "در وضعیت فعلی امکان ویرایش اقساط وجود ندارد.";
     public const string LoanRepaymentIncomplete = "همه اقساط هنوز پرداخت نشده‌اند.";
+
+    public const string InvalidCaseModule = "ماژول پرونده نامعتبر است.";
+    public const string InvalidTargetStage = "مرحله هدف نامعتبر است.";
+    public const string CannotRollbackToSameStage = "مرحله فعلی و مرحله هدف یکسان هستند.";
+    public const string CannotAdvanceCaseStage = "فقط امکان بازگشت به مراحل قبلی وجود دارد؛ پیشروی به مرحله جلوتر مجاز نیست.";
+    public const string TargetStageNotVisited = "پرونده قبلاً در مرحله هدف نبوده است.";
+    public const string CaseStageRollbackCommentRequired = "ثبت دلیل بازگشت مرحله الزامی است.";
+    public const string OnlyAdminOrTechnicalCanRollbackStage = "فقط مدیر سیستم یا واحد فنی می‌توانند مرحله پرونده را بازگردانند.";
 }

@@ -12,6 +12,32 @@ namespace Core.Application.Common;
 /// </summary>
 public static class GuaranteeFundCreditGuard
 {
+    public static async Task<Result> ValidateAmendmentExtensionAsync(
+        ICoreDbContext db,
+        GuaranteeCase caseEntity,
+        CancellationToken cancellationToken)
+    {
+        var settings = await GuaranteeApplicantCreditSnapshotCalculator.ResolveFundCreditLimitSettingsAsync(
+            db,
+            cancellationToken);
+
+        if (settings is null || settings.CreditLimitWithCheck <= 0)
+            return Result.Fail(Error.Conflict(ApiMessages.FundCreditLimitNotSet));
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        if (today > settings.ExpiresAt)
+            return Result.Fail(Error.Conflict(ApiMessages.FundCreditLimitExpired));
+
+        if (today < settings.PeriodStart)
+            return Result.Fail(Error.Conflict(ApiMessages.FundCreditLimitNotYetActive));
+
+        var requestAmount = GuaranteeApplicantCreditSnapshotCalculator.ResolveCaseAmount(caseEntity);
+        if (requestAmount <= 0)
+            return Result.Fail(Error.Conflict(ApiMessages.GuaranteeApprovalFormAmountRequired));
+
+        return Result.Ok();
+    }
+
     public static async Task<Result> ValidateApprovalFormSubmitAsync(
         ICoreDbContext db,
         GuaranteeCase caseEntity,

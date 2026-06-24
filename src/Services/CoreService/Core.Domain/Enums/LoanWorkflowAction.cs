@@ -12,5 +12,6 @@ public enum LoanWorkflowAction
     SubmitSignedPackage = 8,
     UploadFinalContract = 9,
     RegisterPayment = 10,
-    Archive = 11
+    Archive = 11,
+    StageRollback = 12
 }

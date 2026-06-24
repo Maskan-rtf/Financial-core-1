@@ -1,4 +1,0 @@
-interface:
-  display_name: "React Next Architecture Builder"
-  short_description: "Shape scalable React and Next.js UI"
-  default_prompt: "Use $react-next-architecture-builder to structure a React or Next.js feature with clean state and component boundaries."

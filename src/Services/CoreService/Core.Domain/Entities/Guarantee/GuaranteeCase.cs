@@ -35,6 +35,18 @@ public sealed class GuaranteeCase : AggregateRoot<Guid>, IAuditableEntity, ISoft
     public GuaranteeCasePhase CurrentPhase { get; private set; }
     public GuaranteeCaseStatus CurrentStatus { get; private set; }
     public string? WorkflowInstanceId { get; private set; }
+    public AmendmentType? AmendmentType { get; private set; }
+    public string? AmendmentReason { get; private set; }
+    public bool AmendmentRequiresCreditReview { get; private set; }
+    public string? AmendmentOriginalGuaranteeReference { get; private set; }
+    public bool LegalOverrideApproved { get; private set; }
+    public bool SettlementConfirmationRequired { get; private set; }
+    public DateOnly? AmendmentRequestedValidityTo { get; private set; }
+    public decimal? AmendmentRequestedAmount { get; private set; }
+    public DateOnly? AmendmentApprovedValidityTo { get; private set; }
+    public decimal? AmendmentApprovedAmount { get; private set; }
+    public DateTimeOffset? AmendmentCreatedAt { get; private set; }
+    public DateTimeOffset? AmendmentCompletedAt { get; private set; }
 
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset? UpdatedAt { get; private set; }
@@ -49,6 +61,7 @@ public sealed class GuaranteeCase : AggregateRoot<Guid>, IAuditableEntity, ISoft
     public List<GuaranteeCaseDocument> Documents { get; private set; } = [];
     public List<GuaranteeCaseComment> Comments { get; private set; } = [];
     public List<GuaranteeCaseWorkflowHistory> WorkflowHistory { get; private set; } = [];
+    public List<GuaranteeAmendmentHistoryRecord> AmendmentHistoryRecords { get; private set; } = [];
 
     public void TransitionTo(
         GuaranteeCaseStatus nextStatus,
@@ -71,6 +84,9 @@ public sealed class GuaranteeCase : AggregateRoot<Guid>, IAuditableEntity, ISoft
         if (nextStatus == GuaranteeCaseStatus.Completed)
             CompletedAt = DateTimeOffset.UtcNow;
 
+        if (nextStatus is GuaranteeCaseStatus.AmendmentCompleted or GuaranteeCaseStatus.AmendmentApproved)
+            AmendmentCompletedAt = DateTimeOffset.UtcNow;
+
         WorkflowHistory.Add(new GuaranteeCaseWorkflowHistory(
             Id,
             fromPhase,
@@ -84,12 +100,35 @@ public sealed class GuaranteeCase : AggregateRoot<Guid>, IAuditableEntity, ISoft
             comment));
     }
 
+    public void RollbackTo(
+        GuaranteeCaseStatus nextStatus,
+        string changedByUserId,
+        string actorRole,
+        Guid correlationId,
+        string? comment)
+    {
+        if (CurrentStatus is GuaranteeCaseStatus.Completed or GuaranteeCaseStatus.Archived
+            or GuaranteeCaseStatus.Rejected or GuaranteeCaseStatus.Cancelled)
+            CompletedAt = null;
+
+        if (CurrentStatus is GuaranteeCaseStatus.AmendmentCompleted or GuaranteeCaseStatus.AmendmentApproved
+            or GuaranteeCaseStatus.AmendmentRejected)
+            AmendmentCompletedAt = null;
+
+        TransitionTo(nextStatus, changedByUserId, actorRole, GuaranteeWorkflowAction.StageRollback, correlationId, comment);
+    }
+
     public static GuaranteeCasePhase DerivePhaseFromStatus(GuaranteeCaseStatus status) => status switch
     {
         GuaranteeCaseStatus.Draft or GuaranteeCaseStatus.DataEntry or GuaranteeCaseStatus.CreditReview => GuaranteeCasePhase.Application,
         GuaranteeCaseStatus.ApprovalFormEntry or GuaranteeCaseStatus.CeoApprovalInitial => GuaranteeCasePhase.CreditAssessment,
         GuaranteeCaseStatus.WaitingDraftContract or GuaranteeCaseStatus.WaitingSignedContractAndAttachments or GuaranteeCaseStatus.WaitingFinalContract => GuaranteeCasePhase.Legal,
         GuaranteeCaseStatus.FinancialAttachmentReview or GuaranteeCaseStatus.CeoApprovalFinal or GuaranteeCaseStatus.WaitingIssuanceDocuments => GuaranteeCasePhase.Finance,
+        GuaranteeCaseStatus.AmendmentDraft or GuaranteeCaseStatus.AmendmentDataEntry => GuaranteeCasePhase.Application,
+        GuaranteeCaseStatus.AmendmentCreditReview => GuaranteeCasePhase.CreditAssessment,
+        GuaranteeCaseStatus.AmendmentCeoApproval => GuaranteeCasePhase.CreditAssessment,
+        GuaranteeCaseStatus.AmendmentLegalReview => GuaranteeCasePhase.Legal,
+        GuaranteeCaseStatus.AmendmentCompleted or GuaranteeCaseStatus.AmendmentApproved or GuaranteeCaseStatus.AmendmentRejected => GuaranteeCasePhase.Closing,
         GuaranteeCaseStatus.Completed or GuaranteeCaseStatus.Rejected or GuaranteeCaseStatus.Cancelled or GuaranteeCaseStatus.Archived => GuaranteeCasePhase.Closing,
         _ => GuaranteeCasePhase.Application
     };
@@ -300,5 +339,80 @@ public sealed class GuaranteeCase : AggregateRoot<Guid>, IAuditableEntity, ISoft
 
         Documents.Add(doc);
         return doc;
+    }
+
+    public void UpsertAmendment(
+        AmendmentType amendmentType,
+        DateOnly? requestedValidityTo,
+        decimal? requestedAmount,
+        string? reason)
+    {
+        AmendmentType = amendmentType;
+        AmendmentRequestedValidityTo = amendmentType == Enums.AmendmentType.Extension ? requestedValidityTo : null;
+        AmendmentRequestedAmount = amendmentType == Enums.AmendmentType.Reduction ? requestedAmount : null;
+        AmendmentReason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        AmendmentRequiresCreditReview = amendmentType == Enums.AmendmentType.Reduction;
+        AmendmentOriginalGuaranteeReference = null;
+        LegalOverrideApproved = false;
+        SettlementConfirmationRequired = false;
+        AmendmentApprovedValidityTo = null;
+        AmendmentApprovedAmount = null;
+        AmendmentCreatedAt ??= DateTimeOffset.UtcNow;
+        AmendmentCompletedAt = null;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    public void ConfigureCancellationAmendment(
+        string? originalGuaranteeReference,
+        bool settlementConfirmationRequired,
+        bool requiresCreditReview,
+        string? reason)
+    {
+        AmendmentType = Enums.AmendmentType.Cancellation;
+        AmendmentReason = string.IsNullOrWhiteSpace(reason) ? AmendmentReason : reason.Trim();
+        AmendmentOriginalGuaranteeReference = string.IsNullOrWhiteSpace(originalGuaranteeReference)
+            ? null
+            : originalGuaranteeReference.Trim();
+        SettlementConfirmationRequired = settlementConfirmationRequired;
+        AmendmentRequiresCreditReview = requiresCreditReview;
+        AmendmentRequestedValidityTo = null;
+        AmendmentRequestedAmount = null;
+        AmendmentApprovedValidityTo = null;
+        AmendmentApprovedAmount = null;
+        LegalOverrideApproved = false;
+        AmendmentCreatedAt ??= DateTimeOffset.UtcNow;
+        AmendmentCompletedAt = null;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    public void ApproveCancellationLegalOverride()
+    {
+        LegalOverrideApproved = true;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    public void ApplyApprovedAmendment()
+    {
+        if (!AmendmentType.HasValue)
+            return;
+
+        switch (AmendmentType.Value)
+        {
+            case Enums.AmendmentType.Extension:
+                AmendmentApprovedValidityTo = AmendmentRequestedValidityTo;
+                AmendmentApprovedAmount = null;
+                break;
+            case Enums.AmendmentType.Reduction:
+                AmendmentApprovedAmount = AmendmentRequestedAmount;
+                AmendmentApprovedValidityTo = null;
+                break;
+            case Enums.AmendmentType.Cancellation:
+                AmendmentApprovedAmount = null;
+                AmendmentApprovedValidityTo = null;
+                break;
+        }
+
+        AmendmentCompletedAt = DateTimeOffset.UtcNow;
+        UpdatedAt = DateTimeOffset.UtcNow;
     }
 }
