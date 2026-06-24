@@ -2,9 +2,11 @@ using BuildingBlocks.Application.Common;
 using BuildingBlocks.Application.Results;
 using BuildingBlocks.Persistence.Queries;
 using Core.Application.Abstractions;
+using Core.Application.Common;
 using Core.Application.Queries;
 using Core.Application.Requests;
 using Core.Domain.Entities;
+using Core.Domain.Entities.Guarantee;
 using Core.Domain.Enums;
 using Core.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -340,6 +342,7 @@ public sealed class GuaranteeCaseRepository(CoreDbContext dbContext) : IGuarante
                 x.ApplicantType,
                 x.CurrentPhase,
                 x.CurrentStatus,
+                x.AmendmentType,
                 x.CreatedAt,
                 x.UpdatedAt,
                 null,
@@ -349,6 +352,336 @@ public sealed class GuaranteeCaseRepository(CoreDbContext dbContext) : IGuarante
                     .Select(u => (u.FirstName + " " + u.LastName).Trim())
                     .FirstOrDefault()))
             .ToListAsync(cancellationToken);
+    }
+
+    public Task<bool> ExistsScopedAsync(
+        Guid caseId,
+        string userId,
+        bool isInternalUser,
+        CancellationToken cancellationToken)
+        => ApplyScopedFilter(dbContext.GuaranteeCases.AsNoTracking(), userId, isInternalUser)
+            .AnyAsync(x => x.Id == caseId, cancellationToken);
+
+    public Task<GuaranteeCaseStatus?> GetCurrentStatusScopedAsync(
+        Guid caseId,
+        string userId,
+        bool isInternalUser,
+        CancellationToken cancellationToken)
+        => ApplyScopedFilter(dbContext.GuaranteeCases.AsNoTracking(), userId, isInternalUser)
+            .Where(x => x.Id == caseId)
+            .Select(x => (GuaranteeCaseStatus?)x.CurrentStatus)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public Task<GuaranteeCase?> GetAsNoTrackingAsync(Guid caseId, CancellationToken cancellationToken)
+        => dbContext.GuaranteeCases
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == caseId, cancellationToken);
+
+    public Task<int> TouchUpdatedAtAsync(Guid caseId, DateTimeOffset updatedAt, CancellationToken cancellationToken)
+        => dbContext.GuaranteeCases.TouchUpdatedAtAsync(caseId, updatedAt, cancellationToken);
+
+    public Task<int> SetTitleAsync(
+        Guid caseId,
+        string? title,
+        DateTimeOffset updatedAt,
+        CancellationToken cancellationToken)
+        => dbContext.GuaranteeCases.SetTitleAsync(caseId, title, updatedAt, cancellationToken);
+
+    public Task<int> ApplyStateAndAmendmentAsync(
+        Guid caseId,
+        GuaranteeCaseStatus status,
+        GuaranteeCasePhase phase,
+        DateTimeOffset updatedAt,
+        DateTimeOffset? completedAt,
+        AmendmentType? amendmentType,
+        string? amendmentReason,
+        bool amendmentRequiresCreditReview,
+        string? amendmentOriginalGuaranteeReference,
+        bool legalOverrideApproved,
+        bool settlementConfirmationRequired,
+        DateOnly? amendmentRequestedValidityTo,
+        decimal? amendmentRequestedAmount,
+        DateOnly? amendmentApprovedValidityTo,
+        decimal? amendmentApprovedAmount,
+        DateTimeOffset? amendmentCreatedAt,
+        DateTimeOffset? amendmentCompletedAt,
+        CancellationToken cancellationToken)
+        => dbContext.GuaranteeCases.ApplyStateAndAmendmentAsync(
+            caseId,
+            status,
+            phase,
+            updatedAt,
+            completedAt,
+            amendmentType,
+            amendmentReason,
+            amendmentRequiresCreditReview,
+            amendmentOriginalGuaranteeReference,
+            legalOverrideApproved,
+            settlementConfirmationRequired,
+            amendmentRequestedValidityTo,
+            amendmentRequestedAmount,
+            amendmentApprovedValidityTo,
+            amendmentApprovedAmount,
+            amendmentCreatedAt,
+            amendmentCompletedAt,
+            cancellationToken);
+
+    public Task AddDocumentAsync(GuaranteeCaseDocument document, CancellationToken cancellationToken)
+        => dbContext.GuaranteeCaseDocuments.AddAsync(document, cancellationToken).AsTask();
+
+    public void AddAmendmentHistoryRecord(GuaranteeAmendmentHistoryRecord record)
+        => dbContext.GuaranteeAmendmentHistoryRecords.Add(record);
+
+    public Task AddAmendmentHistoryRecordAsync(
+        GuaranteeAmendmentHistoryRecord record,
+        CancellationToken cancellationToken)
+        => dbContext.GuaranteeAmendmentHistoryRecords.AddAsync(record, cancellationToken).AsTask();
+
+    public Task AddWorkflowHistoryAsync(GuaranteeCaseWorkflowHistory history, CancellationToken cancellationToken)
+        => dbContext.GuaranteeCaseWorkflowHistories.AddAsync(history, cancellationToken).AsTask();
+
+    public Task InsertWorkflowHistoryAsync(GuaranteeCaseWorkflowHistory history, CancellationToken cancellationToken)
+        => dbContext.InsertWorkflowHistoryAsync(history, cancellationToken);
+
+    public Task AddCommentAsync(GuaranteeCaseComment comment, CancellationToken cancellationToken)
+        => dbContext.GuaranteeCaseComments.AddAsync(comment, cancellationToken).AsTask();
+
+    public Task InsertCommentAsync(GuaranteeCaseComment comment, CancellationToken cancellationToken)
+        => dbContext.InsertCommentAsync(comment, cancellationToken);
+
+    public Task InsertAmendmentHistoryRecordAsync(
+        GuaranteeAmendmentHistoryRecord record,
+        CancellationToken cancellationToken)
+        => dbContext.InsertAmendmentHistoryRecordAsync(record, cancellationToken);
+
+    public Task<int> ApplyLatestPendingAmendmentAuditDecisionAsync(
+        Guid caseId,
+        GuaranteeAmendmentHistoryStatus status,
+        string approvalUser,
+        DateTimeOffset decidedAt,
+        string? decisionReason,
+        CancellationToken cancellationToken)
+        => dbContext.GuaranteeAmendmentHistoryRecords.ApplyLatestPendingAmendmentAuditDecisionAsync(
+            caseId,
+            status,
+            approvalUser,
+            decidedAt,
+            decisionReason,
+            cancellationToken);
+
+    public Task<GuaranteeAmendmentHistoryStatus?> GetLatestAmendmentHistoryStatusAsync(
+        Guid caseId,
+        CancellationToken cancellationToken)
+        => dbContext.GuaranteeAmendmentHistoryRecords
+            .AsNoTracking()
+            .Where(x => x.GuaranteeCaseId == caseId)
+            .OrderByDescending(x => x.CreatedAt)
+            .Select(x => (GuaranteeAmendmentHistoryStatus?)x.Status)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<GuaranteeAmendmentHistoryRecord>> GetAmendmentHistoryRecordsAsync(
+        Guid caseId,
+        CancellationToken cancellationToken)
+        => await dbContext.GuaranteeAmendmentHistoryRecords
+            .AsNoTracking()
+            .Where(x => x.GuaranteeCaseId == caseId)
+            .OrderByDescending(x => x.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+    public void ClearChangeTracker()
+        => dbContext.ChangeTracker.Clear();
+
+    public void DetachTrackedExceptAdded()
+    {
+        foreach (var entry in dbContext.ChangeTracker.Entries().ToList())
+        {
+            if (entry.State != EntityState.Added)
+                entry.State = EntityState.Detached;
+        }
+    }
+
+    public IReadOnlyList<string> DescribeTrackedEntries()
+        => dbContext.ChangeTracker.Entries()
+            .Select(e => $"{e.Entity.GetType().Name}:{e.State}")
+            .ToList();
+
+    public IReadOnlyList<GuaranteeAmendmentHistoryRecord> CapturePendingNewAmendmentHistory()
+        => dbContext.ChangeTracker
+            .Entries<GuaranteeAmendmentHistoryRecord>()
+            .Where(x => x.State == EntityState.Added)
+            .Select(x => x.Entity)
+            .ToList();
+
+    public Task<GuaranteeApprovalForm?> GetApprovalFormAsync(Guid caseId, CancellationToken cancellationToken)
+        => dbContext.GuaranteeApprovalForms.FirstOrDefaultAsync(x => x.CaseId == caseId, cancellationToken);
+
+    public Task<bool> ApprovalFormExistsAsync(Guid caseId, CancellationToken cancellationToken)
+        => dbContext.GuaranteeApprovalForms.AsNoTracking().AnyAsync(x => x.CaseId == caseId, cancellationToken);
+
+    public Task AddApprovalFormAsync(GuaranteeApprovalForm approvalForm, CancellationToken cancellationToken)
+        => dbContext.GuaranteeApprovalForms.AddAsync(approvalForm, cancellationToken).AsTask();
+
+    public Task PersistApprovedAmendmentExtensionAsync(
+        Guid caseId,
+        DateOnly approvedValidityTo,
+        DateTimeOffset updatedAt,
+        CancellationToken cancellationToken)
+    {
+        return PersistApprovedAmendmentExtensionInternalAsync(caseId, approvedValidityTo, updatedAt, cancellationToken);
+    }
+
+    private async Task PersistApprovedAmendmentExtensionInternalAsync(
+        Guid caseId,
+        DateOnly approvedValidityTo,
+        DateTimeOffset updatedAt,
+        CancellationToken cancellationToken)
+    {
+        await dbContext.GuaranteeCaseApplications
+            .Where(x => x.CaseId == caseId)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(x => x.ValidityTo, approvedValidityTo)
+                    .SetProperty(x => x.UpdatedAt, updatedAt),
+                cancellationToken);
+
+        await dbContext.GuaranteeApprovalForms
+            .Where(x => x.CaseId == caseId)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(x => x.ExpiryDate, approvedValidityTo)
+                    .SetProperty(
+                        x => x.ActiveDurationDays,
+                        x => x.IssuanceDate.HasValue
+                            ? approvedValidityTo.DayNumber - x.IssuanceDate.Value.DayNumber + 1
+                            : x.ActiveDurationDays)
+                    .SetProperty(x => x.UpdatedAt, updatedAt),
+                cancellationToken);
+    }
+
+    public async Task PersistApprovedAmendmentReductionAsync(
+        Guid caseId,
+        decimal approvedAmount,
+        DateTimeOffset updatedAt,
+        CancellationToken cancellationToken)
+    {
+        await dbContext.GuaranteeCaseApplications
+            .Where(x => x.CaseId == caseId)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(x => x.RequestedGuaranteeAmount, approvedAmount)
+                    .SetProperty(x => x.UpdatedAt, updatedAt),
+                cancellationToken);
+
+        await dbContext.GuaranteeApprovalForms
+            .Where(x => x.CaseId == caseId)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(x => x.GuaranteeAmount, approvedAmount)
+                    .SetProperty(x => x.UpdatedAt, updatedAt),
+                cancellationToken);
+    }
+
+    public async Task PersistApprovedAmendmentCancellationAsync(
+        Guid caseId,
+        DateTimeOffset updatedAt,
+        CancellationToken cancellationToken)
+    {
+        await dbContext.GuaranteeApprovalForms
+            .Where(x => x.CaseId == caseId)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(x => x.ActiveCommitments, 0m)
+                    .SetProperty(x => x.GuaranteeAmount, 0m)
+                    .SetProperty(x => x.UpdatedAt, updatedAt),
+                cancellationToken);
+
+        await dbContext.GuaranteeCaseApplications
+            .Where(x => x.CaseId == caseId)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(x => x.RequestedGuaranteeAmount, 0m)
+                    .SetProperty(x => x.UpdatedAt, updatedAt),
+                cancellationToken);
+    }
+
+    public Task AddApplicantCreditProfileAsync(
+        GuaranteeApplicantCreditProfile profile,
+        CancellationToken cancellationToken)
+        => dbContext.GuaranteeApplicantCreditProfiles.AddAsync(profile, cancellationToken).AsTask();
+
+    public Task<GuaranteeApplicantCreditProfile?> FindApplicantCreditProfileByCompanyAsync(
+        Guid companyId,
+        CancellationToken cancellationToken)
+        => dbContext.GuaranteeApplicantCreditProfiles
+            .FirstOrDefaultAsync(x => x.CompanyId == companyId, cancellationToken);
+
+    public Task<GuaranteeApplicantCreditProfile?> FindApplicantCreditProfileByUserAsync(
+        string applicantUserId,
+        CancellationToken cancellationToken)
+        => dbContext.GuaranteeApplicantCreditProfiles
+            .FirstOrDefaultAsync(
+                x => x.ApplicantUserId == applicantUserId && x.CompanyId == null,
+                cancellationToken);
+
+    public async Task<IReadOnlyList<GuaranteeCaseCreditProjection>> GetCreditProjectionsAsync(
+        CancellationToken cancellationToken)
+        => await dbContext.GuaranteeCases
+            .AsNoTracking()
+            .Where(c => !c.IsDeleted)
+            .Select(c => new GuaranteeCaseCreditProjection(
+                c.CurrentStatus,
+                c.CreatedAt,
+                c.CompletedAt,
+                c.ApprovalForm != null
+                    ? c.ApprovalForm.GuaranteeAmount
+                    : c.Application != null
+                        ? c.Application.RequestedGuaranteeAmount
+                        : null,
+                c.ApprovalForm != null ? c.ApprovalForm.IssuanceDate : null))
+            .ToListAsync(cancellationToken);
+
+    public Task<GuaranteeCaseApplication?> GetApplicationByCaseIdAsync(
+        Guid caseId,
+        CancellationToken cancellationToken)
+        => dbContext.GuaranteeCaseApplications.FirstOrDefaultAsync(x => x.CaseId == caseId, cancellationToken);
+
+    public async Task<GuaranteeCaseApplication> UpsertApplicationAsync(
+        Guid caseId,
+        UpdateGuaranteeApplicationRequest request,
+        CancellationToken cancellationToken)
+    {
+        var application = await dbContext.GuaranteeCaseApplications
+            .FirstOrDefaultAsync(x => x.CaseId == caseId, cancellationToken);
+
+        if (application is null)
+        {
+            application = new GuaranteeCaseApplication(caseId);
+            await dbContext.GuaranteeCaseApplications.AddAsync(application, cancellationToken);
+        }
+
+        application.Update(
+            request.GuaranteeType,
+            request.ContractSubject,
+            request.IsKnowledgeBasedProduct,
+            request.BeneficiaryName,
+            request.BeneficiaryNationalId,
+            request.BeneficiaryCompanyType,
+            request.ApplicantCategory,
+            request.ApplicantCategoryOther,
+            request.ApplicantLegalForm,
+            request.BaseContractNumber,
+            request.BaseContractAmount,
+            request.BaseContractAmountInWords,
+            request.PriceAdjustmentRatePercent,
+            request.ExecutionProvince,
+            request.RequestedGuaranteeAmount,
+            request.InitialValidityDays,
+            request.ValidityFrom,
+            request.ValidityTo,
+            request.CollateralDescription,
+            request.FacilitySubject);
+
+        return application;
     }
 
     private static IQueryable<GuaranteeCase> ApplyScopedFilter(

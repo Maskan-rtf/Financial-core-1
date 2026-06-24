@@ -387,6 +387,22 @@ public sealed class LoanCaseRepository(CoreDbContext dbContext) : ILoanCaseRepos
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<LoanCaseCreditProjection>> GetCreditProjectionsAsync(
+        CancellationToken cancellationToken)
+        => await dbContext.LoanCases
+            .AsNoTracking()
+            .Where(c => !c.IsDeleted)
+            .Select(c => new LoanCaseCreditProjection(
+                c.CurrentStatus,
+                c.CreatedAt,
+                c.CompletedAt,
+                c.ApprovalDetail != null
+                    ? c.ApprovalDetail.ApprovedAmount
+                    : c.Application != null
+                        ? c.Application.RequestedAmount
+                        : null))
+            .ToListAsync(cancellationToken);
+
     private static IQueryable<LoanCase> ApplyScopedFilter(
         IQueryable<LoanCase> query,
         string userId,

@@ -28,7 +28,6 @@ namespace Core.Application.Services;
 
 public sealed class GuaranteeCaseAppService(
     ICoreUnitOfWork unitOfWork,
-    ICoreDbContext dbContext,
     IGuaranteeCaseStateManager stateManager,
     IGuaranteeWorkflowOrchestrator workflowOrchestrator,
     IGuaranteeCaseNumberGenerator caseNumberGenerator,
@@ -113,7 +112,7 @@ public sealed class GuaranteeCaseAppService(
             return Result<GuaranteeCaseDto>.Fail(Error.NotFound(ApiMessages.GuaranteeCaseNotFound));
 
         var creditSnapshot = await GuaranteeApplicantCreditSnapshotCalculator.ComputeFundSnapshotAsync(
-            dbContext, currentCase: null, ct);
+            unitOfWork, currentCase: null, ct);
         var fundCreditCapacity = await ResolveFundCreditCapacityForCaseAsync(detail.CurrentStatus, ct);
 
         if (authorizationService.IsInternalUser
@@ -143,15 +142,14 @@ public sealed class GuaranteeCaseAppService(
         if (auth.IsFailure) return Result<GuaranteeCaseDto>.Fail(auth.Error!);
 
         var isInternal = authorizationService.IsInternalUser;
-        var exists = await dbContext.GuaranteeCases
-            .AsNoTracking()
-            .AnyAsync(x => x.Id == caseId && (isInternal || x.ApplicantUserId == auth.Value), ct);
+        var exists = await unitOfWork.GuaranteeCases.ExistsScopedAsync(
+            caseId, auth.Value!, isInternal, ct);
 
         if (!exists)
             return Result<GuaranteeCaseDto>.Fail(Error.NotFound(ApiMessages.GuaranteeCaseNotFound));
 
         var title = string.IsNullOrWhiteSpace(request.Title) ? null : request.Title.Trim();
-        var rows = await dbContext.GuaranteeCases.SetTitleAsync(caseId, title, clock.UtcNow, ct);
+        var rows = await unitOfWork.GuaranteeCases.SetTitleAsync(caseId, title, clock.UtcNow, ct);
 
         if (rows == 0)
             return Result<GuaranteeCaseDto>.Fail(Error.NotFound(ApiMessages.GuaranteeCaseNotFound));
@@ -190,12 +188,8 @@ public sealed class GuaranteeCaseAppService(
 
         if (history.Count == 0)
         {
-            var exists = await dbContext.GuaranteeCases
-                .AsNoTracking()
-                .AnyAsync(
-                    x => x.Id == caseId
-                         && (authorizationService.IsInternalUser || x.ApplicantUserId == auth.Value),
-                    ct);
+            var exists = await unitOfWork.GuaranteeCases.ExistsScopedAsync(
+                caseId, auth.Value!, authorizationService.IsInternalUser, ct);
 
             if (!exists)
                 return Result<IEnumerable<GuaranteeWorkflowHistoryDto>>.Fail(
@@ -291,7 +285,7 @@ public sealed class GuaranteeCaseAppService(
         }
         else
         {
-            await dbContext.GuaranteeCases.TouchUpdatedAtAsync(caseId, clock.UtcNow, ct);
+            await unitOfWork.GuaranteeCases.TouchUpdatedAtAsync(caseId, clock.UtcNow, ct);
             await unitOfWork.SaveChangesAsync(ct);
         }
 
@@ -322,9 +316,6 @@ public sealed class GuaranteeCaseAppService(
 
     public Task<Result> SubmitAmendmentAsync(Guid caseId, CancellationToken ct)
     {
-        // #region agent log
-        AgentDebugLog.Write("H4", "GuaranteeCaseAppService.SubmitAmendmentAsync", "entry", new { caseId });
-        // #endregion
         return SubmitCurrentAmendmentAsync(caseId, null, ct);
     }
 
@@ -472,7 +463,7 @@ public sealed class GuaranteeCaseAppService(
 
     private async Task PersistDraftChangesAsync(Guid caseId, CancellationToken ct)
     {
-        await dbContext.GuaranteeCases.TouchUpdatedAtAsync(caseId, clock.UtcNow, ct);
+        await unitOfWork.GuaranteeCases.TouchUpdatedAtAsync(caseId, clock.UtcNow, ct);
         await unitOfWork.SaveChangesAsync(ct);
     }
 
@@ -499,7 +490,7 @@ public sealed class GuaranteeCaseAppService(
                 if (entity.AmendmentType is not (AmendmentType.Extension or AmendmentType.Reduction or AmendmentType.Cancellation))
                     return Result.Ok();
 
-                dbContext.GuaranteeAmendmentHistoryRecords.Add(
+                unitOfWork.GuaranteeCases.AddAmendmentHistoryRecord(
                     BuildPendingAmendmentHistoryRecord(entity, authUserId: entity.ApplicantUserId));
 
                 return Result.Ok();
@@ -512,6 +503,9 @@ public sealed class GuaranteeCaseAppService(
         bool legalOverrideActiveObligationCheck,
         CancellationToken ct)
     {
+        // #region agent log
+        DebugSessionLog.Write("E", "GuaranteeCaseAppService.ApproveCurrentAmendmentAsync", "entry", new { caseId });
+        // #endregion
         var auth = RequireUser();
         if (auth.IsFailure)
             return Result.Fail(auth.Error!);
@@ -527,20 +521,13 @@ public sealed class GuaranteeCaseAppService(
                 GuaranteeCaseStatus.AmendmentLegalReview))
             return Result.Fail(Error.Conflict(ApiMessages.InvalidTransition));
 
-        if (entity.AmendmentType == AmendmentType.Cancellation
-            && entity.CurrentStatus == GuaranteeCaseStatus.AmendmentLegalReview
-            && legalOverrideActiveObligationCheck)
-        {
-            entity.ApproveCancellationLegalOverride();
-        }
-
         Result validation = Result.Ok();
         if (entity.CurrentStatus == GuaranteeCaseStatus.AmendmentCreditReview)
         {
             validation = entity.AmendmentType switch
             {
-                AmendmentType.Extension => await GuaranteeFundCreditGuard.ValidateAmendmentExtensionAsync(dbContext, entity, ct),
-                AmendmentType.Reduction => await GuaranteeFundCreditGuard.ValidateApprovalFormSubmitAsync(dbContext, entity, ct),
+                AmendmentType.Extension => await GuaranteeFundCreditGuard.ValidateAmendmentExtensionAsync(unitOfWork, entity, ct),
+                AmendmentType.Reduction => await GuaranteeFundCreditGuard.ValidateApprovalFormSubmitAsync(unitOfWork, entity, ct),
                 AmendmentType.Cancellation => Result.Ok(),
                 _ => Result.Fail(Error.Conflict(ApiMessages.InvalidTransition))
             };
@@ -562,6 +549,9 @@ public sealed class GuaranteeCaseAppService(
                 return auditGate;
         }
 
+        // #region agent log
+        DebugSessionLog.Write("E", "GuaranteeCaseAppService.ApproveCurrentAmendmentAsync", "before-apply-transition", new { caseId, status = entity.CurrentStatus.ToString() });
+        // #endregion
         return await ApplyTransitionAsync(
             caseId,
             GuaranteeWorkflowAction.Approve,
@@ -606,11 +596,8 @@ public sealed class GuaranteeCaseAppService(
             return validation;
 
         var isInternal = authorizationService.IsInternalUser;
-        var currentStatus = await dbContext.GuaranteeCases
-            .AsNoTracking()
-            .Where(x => x.Id == caseId && (isInternal || x.ApplicantUserId == auth.Value))
-            .Select(x => (GuaranteeCaseStatus?)x.CurrentStatus)
-            .FirstOrDefaultAsync(ct);
+        var currentStatus = await unitOfWork.GuaranteeCases.GetCurrentStatusScopedAsync(
+            caseId, auth.Value!, isInternal, ct);
 
         if (currentStatus is null)
             return Result.Fail(Error.NotFound(ApiMessages.GuaranteeCaseNotFound));
@@ -626,11 +613,10 @@ public sealed class GuaranteeCaseAppService(
             return Result.Fail(Error.Validation(ApiMessages.GuaranteeApplicationIncomplete));
         }
 
-        var application = await GuaranteeCaseApplicationPersistence.UpsertAsync(
-            dbContext, caseId, request, ct);
+        var application = await unitOfWork.GuaranteeCases.UpsertApplicationAsync(caseId, request, ct);
 
         await SyncApprovalFormFromApplicationAsync(caseId, application, ct);
-        await dbContext.GuaranteeCases.TouchUpdatedAtAsync(caseId, clock.UtcNow, ct);
+        await unitOfWork.GuaranteeCases.TouchUpdatedAtAsync(caseId, clock.UtcNow, ct);
         await unitOfWork.SaveChangesAsync(ct);
         return Result.Ok();
     }
@@ -689,7 +675,7 @@ public sealed class GuaranteeCaseAppService(
         if (entity.CurrentStatus != GuaranteeCaseStatus.ApprovalFormEntry)
             return Result.Fail(Error.Conflict(ApiMessages.InvalidTransition));
 
-        var creditCheck = await GuaranteeFundCreditGuard.ValidateApprovalFormSubmitAsync(dbContext, entity, ct);
+        var creditCheck = await GuaranteeFundCreditGuard.ValidateApprovalFormSubmitAsync(unitOfWork, entity, ct);
         if (creditCheck.IsFailure)
             return creditCheck;
 
@@ -814,8 +800,8 @@ public sealed class GuaranteeCaseAppService(
             docType,
             auth.Value!);
 
-        await dbContext.GuaranteeCaseDocuments.AddAsync(document, ct);
-        await dbContext.GuaranteeCases.TouchUpdatedAtAsync(caseId, clock.UtcNow, ct);
+        await unitOfWork.GuaranteeCases.AddDocumentAsync(document, ct);
+        await unitOfWork.GuaranteeCases.TouchUpdatedAtAsync(caseId, clock.UtcNow, ct);
         await unitOfWork.SaveChangesAsync(ct);
 
         await TryAutoAdvanceAfterDocumentAsync(caseId, docType, ct);
@@ -887,12 +873,8 @@ public sealed class GuaranteeCaseAppService(
 
         if (comments.Count == 0)
         {
-            var exists = await dbContext.GuaranteeCases
-                .AsNoTracking()
-                .AnyAsync(
-                    x => x.Id == caseId
-                         && (authorizationService.IsInternalUser || x.ApplicantUserId == auth.Value),
-                    ct);
+            var exists = await unitOfWork.GuaranteeCases.ExistsScopedAsync(
+                caseId, auth.Value!, authorizationService.IsInternalUser, ct);
 
             if (!exists)
                 return Result<IEnumerable<GuaranteeCaseCommentDto>>.Fail(
@@ -1040,7 +1022,7 @@ public sealed class GuaranteeCaseAppService(
         CancellationToken ct)
     {
         if (await FundCreditLimitCapacityCalculator.HasOverlappingPeriodAsync(
-                dbContext,
+                unitOfWork,
                 FundModuleType.Guarantee,
                 periodStart,
                 expiresAt,
@@ -1057,7 +1039,7 @@ public sealed class GuaranteeCaseAppService(
             expiresAt,
             setByUserId);
 
-        await dbContext.FundCreditLimits.AddAsync(row, ct);
+        await unitOfWork.FundCreditLimits.AddAsync(row, ct);
     }
 
     private async Task<FundCreditCapacitySnapshotDto?> ResolveFundCreditCapacityForCaseAsync(
@@ -1071,7 +1053,7 @@ public sealed class GuaranteeCaseAppService(
             return null;
 
         return await FundCreditLimitCapacityCalculator.ComputeActiveAsync(
-            dbContext,
+            unitOfWork,
             FundModuleType.Guarantee,
             DateOnly.FromDateTime(DateTime.UtcNow),
             ct);
@@ -1080,22 +1062,20 @@ public sealed class GuaranteeCaseAppService(
     private async Task<GuaranteeFundCreditLimitDto> BuildFundCreditLimitDtoAsync(CancellationToken ct)
     {
         var snapshot = await GuaranteeApplicantCreditSnapshotCalculator.ComputeFundSnapshotAsync(
-            dbContext,
+            unitOfWork,
             currentCase: null,
             ct);
 
         var referenceDate = DateOnly.FromDateTime(DateTime.UtcNow);
         var pool = await FundCreditLimitCapacityCalculator.ResolveActivePoolAsync(
-            dbContext,
+            unitOfWork,
             FundModuleType.Guarantee,
             referenceDate,
             ct);
 
         var row = pool is null
             ? null
-            : await dbContext.FundCreditLimits
-                .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.Id == pool.Id, ct);
+            : await unitOfWork.FundCreditLimits.GetAsNoTrackingAsync(pool.Id, ct);
 
         var lastSetByUserId = row?.LastSetByUserId;
         var lastSetByLookup = string.IsNullOrWhiteSpace(lastSetByUserId)
@@ -1141,19 +1121,18 @@ public sealed class GuaranteeCaseAppService(
         if (entity.CurrentStatus != GuaranteeCaseStatus.ApprovalFormEntry)
             return Result.Fail(Error.Conflict(ApiMessages.InvalidTransition));
 
-        var approvalForm = await dbContext.GuaranteeApprovalForms
-            .FirstOrDefaultAsync(x => x.CaseId == caseId, ct);
+        var approvalForm = await unitOfWork.GuaranteeCases.GetApprovalFormAsync(caseId, ct);
 
         if (approvalForm is null)
         {
             approvalForm = new GuaranteeApprovalForm(caseId);
-            await dbContext.GuaranteeApprovalForms.AddAsync(approvalForm, ct);
+            await unitOfWork.GuaranteeCases.AddApprovalFormAsync(approvalForm, ct);
         }
 
         var application = entity.Application
-                          ?? await GuaranteeCaseApplicationPersistence.GetByCaseIdAsync(dbContext, caseId, ct);
+                          ?? await unitOfWork.GuaranteeCases.GetApplicationByCaseIdAsync(caseId, ct);
 
-        var creditSnapshot = await GuaranteeApplicantCreditSnapshotCalculator.ComputeAsync(dbContext, entity, ct);
+        var creditSnapshot = await GuaranteeApplicantCreditSnapshotCalculator.ComputeAsync(unitOfWork, entity, ct);
 
         GuaranteeApprovalFormMapping.Apply(
             approvalForm,
@@ -1161,7 +1140,7 @@ public sealed class GuaranteeCaseAppService(
             creditSnapshot,
             request);
 
-        await dbContext.GuaranteeCases.TouchUpdatedAtAsync(caseId, clock.UtcNow, ct);
+        await unitOfWork.GuaranteeCases.TouchUpdatedAtAsync(caseId, clock.UtcNow, ct);
         await unitOfWork.SaveChangesAsync(ct);
         return Result.Ok();
     }
@@ -1241,9 +1220,6 @@ public sealed class GuaranteeCaseAppService(
         string? internalComment = null,
         Func<GuaranteeCase, Result>? beforeTransition = null)
     {
-        // #region agent log
-        AgentDebugLog.Write("H3", "GuaranteeCaseAppService.ApplyTransitionAsync", "entry", new { caseId, action = action.ToString() });
-        // #endregion
         var auth = RequireUser();
         if (auth.IsFailure) return Result.Fail(auth.Error!);
 
@@ -1251,18 +1227,11 @@ public sealed class GuaranteeCaseAppService(
             return Result.Fail(Error.Validation(ApiMessages.RevisionMessageRequired));
 
         var actorRole = ResolveActorRole();
-        // #region agent log
-        AgentDebugLog.Write("H3", "GuaranteeCaseAppService.ApplyTransitionAsync", "before-load", new { caseId, action = action.ToString() });
-        // #endregion
         var entity = await unitOfWork.GuaranteeCases.GetScopedForTransitionAsync(
             caseId, auth.Value!, authorizationService.IsInternalUser, ct);
 
         if (entity is null)
             return Result.Fail(Error.NotFound(ApiMessages.GuaranteeCaseNotFound));
-
-        // #region agent log
-        AgentDebugLog.Write("H3", "GuaranteeCaseAppService.ApplyTransitionAsync", "after-load", new { caseId, status = (int)entity.CurrentStatus });
-        // #endregion
 
         var statusBefore = entity.CurrentStatus;
         var phaseBefore = entity.CurrentPhase;
@@ -1296,13 +1265,11 @@ public sealed class GuaranteeCaseAppService(
 
         if (entity.WorkflowHistory.Count > historyCountBefore)
         {
-            // #region agent log
-            AgentDebugLog.Write("H1", "GuaranteeCaseAppService.ApplyTransitionAsync", "before-persist", new { caseId, from = statusBefore.ToString(), to = entity.CurrentStatus.ToString() });
-            // #endregion
             var persist = await PersistTransitionAsync(entity, commentsCountBefore, historyCountBefore, ct);
             if (persist.IsFailure) return persist;
+
             // #region agent log
-            AgentDebugLog.Write("H1", "GuaranteeCaseAppService.ApplyTransitionAsync", "after-persist", new { caseId });
+            DebugSessionLog.Write("E", "GuaranteeCaseAppService.ApplyTransitionAsync", "after-persist", new { caseId, status = entity.CurrentStatus.ToString() });
             // #endregion
 
             foreach (var historyEntry in entity.WorkflowHistory.Skip(historyCountBefore))
@@ -1326,33 +1293,28 @@ public sealed class GuaranteeCaseAppService(
             GuaranteeWorkflowBackgroundSignaler.SignalStatusChanged(serviceScopeFactory, logger, caseId);
         }
 
-        // #region agent log
-        AgentDebugLog.Write("H3", "GuaranteeCaseAppService.ApplyTransitionAsync", "exit", new { caseId, action = action.ToString(), status = entity.CurrentStatus.ToString() });
-        // #endregion
         return Result.Ok();
     }
 
     private async Task<Result> EnsureApprovalFormSeededAsync(GuaranteeCase entity, CancellationToken ct)
     {
-        var exists = await dbContext.GuaranteeApprovalForms
-            .AsNoTracking()
-            .AnyAsync(x => x.CaseId == entity.Id, ct);
+        var exists = await unitOfWork.GuaranteeCases.ApprovalFormExistsAsync(entity.Id, ct);
 
         if (exists)
             return Result.Ok();
 
         var application = entity.Application
-                          ?? await GuaranteeCaseApplicationPersistence.GetByCaseIdAsync(dbContext, entity.Id, ct);
+                          ?? await unitOfWork.GuaranteeCases.GetApplicationByCaseIdAsync(entity.Id, ct);
 
         if (application is null)
             return Result.Ok();
 
         var approvalForm = new GuaranteeApprovalForm(entity.Id);
-        var creditSnapshot = await GuaranteeApplicantCreditSnapshotCalculator.ComputeAsync(dbContext, entity, ct);
+        var creditSnapshot = await GuaranteeApplicantCreditSnapshotCalculator.ComputeAsync(unitOfWork, entity, ct);
         GuaranteeApprovalFormMapping.Apply(approvalForm, application, creditSnapshot);
 
-        await dbContext.GuaranteeApprovalForms.AddAsync(approvalForm, ct);
-        await dbContext.GuaranteeCases.TouchUpdatedAtAsync(entity.Id, clock.UtcNow, ct);
+        await unitOfWork.GuaranteeCases.AddApprovalFormAsync(approvalForm, ct);
+        await unitOfWork.GuaranteeCases.TouchUpdatedAtAsync(entity.Id, clock.UtcNow, ct);
         await unitOfWork.SaveChangesAsync(ct);
         return Result.Ok();
     }
@@ -1362,21 +1324,18 @@ public sealed class GuaranteeCaseAppService(
         GuaranteeCaseApplication application,
         CancellationToken ct)
     {
-        var approvalForm = await dbContext.GuaranteeApprovalForms
-            .FirstOrDefaultAsync(x => x.CaseId == caseId, ct);
+        var approvalForm = await unitOfWork.GuaranteeCases.GetApprovalFormAsync(caseId, ct);
 
         if (approvalForm is null)
             return;
 
-        var guaranteeCase = await dbContext.GuaranteeCases
-            .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == caseId, ct);
+        var guaranteeCase = await unitOfWork.GuaranteeCases.GetAsNoTrackingAsync(caseId, ct);
 
         if (guaranteeCase is null)
             return;
 
         var creditSnapshot = await GuaranteeApplicantCreditSnapshotCalculator.ComputeAsync(
-            dbContext,
+            unitOfWork,
             guaranteeCase,
             ct);
 
@@ -1394,7 +1353,7 @@ public sealed class GuaranteeCaseAppService(
 
         if (profile is null)
         {
-            await dbContext.GuaranteeApplicantCreditProfiles.AddAsync(
+            await unitOfWork.GuaranteeCases.AddApplicantCreditProfileAsync(
                 new GuaranteeApplicantCreditProfile(applicantUserId, companyId, creditLimitWithCheck, setByUserId),
                 ct);
             return;
@@ -1410,14 +1369,10 @@ public sealed class GuaranteeCaseAppService(
     {
         if (companyId.HasValue)
         {
-            return dbContext.GuaranteeApplicantCreditProfiles
-                .FirstOrDefaultAsync(x => x.CompanyId == companyId.Value, ct);
+            return unitOfWork.GuaranteeCases.FindApplicantCreditProfileByCompanyAsync(companyId.Value, ct);
         }
 
-        return dbContext.GuaranteeApplicantCreditProfiles
-            .FirstOrDefaultAsync(
-                x => x.ApplicantUserId == applicantUserId && x.CompanyId == null,
-                ct);
+        return unitOfWork.GuaranteeCases.FindApplicantCreditProfileByUserAsync(applicantUserId, ct);
     }
 
     private static bool SupportsInternalComment(GuaranteeWorkflowAction action, GuaranteeCaseStatus statusBefore) =>
@@ -1441,35 +1396,35 @@ public sealed class GuaranteeCaseAppService(
         CancellationToken ct)
     {
         // #region agent log
-        AgentDebugLog.Write("H1", "GuaranteeCaseAppService.PersistTransitionAsync", "entry", new { caseId = entity.Id, status = entity.CurrentStatus.ToString() });
+        DebugSessionLog.Write("A", "GuaranteeCaseAppService.PersistTransitionAsync", "entry", new
+        {
+            caseId = entity.Id,
+            status = entity.CurrentStatus.ToString(),
+            pendingHistory = entity.WorkflowHistory.Count - historyCountBefore,
+            pendingComments = entity.Comments.Count - commentsCountBefore
+        });
         // #endregion
+
         var pendingHistory = entity.WorkflowHistory.Skip(historyCountBefore).ToList();
         var pendingComments = entity.Comments.Skip(commentsCountBefore).ToList();
-        var pendingNewAmendmentRecords = CapturePendingNewAmendmentHistory();
+        var pendingNewAmendmentRecords = unitOfWork.GuaranteeCases.CapturePendingNewAmendmentHistory();
 
-        if (dbContext is DbContext ef)
-            ef.ChangeTracker.Clear();
+        unitOfWork.GuaranteeCases.ClearChangeTracker();
 
-        foreach (var record in pendingNewAmendmentRecords)
-        {
-            if (dbContext is DbContext db)
-                await db.InsertAmendmentHistoryRecordAsync(record, ct);
-        }
-
-        // #region agent log
-        AgentDebugLog.Write("H1", "GuaranteeCaseAppService.PersistTransitionAsync", "before-audit-update", new { caseId = entity.Id });
-        // #endregion
         foreach (var history in pendingHistory)
         {
+            // #region agent log
+            DebugSessionLog.Write("D", "GuaranteeCaseAppService.PersistTransitionAsync", "before-audit-update", new { caseId = entity.Id, historyId = history.Id });
+            // #endregion
             var auditApplied = await ApplyAmendmentAuditDecisionAsync(entity, history, ct);
             if (auditApplied.IsFailure)
                 return auditApplied;
         }
 
         // #region agent log
-        AgentDebugLog.Write("H1", "GuaranteeCaseAppService.PersistTransitionAsync", "before-state-update", new { caseId = entity.Id });
+        DebugSessionLog.Write("B", "GuaranteeCaseAppService.PersistTransitionAsync", "before-state-update", new { caseId = entity.Id, status = entity.CurrentStatus.ToString() });
         // #endregion
-        var rows = await dbContext.GuaranteeCases.ApplyStateAndAmendmentAsync(
+        var rows = await unitOfWork.GuaranteeCases.ApplyStateAndAmendmentAsync(
             entity.Id,
             entity.CurrentStatus,
             entity.CurrentPhase,
@@ -1489,38 +1444,52 @@ public sealed class GuaranteeCaseAppService(
             entity.AmendmentCompletedAt,
             ct);
 
+        // #region agent log
+        DebugSessionLog.Write("B", "GuaranteeCaseAppService.PersistTransitionAsync", "after-state-update", new { caseId = entity.Id, rows });
+        // #endregion
+
         if (rows == 0)
             return Result.Fail(Error.NotFound(ApiMessages.GuaranteeCaseNotFound));
-
-        // #region agent log
-        AgentDebugLog.Write("H1", "GuaranteeCaseAppService.PersistTransitionAsync", "after-state-update", new { caseId = entity.Id, rows });
-        // #endregion
 
         if (entity.CurrentStatus is GuaranteeCaseStatus.AmendmentApproved
             || (entity.CurrentStatus == GuaranteeCaseStatus.Cancelled && entity.AmendmentType == AmendmentType.Cancellation))
         {
             // #region agent log
-            AgentDebugLog.Write("H1", "GuaranteeCaseAppService.PersistTransitionAsync", "before-approved-data", new { caseId = entity.Id });
+            DebugSessionLog.Write("B", "GuaranteeCaseAppService.PersistTransitionAsync", "before-approved-data", new
+            {
+                caseId = entity.Id,
+                amendmentType = entity.AmendmentType?.ToString()
+            });
             // #endregion
             await PersistApprovedAmendmentDataAsync(entity, ct);
             // #region agent log
-            AgentDebugLog.Write("H1", "GuaranteeCaseAppService.PersistTransitionAsync", "after-approved-data", new { caseId = entity.Id });
+            DebugSessionLog.Write("B", "GuaranteeCaseAppService.PersistTransitionAsync", "after-approved-data", new { caseId = entity.Id });
             // #endregion
         }
 
-        // #region agent log
-        AgentDebugLog.Write("H1", "GuaranteeCaseAppService.PersistTransitionAsync", "before-history-insert", new { caseId = entity.Id });
-        // #endregion
-        if (dbContext is DbContext dbContextImpl)
+        foreach (var record in pendingNewAmendmentRecords)
         {
-            foreach (var history in pendingHistory)
-                await dbContextImpl.InsertWorkflowHistoryAsync(history, ct);
-            foreach (var comment in pendingComments)
-                await dbContextImpl.InsertCommentAsync(comment, ct);
+            // #region agent log
+            DebugSessionLog.Write("G", "GuaranteeCaseAppService.PersistTransitionAsync", "before-insert-amendment", new { caseId = entity.Id, recordId = record.Id });
+            // #endregion
+            await unitOfWork.GuaranteeCases.InsertAmendmentHistoryRecordAsync(record, ct);
         }
+        foreach (var history in pendingHistory)
+        {
+            // #region agent log
+            DebugSessionLog.Write("G", "GuaranteeCaseAppService.PersistTransitionAsync", "before-insert-history", new { caseId = entity.Id, historyId = history.Id });
+            // #endregion
+            await unitOfWork.GuaranteeCases.InsertWorkflowHistoryAsync(history, ct);
+        }
+        foreach (var comment in pendingComments)
+            await unitOfWork.GuaranteeCases.InsertCommentAsync(comment, ct);
 
         // #region agent log
-        AgentDebugLog.Write("H1", "GuaranteeCaseAppService.PersistTransitionAsync", "exit", new { caseId = entity.Id });
+        DebugSessionLog.Write("A", "GuaranteeCaseAppService.PersistTransitionAsync", "after-inserts", new { caseId = entity.Id });
+        // #endregion
+
+        // #region agent log
+        DebugSessionLog.Write("A", "GuaranteeCaseAppService.PersistTransitionAsync", "exit", new { caseId = entity.Id });
         // #endregion
         return Result.Ok();
     }
@@ -1545,7 +1514,7 @@ public sealed class GuaranteeCaseAppService(
         if (decisionStatus is null)
             return Result.Ok();
 
-        var rows = await dbContext.GuaranteeAmendmentHistoryRecords.ApplyLatestPendingAmendmentAuditDecisionAsync(
+        var rows = await unitOfWork.GuaranteeCases.ApplyLatestPendingAmendmentAuditDecisionAsync(
             entity.Id,
             decisionStatus.Value,
             history.ChangedByUserId,
@@ -1555,104 +1524,33 @@ public sealed class GuaranteeCaseAppService(
 
         if (rows == 0)
         {
-            var latestStatus = await dbContext.GuaranteeAmendmentHistoryRecords
-                .AsNoTracking()
-                .Where(x => x.GuaranteeCaseId == entity.Id)
-                .OrderByDescending(x => x.CreatedAt)
-                .Select(x => (GuaranteeAmendmentHistoryStatus?)x.Status)
-                .FirstOrDefaultAsync(ct);
+            var latestStatus = await unitOfWork.GuaranteeCases.GetLatestAmendmentHistoryStatusAsync(entity.Id, ct);
 
             if (latestStatus == decisionStatus.Value)
                 return Result.Ok();
 
-            // #region agent log
-            AgentDebugLog.Write("H1", "GuaranteeCaseAppService.ApplyAmendmentAuditDecisionAsync", "no-pending-audit", new { caseId = entity.Id, expected = decisionStatus.Value.ToString(), latest = latestStatus?.ToString() });
-            // #endregion
             return Result.Fail(Error.Conflict(GuaranteeAmendmentMessages.Incomplete));
         }
 
         return Result.Ok();
     }
 
-    private IReadOnlyList<GuaranteeAmendmentHistoryRecord> CapturePendingNewAmendmentHistory()
-    {
-        if (dbContext is not DbContext ef)
-            return [];
-
-        return ef.ChangeTracker
-            .Entries<GuaranteeAmendmentHistoryRecord>()
-            .Where(x => x.State == EntityState.Added)
-            .Select(x => x.Entity)
-            .ToList();
-    }
-
     private async Task PersistApprovedAmendmentDataAsync(GuaranteeCase entity, CancellationToken ct)
     {
         var approvedValidityTo = entity.AmendmentApprovedValidityTo ?? entity.AmendmentRequestedValidityTo;
         var approvedAmount = entity.AmendmentApprovedAmount ?? entity.AmendmentRequestedAmount;
+        var updatedAt = entity.UpdatedAt ?? clock.UtcNow;
 
         if (entity.AmendmentType == AmendmentType.Extension && approvedValidityTo.HasValue)
-        {
-            await dbContext.GuaranteeCaseApplications
-                .Where(x => x.CaseId == entity.Id)
-                .ExecuteUpdateAsync(
-                    setters => setters
-                        .SetProperty(x => x.ValidityTo, approvedValidityTo)
-                        .SetProperty(x => x.UpdatedAt, entity.UpdatedAt ?? clock.UtcNow),
-                    ct);
-
-            await dbContext.GuaranteeApprovalForms
-                .Where(x => x.CaseId == entity.Id)
-                .ExecuteUpdateAsync(
-                    setters => setters
-                        .SetProperty(x => x.ExpiryDate, approvedValidityTo)
-                        .SetProperty(
-                            x => x.ActiveDurationDays,
-                            x => x.IssuanceDate.HasValue
-                                ? approvedValidityTo!.Value.DayNumber - x.IssuanceDate.Value.DayNumber + 1
-                                : x.ActiveDurationDays)
-                        .SetProperty(x => x.UpdatedAt, entity.UpdatedAt ?? clock.UtcNow),
-                    ct);
-        }
+            await unitOfWork.GuaranteeCases.PersistApprovedAmendmentExtensionAsync(
+                entity.Id, approvedValidityTo.Value, updatedAt, ct);
 
         if (entity.AmendmentType == AmendmentType.Reduction && approvedAmount.HasValue)
-        {
-            await dbContext.GuaranteeCaseApplications
-                .Where(x => x.CaseId == entity.Id)
-                .ExecuteUpdateAsync(
-                    setters => setters
-                        .SetProperty(x => x.RequestedGuaranteeAmount, approvedAmount)
-                        .SetProperty(x => x.UpdatedAt, entity.UpdatedAt ?? clock.UtcNow),
-                    ct);
-
-            await dbContext.GuaranteeApprovalForms
-                .Where(x => x.CaseId == entity.Id)
-                .ExecuteUpdateAsync(
-                    setters => setters
-                        .SetProperty(x => x.GuaranteeAmount, approvedAmount)
-                        .SetProperty(x => x.UpdatedAt, entity.UpdatedAt ?? clock.UtcNow),
-                    ct);
-        }
+            await unitOfWork.GuaranteeCases.PersistApprovedAmendmentReductionAsync(
+                entity.Id, approvedAmount.Value, updatedAt, ct);
 
         if (entity.AmendmentType == AmendmentType.Cancellation)
-        {
-            await dbContext.GuaranteeApprovalForms
-                .Where(x => x.CaseId == entity.Id)
-                .ExecuteUpdateAsync(
-                    setters => setters
-                        .SetProperty(x => x.ActiveCommitments, 0m)
-                        .SetProperty(x => x.GuaranteeAmount, 0m)
-                        .SetProperty(x => x.UpdatedAt, entity.UpdatedAt ?? clock.UtcNow),
-                    ct);
-
-            await dbContext.GuaranteeCaseApplications
-                .Where(x => x.CaseId == entity.Id)
-                .ExecuteUpdateAsync(
-                    setters => setters
-                        .SetProperty(x => x.RequestedGuaranteeAmount, 0m)
-                        .SetProperty(x => x.UpdatedAt, entity.UpdatedAt ?? clock.UtcNow),
-                    ct);
-        }
+            await unitOfWork.GuaranteeCases.PersistApprovedAmendmentCancellationAsync(entity.Id, updatedAt, ct);
     }
 
     private static bool HasActiveAmendmentWorkflow(GuaranteeCase entity)
@@ -1666,6 +1564,7 @@ public sealed class GuaranteeCaseAppService(
     private static bool ShouldMarkAmendmentAuditApproved(GuaranteeCaseStatus status, AmendmentType? amendmentType)
         => status switch
         {
+            GuaranteeCaseStatus.AmendmentCeoApproval when amendmentType is AmendmentType.Cancellation => true,
             GuaranteeCaseStatus.AmendmentLegalReview when amendmentType is AmendmentType.Extension or AmendmentType.Reduction or AmendmentType.Cancellation => true,
             _ => false
         };
@@ -1686,10 +1585,7 @@ public sealed class GuaranteeCaseAppService(
 
     private async Task<Result> ValidateAmendmentAuditForApprovalAsync(GuaranteeCase entity, CancellationToken ct)
     {
-        var latestStatus = await GetLatestAmendmentHistoryStatusAsync(entity.Id, ct);
-        // #region agent log
-        AgentDebugLog.Write("H7", "GuaranteeCaseAppService.ValidateAmendmentAuditForApprovalAsync", "audit-status", new { caseId = entity.Id, status = entity.CurrentStatus.ToString(), latest = latestStatus?.ToString() });
-        // #endregion
+        var latestStatus = await unitOfWork.GuaranteeCases.GetLatestAmendmentHistoryStatusAsync(entity.Id, ct);
 
         if (latestStatus is null)
             return await EnsureAmendmentAuditRecordAsync(entity, ct);
@@ -1702,7 +1598,7 @@ public sealed class GuaranteeCaseAppService(
 
     private async Task<Result> ValidateAmendmentAuditForRejectAsync(GuaranteeCase entity, CancellationToken ct)
     {
-        var latestStatus = await GetLatestAmendmentHistoryStatusAsync(entity.Id, ct);
+        var latestStatus = await unitOfWork.GuaranteeCases.GetLatestAmendmentHistoryStatusAsync(entity.Id, ct);
         if (latestStatus is GuaranteeAmendmentHistoryStatus.PendingReview or GuaranteeAmendmentHistoryStatus.Rejected)
             return Result.Ok();
 
@@ -1720,26 +1616,10 @@ public sealed class GuaranteeCaseAppService(
         if (!GuaranteeAmendmentCompleteness.IsComplete(entity))
             return Result.Fail(Error.Conflict(GuaranteeAmendmentMessages.Incomplete));
 
-        if (dbContext is not DbContext db)
-            return Result.Fail(Error.Unexpected(ApiMessages.GuaranteeCaseNotFound));
-
         var record = BuildPendingAmendmentHistoryRecord(entity, entity.ApplicantUserId);
-        await db.InsertAmendmentHistoryRecordAsync(record, ct);
-        // #region agent log
-        AgentDebugLog.Write("H7", "GuaranteeCaseAppService.EnsureAmendmentAuditRecordAsync", "backfilled", new { caseId = entity.Id, recordId = record.Id });
-        // #endregion
+        await unitOfWork.GuaranteeCases.AddAmendmentHistoryRecordAsync(record, ct);
         return Result.Ok();
     }
-
-    private async Task<GuaranteeAmendmentHistoryStatus?> GetLatestAmendmentHistoryStatusAsync(
-        Guid caseId,
-        CancellationToken ct)
-        => await dbContext.GuaranteeAmendmentHistoryRecords
-            .AsNoTracking()
-            .Where(x => x.GuaranteeCaseId == caseId)
-            .OrderByDescending(x => x.CreatedAt)
-            .Select(x => (GuaranteeAmendmentHistoryStatus?)x.Status)
-            .FirstOrDefaultAsync(ct);
 
     private GuaranteeAmendmentHistoryRecord BuildPendingAmendmentHistoryRecord(GuaranteeCase entity, string authUserId)
         => new(
@@ -1787,11 +1667,7 @@ public sealed class GuaranteeCaseAppService(
 
     private async Task<IReadOnlyList<GuaranteeAmendmentHistoryRecordDto>> LoadAmendmentHistoryAsync(Guid caseId, CancellationToken ct)
     {
-        var records = await dbContext.GuaranteeAmendmentHistoryRecords
-            .AsNoTracking()
-            .Where(x => x.GuaranteeCaseId == caseId)
-            .OrderByDescending(x => x.CreatedAt)
-            .ToListAsync(ct);
+        var records = await unitOfWork.GuaranteeCases.GetAmendmentHistoryRecordsAsync(caseId, ct);
 
         if (records.Count == 0)
             return [];
@@ -1865,9 +1741,6 @@ public sealed class GuaranteeCaseAppService(
         int toStatus,
         CancellationToken cancellationToken)
     {
-        // #region agent log
-        AgentDebugLog.Write("H2", "GuaranteeCaseAppService.NotifyWorkflowSmsSafeAsync", "entry", new { caseId, fromStatus, toStatus });
-        // #endregion
         try
         {
             await workflowSmsNotifier.NotifyStepChangeAsync(
@@ -1884,8 +1757,5 @@ public sealed class GuaranteeCaseAppService(
         {
             logger.LogWarning(ex, "Workflow SMS notification failed for guarantee case {CaseId}", caseId);
         }
-        // #region agent log
-        AgentDebugLog.Write("H2", "GuaranteeCaseAppService.NotifyWorkflowSmsSafeAsync", "exit", new { caseId });
-        // #endregion
     }
 }

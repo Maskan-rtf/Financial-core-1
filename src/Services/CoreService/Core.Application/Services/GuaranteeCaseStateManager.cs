@@ -302,16 +302,17 @@ public sealed class GuaranteeCaseStateManager : IGuaranteeCaseStateManager
                 }
                 break;
 
+            case GuaranteeWorkflowAction.Approve when caseEntity.CurrentStatus == GuaranteeCaseStatus.AmendmentCeoApproval:
+                if (caseEntity.AmendmentType == AmendmentType.Cancellation)
+                {
+                    nextStatus = GuaranteeCaseStatus.Cancelled;
+                    break;
+                }
+                break;
+
             case GuaranteeWorkflowAction.Approve when caseEntity.CurrentStatus == GuaranteeCaseStatus.AmendmentLegalReview:
                 if (caseEntity.AmendmentType == AmendmentType.Cancellation)
                 {
-                    if (caseEntity.AmendmentRequiresCreditReview
-                        && !caseEntity.LegalOverrideApproved)
-                    {
-                        errorMessage = ApiMessages.GuaranteeCancellationRequiresLegalOverride;
-                        return false;
-                    }
-
                     nextStatus = GuaranteeCaseStatus.Cancelled;
                     break;
                 }

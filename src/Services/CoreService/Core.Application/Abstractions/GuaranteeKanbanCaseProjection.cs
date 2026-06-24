@@ -8,6 +8,7 @@ public sealed record GuaranteeKanbanCaseProjection(
     ApplicantType ApplicantType,
     GuaranteeCasePhase CurrentPhase,
     GuaranteeCaseStatus CurrentStatus,
+    AmendmentType? AmendmentType,
     DateTimeOffset CreatedAt,
     DateTimeOffset? UpdatedAt,
     string? RepresentativeName,

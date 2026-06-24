@@ -894,7 +894,7 @@ public sealed class LoanCaseAppService(
             return null;
 
         return await FundCreditLimitCapacityCalculator.ComputeActiveAsync(
-            dbContext,
+            unitOfWork,
             FundModuleType.Loan,
             DateOnly.FromDateTime(DateTime.UtcNow),
             ct);

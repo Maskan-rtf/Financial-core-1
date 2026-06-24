@@ -41,6 +41,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IGuaranteeCaseRepository, GuaranteeCaseRepository>();
         services.AddScoped<IGuaranteeRenewalCaseRepository, GuaranteeRenewalCaseRepository>();
         services.AddScoped<ILoanCaseRepository, LoanCaseRepository>();
+        services.AddScoped<IFundCreditLimitRepository, FundCreditLimitRepository>();
         services.AddScoped<ICoreUnitOfWork, CoreUnitOfWork>();
         services.AddScoped<ICompanyDtoMapper, CompanyDtoMapper>();
         services.AddScoped<ICaseDtoMapper, CaseDtoMapper>();

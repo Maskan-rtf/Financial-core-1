@@ -51,4 +51,6 @@ public interface ILoanCaseRepository
         string userId,
         bool isInternalUser,
         CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<LoanCaseCreditProjection>> GetCreditProjectionsAsync(CancellationToken cancellationToken);
 }

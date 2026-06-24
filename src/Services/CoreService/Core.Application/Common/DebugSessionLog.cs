@@ -2,17 +2,18 @@ using System.Text.Json;
 
 namespace Core.Application.Common;
 
-public static class AgentDebugLog
+internal static class DebugSessionLog
 {
-    private const string LogPath = @"d:\work\Maskan\Panel\Financial-Core\debug-35307a.log";
+    private const string LogPath = @"d:\work\Maskan\Panel\Financial-Core\debug-f414f7.log";
 
-    public static void Write(string hypothesisId, string location, string message, object? data = null)
+    public static void Write(string hypothesisId, string location, string message, object? data = null, string? runId = null)
     {
         try
         {
             var payload = JsonSerializer.Serialize(new
             {
-                sessionId = "35307a",
+                sessionId = "f414f7",
+                runId,
                 hypothesisId,
                 location,
                 message,

@@ -1,7 +1,6 @@
 using Core.Application.Abstractions;
 using Core.Application.DTOs;
 using Core.Domain.Enums;
-using Microsoft.EntityFrameworkCore;
 
 namespace Core.Application.Common;
 
@@ -45,16 +44,21 @@ public static class FundCreditLimitCapacityCalculator
     ];
 
     public static async Task<FundCreditCapacitySnapshotDto> ComputeActiveAsync(
-        ICoreDbContext db,
+        ICoreUnitOfWork unitOfWork,
         FundModuleType moduleType,
         DateOnly referenceDate,
         CancellationToken cancellationToken)
     {
-        var pool = await ResolveActivePoolAsync(db, moduleType, referenceDate, cancellationToken);
+        var pool = await unitOfWork.FundCreditLimits.ResolveActivePoolAsync(moduleType, referenceDate, cancellationToken);
         if (pool is null)
             return new FundCreditCapacitySnapshotDto(moduleType, null, null, null, null, null);
 
-        var utilization = await ComputeUtilizationAsync(db, moduleType, pool.PeriodStart, pool.ExpiresAt, cancellationToken);
+        var utilization = await ComputeUtilizationAsync(
+            unitOfWork,
+            moduleType,
+            pool.PeriodStart,
+            pool.ExpiresAt,
+            cancellationToken);
         return new FundCreditCapacitySnapshotDto(
             moduleType,
             pool.CreditLimitWithCheck,
@@ -65,20 +69,21 @@ public static class FundCreditLimitCapacityCalculator
     }
 
     public static async Task<FundCreditCapacitySnapshotDto> ComputeForPoolAsync(
-        ICoreDbContext db,
+        ICoreUnitOfWork unitOfWork,
         Guid poolId,
         CancellationToken cancellationToken)
     {
-        var pool = await db.FundCreditLimits
-            .AsNoTracking()
-            .Where(x => x.Id == poolId)
-            .Select(x => new PoolProjection(x.Id, x.ModuleType, x.CreditLimitWithCheck, x.PeriodStart, x.ExpiresAt))
-            .FirstOrDefaultAsync(cancellationToken);
+        var pool = await unitOfWork.FundCreditLimits.GetPoolProjectionAsync(poolId, cancellationToken);
 
         if (pool is null)
             return new FundCreditCapacitySnapshotDto(FundModuleType.Guarantee, null, null, null, null, null);
 
-        var utilization = await ComputeUtilizationAsync(db, pool.ModuleType, pool.PeriodStart, pool.ExpiresAt, cancellationToken);
+        var utilization = await ComputeUtilizationAsync(
+            unitOfWork,
+            pool.ModuleType,
+            pool.PeriodStart,
+            pool.ExpiresAt,
+            cancellationToken);
         return new FundCreditCapacitySnapshotDto(
             pool.ModuleType,
             pool.CreditLimitWithCheck,
@@ -88,69 +93,55 @@ public static class FundCreditLimitCapacityCalculator
             pool.ExpiresAt);
     }
 
-    public static async Task<PoolProjection?> ResolveActivePoolAsync(
-        ICoreDbContext db,
+    public static Task<FundCreditLimitPoolProjection?> ResolveActivePoolAsync(
+        ICoreUnitOfWork unitOfWork,
         FundModuleType moduleType,
         DateOnly referenceDate,
         CancellationToken cancellationToken)
-        => await db.FundCreditLimits
-            .AsNoTracking()
-            .Where(x => x.ModuleType == moduleType
-                && x.PeriodStart <= referenceDate
-                && x.ExpiresAt >= referenceDate)
-            .OrderByDescending(x => x.PeriodStart)
-            .Select(x => new PoolProjection(x.Id, x.ModuleType, x.CreditLimitWithCheck, x.PeriodStart, x.ExpiresAt))
-            .FirstOrDefaultAsync(cancellationToken);
+        => unitOfWork.FundCreditLimits.ResolveActivePoolAsync(moduleType, referenceDate, cancellationToken);
 
     public static async Task<decimal> ComputeUtilizationAsync(
-        ICoreDbContext db,
+        ICoreUnitOfWork unitOfWork,
         FundModuleType moduleType,
         DateOnly periodStart,
         DateOnly expiresAt,
         CancellationToken cancellationToken)
         => moduleType switch
         {
-            FundModuleType.Guarantee => await ComputeGuaranteeUtilizationAsync(db, periodStart, expiresAt, cancellationToken),
-            FundModuleType.Loan => await ComputeLoanUtilizationAsync(db, periodStart, expiresAt, cancellationToken),
+            FundModuleType.Guarantee => await ComputeGuaranteeUtilizationAsync(
+                unitOfWork,
+                periodStart,
+                expiresAt,
+                cancellationToken),
+            FundModuleType.Loan => await ComputeLoanUtilizationAsync(
+                unitOfWork,
+                periodStart,
+                expiresAt,
+                cancellationToken),
             _ => 0m
         };
 
-    public static async Task<bool> HasOverlappingPeriodAsync(
-        ICoreDbContext db,
+    public static Task<bool> HasOverlappingPeriodAsync(
+        ICoreUnitOfWork unitOfWork,
         FundModuleType moduleType,
         DateOnly periodStart,
         DateOnly expiresAt,
         Guid? excludeId,
         CancellationToken cancellationToken)
-        => await db.FundCreditLimits
-            .AsNoTracking()
-            .AnyAsync(
-                x => x.ModuleType == moduleType
-                    && x.Id != excludeId
-                    && periodStart <= x.ExpiresAt
-                    && expiresAt >= x.PeriodStart,
-                cancellationToken);
+        => unitOfWork.FundCreditLimits.HasOverlappingPeriodAsync(
+            moduleType,
+            periodStart,
+            expiresAt,
+            excludeId,
+            cancellationToken);
 
     private static async Task<decimal> ComputeGuaranteeUtilizationAsync(
-        ICoreDbContext db,
+        ICoreUnitOfWork unitOfWork,
         DateOnly periodStart,
         DateOnly expiresAt,
         CancellationToken cancellationToken)
     {
-        var cases = await db.GuaranteeCases
-            .AsNoTracking()
-            .Where(c => !c.IsDeleted)
-            .Select(c => new GuaranteeCreditProjection(
-                c.CurrentStatus,
-                c.CreatedAt,
-                c.CompletedAt,
-                c.ApprovalForm != null
-                    ? c.ApprovalForm.GuaranteeAmount
-                    : c.Application != null
-                        ? c.Application.RequestedGuaranteeAmount
-                        : null,
-                c.ApprovalForm != null ? c.ApprovalForm.IssuanceDate : null))
-            .ToListAsync(cancellationToken);
+        var cases = await unitOfWork.GuaranteeCases.GetCreditProjectionsAsync(cancellationToken);
 
         var issued = cases
             .Where(c => c.Status == GuaranteeCaseStatus.Completed && c.Amount is > 0)
@@ -166,24 +157,12 @@ public static class FundCreditLimitCapacityCalculator
     }
 
     private static async Task<decimal> ComputeLoanUtilizationAsync(
-        ICoreDbContext db,
+        ICoreUnitOfWork unitOfWork,
         DateOnly periodStart,
         DateOnly expiresAt,
         CancellationToken cancellationToken)
     {
-        var cases = await db.LoanCases
-            .AsNoTracking()
-            .Where(c => !c.IsDeleted)
-            .Select(c => new LoanCreditProjection(
-                c.CurrentStatus,
-                c.CreatedAt,
-                c.CompletedAt,
-                c.ApprovalDetail != null
-                    ? c.ApprovalDetail.ApprovedAmount
-                    : c.Application != null
-                        ? c.Application.RequestedAmount
-                        : null))
-            .ToListAsync(cancellationToken);
+        var cases = await unitOfWork.LoanCases.GetCreditProjectionsAsync(cancellationToken);
 
         var disbursed = cases
             .Where(c => LoanDisbursedStatuses.Contains(c.Status) && c.Amount is > 0)
@@ -207,7 +186,7 @@ public static class FundCreditLimitCapacityCalculator
         return created >= periodStart && created <= expiresAt;
     }
 
-    private static DateOnly? GetGuaranteeIssuedReferenceDate(GuaranteeCreditProjection c)
+    private static DateOnly? GetGuaranteeIssuedReferenceDate(GuaranteeCaseCreditProjection c)
     {
         if (c.IssuanceDate is not null)
             return c.IssuanceDate;
@@ -218,31 +197,11 @@ public static class FundCreditLimitCapacityCalculator
         return null;
     }
 
-    private static DateOnly? GetLoanDisbursedReferenceDate(LoanCreditProjection c)
+    private static DateOnly? GetLoanDisbursedReferenceDate(LoanCaseCreditProjection c)
     {
         if (c.CompletedAt is not null)
             return DateOnly.FromDateTime(c.CompletedAt.Value.UtcDateTime);
 
         return null;
     }
-
-    public sealed record PoolProjection(
-        Guid Id,
-        FundModuleType ModuleType,
-        decimal CreditLimitWithCheck,
-        DateOnly PeriodStart,
-        DateOnly ExpiresAt);
-
-    private sealed record GuaranteeCreditProjection(
-        GuaranteeCaseStatus Status,
-        DateTimeOffset CreatedAt,
-        DateTimeOffset? CompletedAt,
-        decimal? Amount,
-        DateOnly? IssuanceDate);
-
-    private sealed record LoanCreditProjection(
-        LoanCaseStatus Status,
-        DateTimeOffset CreatedAt,
-        DateTimeOffset? CompletedAt,
-        decimal? Amount);
 }

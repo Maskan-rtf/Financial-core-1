@@ -1,7 +1,6 @@
 using BuildingBlocks.Application.Errors;
 using BuildingBlocks.Application.Results;
 using BuildingBlocks.Domain.Abstractions;
-using BuildingBlocks.Persistence.Queries;
 using Core.Application.Abstractions;
 using Core.Application.Common;
 using Core.Application.DTOs;
@@ -9,12 +8,11 @@ using Core.Application.Mappers;
 using Core.Application.Requests;
 using Core.Domain.Entities.Fund;
 using Core.Domain.Enums;
-using Microsoft.EntityFrameworkCore;
 
 namespace Core.Application.Services;
 
 public sealed class FundCreditLimitAppService(
-    ICoreDbContext dbContext,
+    ICoreUnitOfWork unitOfWork,
     IUserContext userContext,
     IUserDisplayLookup userDisplayLookup,
     IFundCreditLimitDtoMapper fundCreditLimitDtoMapper) : IFundCreditLimitAppService
@@ -36,7 +34,7 @@ public sealed class FundCreditLimitAppService(
             return Result<FundCreditLimitDto>.Fail(Error.Validation(ApiMessages.InvalidFundCreditLimitPeriod));
 
         if (await FundCreditLimitCapacityCalculator.HasOverlappingPeriodAsync(
-                dbContext,
+                unitOfWork,
                 request.ModuleType,
                 request.PeriodStart,
                 request.ExpiresAt,
@@ -53,8 +51,8 @@ public sealed class FundCreditLimitAppService(
             request.ExpiresAt,
             userId);
 
-        await dbContext.FundCreditLimits.AddAsync(entity, ct);
-        await dbContext.SaveChangesAsync(ct);
+        await unitOfWork.FundCreditLimits.AddAsync(entity, ct);
+        await unitOfWork.SaveChangesAsync(ct);
 
         var userLookup = await userDisplayLookup.GetByIdsAsync([userId], ct);
         return Result<FundCreditLimitDto>.Ok(await MapDtoAsync(entity, userLookup, ct));
@@ -76,12 +74,12 @@ public sealed class FundCreditLimitAppService(
         if (request.ExpiresAt < request.PeriodStart)
             return Result<FundCreditLimitDto>.Fail(Error.Validation(ApiMessages.InvalidFundCreditLimitPeriod));
 
-        var entity = await dbContext.FundCreditLimits.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var entity = await unitOfWork.FundCreditLimits.GetAsync(id, ct);
         if (entity is null)
             return Result<FundCreditLimitDto>.Fail(Error.NotFound(ApiMessages.FundCreditLimitNotFound));
 
         if (await FundCreditLimitCapacityCalculator.HasOverlappingPeriodAsync(
-                dbContext,
+                unitOfWork,
                 entity.ModuleType,
                 request.PeriodStart,
                 request.ExpiresAt,
@@ -92,7 +90,7 @@ public sealed class FundCreditLimitAppService(
         }
 
         var utilization = await FundCreditLimitCapacityCalculator.ComputeUtilizationAsync(
-            dbContext,
+            unitOfWork,
             entity.ModuleType,
             request.PeriodStart,
             request.ExpiresAt,
@@ -105,7 +103,7 @@ public sealed class FundCreditLimitAppService(
         }
 
         entity.Update(request.CreditLimitWithCheck, request.PeriodStart, request.ExpiresAt, userId);
-        await dbContext.SaveChangesAsync(ct);
+        await unitOfWork.SaveChangesAsync(ct);
 
         var userLookup = await userDisplayLookup.GetByIdsAsync([userId], ct);
         return Result<FundCreditLimitDto>.Ok(await MapDtoAsync(entity, userLookup, ct));
@@ -116,12 +114,12 @@ public sealed class FundCreditLimitAppService(
         if (!FundCreditLimitAuthorization.CanAccessFundCreditLimits(userContext.Roles))
             return Result.Fail(Error.Forbidden(ApiMessages.NotAllowed));
 
-        var entity = await dbContext.FundCreditLimits.FirstOrDefaultAsync(x => x.Id == id, ct);
+        var entity = await unitOfWork.FundCreditLimits.GetAsync(id, ct);
         if (entity is null)
             return Result.Fail(Error.NotFound(ApiMessages.FundCreditLimitNotFound));
 
         var utilization = await FundCreditLimitCapacityCalculator.ComputeUtilizationAsync(
-            dbContext,
+            unitOfWork,
             entity.ModuleType,
             entity.PeriodStart,
             entity.ExpiresAt,
@@ -130,8 +128,8 @@ public sealed class FundCreditLimitAppService(
         if (utilization > 0)
             return Result.Fail(Error.Conflict(ApiMessages.FundCreditLimitHasUtilization));
 
-        dbContext.FundCreditLimits.Remove(entity);
-        await dbContext.SaveChangesAsync(ct);
+        await unitOfWork.FundCreditLimits.RemoveAsync(entity, ct);
+        await unitOfWork.SaveChangesAsync(ct);
         return Result.Ok();
     }
 
@@ -140,11 +138,10 @@ public sealed class FundCreditLimitAppService(
         if (!FundCreditLimitAuthorization.CanAccessFundCreditLimits(userContext.Roles))
             return Result<PagedResult<FundCreditLimitDto>>.Fail(Error.Forbidden(ApiMessages.NotAllowed));
 
-        var page = await dbContext.FundCreditLimits
-            .AsNoTracking()
-            .OrderByDescending(x => x.ModuleType)
-            .ThenByDescending(x => x.PeriodStart)
-            .ToPagedResultAsync(request.NormalizedSkip, request.NormalizedTake, ct);
+        var page = await unitOfWork.FundCreditLimits.GetPagedAsync(
+            request.NormalizedSkip,
+            request.NormalizedTake,
+            ct);
 
         var userLookup = await userDisplayLookup.GetByIdsAsync(
             page.Items.Select(x => x.LastSetByUserId).Where(id => !string.IsNullOrWhiteSpace(id)).Select(id => id!),
@@ -162,11 +159,7 @@ public sealed class FundCreditLimitAppService(
         if (!FundCreditLimitAuthorization.CanAccessFundCreditLimits(userContext.Roles))
             return Result<FundCreditLimitDashboardSectionDto>.Fail(Error.Forbidden(ApiMessages.NotAllowed));
 
-        var rows = await dbContext.FundCreditLimits
-            .AsNoTracking()
-            .OrderByDescending(x => x.ModuleType)
-            .ThenByDescending(x => x.PeriodStart)
-            .ToListAsync(ct);
+        var rows = await unitOfWork.FundCreditLimits.ListOrderedAsync(ct);
 
         var userLookup = await userDisplayLookup.GetByIdsAsync(
             rows.Select(x => x.LastSetByUserId).Where(id => !string.IsNullOrWhiteSpace(id)).Select(id => id!),
@@ -200,7 +193,7 @@ public sealed class FundCreditLimitAppService(
         CancellationToken ct)
     {
         var utilized = await FundCreditLimitCapacityCalculator.ComputeUtilizationAsync(
-            dbContext,
+            unitOfWork,
             row.ModuleType,
             row.PeriodStart,
             row.ExpiresAt,

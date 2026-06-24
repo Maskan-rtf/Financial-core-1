@@ -89,7 +89,7 @@
   }
 
   function phaseForStatus(status) {
-    return (model.stepForStatus(status) || {}).phase || 0;
+    return (stepForCase(status) || {}).phase || 0;
   }
 
   function commentsForPhase(phase) {
@@ -255,13 +255,7 @@
   }
 
   async function apiCall(opts) {
-    // #region agent log
-    fetch("http://127.0.0.1:7438/ingest/bf39201f-34dc-4f1d-8b2a-d1537a00d85c",{method:"POST",headers:{"Content-Type":"application/json","X-Debug-Session-Id":"35307a"},body:JSON.stringify({sessionId:"35307a",hypothesisId:"H6",location:"guarantee-portal.apiCall",message:"before",data:{method:opts.method||"GET",path:opts.path||""},timestamp:Date.now()})}).catch(function(){});
-    // #endregion
     const res = await state.panel.apiRequest(opts);
-    // #region agent log
-    fetch("http://127.0.0.1:7438/ingest/bf39201f-34dc-4f1d-8b2a-d1537a00d85c",{method:"POST",headers:{"Content-Type":"application/json","X-Debug-Session-Id":"35307a"},body:JSON.stringify({sessionId:"35307a",hypothesisId:"H6",location:"guarantee-portal.apiCall",message:"after",data:{method:opts.method||"GET",path:opts.path||"",status:res.status},timestamp:Date.now()})}).catch(function(){});
-    // #endregion
     if (!isApiSuccess(res)) {
       const msg =
         (res.body && (res.body.message || res.body.Message)) ||
@@ -295,7 +289,7 @@
       "save-amendment": "اصلاحیه ذخیره شد.",
       "submit-amendment": "اصلاحیه برای بررسی ارسال شد.",
       "approve-amendment": "اصلاحیه تایید شد.",
-      "approve-cancellation": "اصلاحیه تایید شد.",
+      "approve-cancellation": "ابطال تایید شد.",
       "ceo-amendment-approve": "اصلاحیه تایید شد.",
       "reject-amendment": "اصلاحیه رد شد.",
       "ceo-amendment-reject": "اصلاحیه رد شد.",
@@ -350,7 +344,7 @@
     const gCaseIdEl = qs("#gCaseId");
     if (gCaseIdEl) gCaseIdEl.textContent = state.caseId;
     const st = pickStatus(state.caseData);
-    const step = model.stepForStatus(st);
+    const step = stepForCase(st);
     qs("#gCaseStatus").textContent = step.title + " (" + st + ")";
     const roleEl = qs("#gCaseRole");
     if (roleEl) roleEl.textContent = getSessionRole() || "—";
@@ -404,12 +398,29 @@
   function currentAmendmentType() {
     const amendment = readAmendmentFromCase() || {};
     const cancellation = readCancellationDetails() || {};
-    return Number(
+    const raw =
       pick(amendment, "amendmentType", "AmendmentType") ||
       pick(cancellation, "amendmentType", "AmendmentType") ||
       pick(state.caseData, "amendmentType", "AmendmentType") ||
-      0
-    );
+      0;
+    return typeof model.coerceAmendmentType === "function"
+      ? model.coerceAmendmentType(raw)
+      : Number(raw || 0);
+  }
+
+  function workflowContext() {
+    const fromDetails = currentAmendmentType();
+    const fromCase = Number(pick(state.caseData, "amendmentType", "AmendmentType") || 0);
+    const amendmentType = fromDetails || fromCase;
+    return amendmentType > 0 ? { amendmentType } : {};
+  }
+
+  function stepForCase(status) {
+    return model.stepForStatus(status, workflowContext());
+  }
+
+  function workflowProcessLabel() {
+    return currentAmendmentType() === 3 ? "ابطال" : "اصلاحیه";
   }
 
   function canStartNewAmendment(status) {
@@ -446,9 +457,10 @@
   }
 
   function buildAmendmentInfoRows(amendment, typeValue, status, currentValidityTo, currentAmount) {
+    const processLabel = typeValue === 3 ? "ابطال" : "اصلاحیه";
     const rows = [
-      ["نوع اصلاحیه", amendmentTypeLabel(typeValue)],
-      ["وضعیت اصلاحیه", amendmentReviewStateLabel(status)],
+      ["نوع " + processLabel, amendmentTypeLabel(typeValue)],
+      ["وضعیت " + processLabel, amendmentReviewStateLabel(status)],
       ["علت", pick(amendment, "reason", "Reason") || "—"],
     ];
     const prev = pick(amendment, "previousValues", "PreviousValues") || {};
@@ -623,9 +635,32 @@
 
     const current = pickStatus(state.caseData);
     const track = el("div", "portal-stepper__track");
-    const currentIndex = model.getStepOrderIndex(current);
+    const currentIndex = model.getStepOrderIndex(current, workflowContext());
+    const ctx = workflowContext();
+    const stepIds = model.getStepperSteps(ctx).map((s) => s.id);
+    // #region agent log
+    fetch("http://127.0.0.1:7438/ingest/bf39201f-34dc-4f1d-8b2a-d1537a00d85c", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "f414f7" },
+      body: JSON.stringify({
+        sessionId: "f414f7",
+        runId: "stepper-fix",
+        hypothesisId: "A-C",
+        location: "guarantee-portal.js:renderStepper",
+        message: "stepper context",
+        data: {
+          current,
+          amendmentType: ctx.amendmentType,
+          stepIds,
+          currentIndex,
+          caseAmendmentType: pick(state.caseData, "amendmentType", "AmendmentType"),
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(function () {});
+    // #endregion
 
-    model.getStepperSteps().forEach((step, index) => {
+    model.getStepperSteps(ctx).forEach((step, index) => {
       const item = el("div", "portal-stepper__item");
       if (currentIndex >= 0) {
         if (index < currentIndex) item.classList.add("is-done");
@@ -705,7 +740,15 @@
     sel.value = String(amendmentType);
     sel.dispatchEvent(new Event("change"));
     const form = sel.closest(".portal-form");
-    if (form) form.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (form) {
+      const title = form.querySelector(".card__title");
+      if (title) {
+        title.textContent = Number(amendmentType) === 3
+          ? "ثبت ابطال ضمانت‌نامه"
+          : "ثبت اصلاحیه ضمانت‌نامه";
+      }
+      form.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   }
 
   function renderActionHint() {
@@ -714,7 +757,7 @@
 
     const status = pickStatus(state.caseData);
     const role = getSessionRole();
-    const step = model.stepForStatus(status);
+    const step = stepForCase(status);
     let text = "";
 
     if (!model.canActOnCase(role, step.unit)) {
@@ -1529,10 +1572,11 @@
       0
     );
     const isFreshEntry = status === 12 || status === 22 || status === 23;
+    const isCancellation = typeValue === 3 || (isFreshEntry && Number(qs("#gAmendmentType")?.value || 0) === 3);
 
     const box = el("div", "portal-form card portal-card portal-card--nested");
     const initialType = isFreshEntry ? 1 : (typeValue || 1);
-    box.appendChild(el("div", "card__title", "ثبت اصلاحیه ضمانت‌نامه"));
+    box.appendChild(el("div", "card__title", isCancellation ? "ثبت ابطال ضمانت‌نامه" : "ثبت اصلاحیه ضمانت‌نامه"));
     box.appendChild(
       el(
         "div",
@@ -1574,12 +1618,40 @@
 
     let cancellationUploads = null;
 
+    const actionsWrap = el("div", "card portal-card portal-card--nested");
+    actionsWrap.appendChild(el("div", "card__title", typeValue === 3 ? "اقدامات ابطال" : "اقدامات اصلاحیه"));
+    const row = el("div", "row");
+    const saveBtn = el("button", "btn btn--primary", typeValue === 3 ? "ذخیره ابطال" : "ذخیره اصلاحیه");
+    saveBtn.type = "button";
+    saveBtn.addEventListener("click", () => void handleAction({ id: "save-amendment", method: "POST", path: "/amendment/create" }));
+    row.appendChild(saveBtn);
+    let submitBtn = null;
+    if (status === 16 || status === 17) {
+      submitBtn = el("button", "btn btn--primary", typeValue === 3 ? "ارسال ابطال" : "ارسال اصلاحیه");
+      submitBtn.type = "button";
+      submitBtn.addEventListener("click", () => void handleAction({ id: "submit-amendment", method: "POST", path: "/amendment/submit" }));
+      row.appendChild(submitBtn);
+    }
+    actionsWrap.appendChild(row);
+    card.appendChild(actionsWrap);
+
     const syncAmendmentTypeFields = function () {
       const type = Number(qs("#gAmendmentType", card)?.value || 0);
       const validity = qs("#gAmendmentValidityTo", card)?.closest(".formrow");
       const amount = qs("#gAmendmentAmount", card)?.closest(".formrow");
       if (validity) validity.hidden = type !== 1;
       if (amount) amount.hidden = type !== 2;
+
+      const formTitle = box.querySelector(".card__title");
+      if (formTitle) {
+        formTitle.textContent = type === 3 ? "ثبت ابطال ضمانت‌نامه" : "ثبت اصلاحیه ضمانت‌نامه";
+      }
+      const actionsTitle = actionsWrap.querySelector(".card__title");
+      if (actionsTitle) {
+        actionsTitle.textContent = type === 3 ? "اقدامات ابطال" : "اقدامات اصلاحیه";
+      }
+      saveBtn.textContent = type === 3 ? "ذخیره ابطال" : "ذخیره اصلاحیه";
+      if (submitBtn) submitBtn.textContent = type === 3 ? "ارسال ابطال" : "ارسال اصلاحیه";
 
       if (type === 3) {
         if (!cancellationUploads) {
@@ -1594,22 +1666,6 @@
     };
     syncAmendmentTypeFields();
     qs("#gAmendmentType", card)?.addEventListener("change", syncAmendmentTypeFields);
-
-    const actionsWrap = el("div", "card portal-card portal-card--nested");
-    actionsWrap.appendChild(el("div", "card__title", "اقدامات اصلاحیه"));
-    const row = el("div", "row");
-    const saveBtn = el("button", "btn btn--primary", "ذخیره اصلاحیه");
-    saveBtn.type = "button";
-    saveBtn.addEventListener("click", () => void handleAction({ id: "save-amendment", method: "POST", path: "/amendment/create" }));
-    row.appendChild(saveBtn);
-    if (status === 16 || status === 17) {
-      const submitBtn = el("button", "btn btn--primary", "ارسال اصلاحیه");
-      submitBtn.type = "button";
-      submitBtn.addEventListener("click", () => void handleAction({ id: "submit-amendment", method: "POST", path: "/amendment/submit" }));
-      row.appendChild(submitBtn);
-    }
-    actionsWrap.appendChild(row);
-    card.appendChild(actionsWrap);
   }
 
   function renderAmendmentStage(card, status, canAct) {
@@ -1630,7 +1686,9 @@
       || pick(state.caseData && (state.caseData.approvalForm || state.caseData.ApprovalForm), "guaranteeAmount", "GuaranteeAmount")
       || "";
 
-    renderReadOnlyBlock(card, "اطلاعات اصلاحیه", buildAmendmentInfoRows(
+    const processLabel = typeValue === 3 ? "ابطال" : "اصلاحیه";
+
+    renderReadOnlyBlock(card, "اطلاعات " + processLabel, buildAmendmentInfoRows(
       amendment,
       typeValue,
       status,
@@ -1651,7 +1709,7 @@
 
     if (auditHistory.length) {
       const timeline = el("div", "card portal-card portal-card--nested");
-      timeline.appendChild(el("div", "card__title", "سابقه اصلاحیه"));
+      timeline.appendChild(el("div", "card__title", "سابقه " + processLabel));
       auditHistory.forEach((item) => {
         const row = el("div", "portal-thread__item");
         const createdBy = pick(item, "createdByFullName", "CreatedByFullName") || pick(item, "createdBy", "CreatedBy") || "—";
@@ -1671,7 +1729,7 @@
       renderAmendmentCreationForm(card, status, canAct);
     }
 
-    if (canAct && (status === 18 || status === 19 || status === 20)) {
+    if (canAct && (status === 18 || status === 19 || (status === 20 && typeValue !== 3))) {
       if (status === 18 || status === 20) {
         card.appendChild(field("توضیح تایید", "gAmendmentApproveComment", "textarea", ""));
         card.appendChild(field("توضیح داخلی", "gAmendmentInternalComment", "textarea", ""));
@@ -1679,22 +1737,34 @@
       } else if (status === 19) {
         card.appendChild(field("توضیح تأیید / رد", "gAmendmentApproveComment", "textarea", ""));
       }
-      if (status === 20 && typeValue === 3) {
-        card.appendChild(checkboxField("تایید کنترل تعهد فعال توسط حقوقی", "gCancellationLegalOverride", false));
-      }
       const actionsWrap = el("div", "card portal-card portal-card--nested");
-      actionsWrap.appendChild(el("div", "card__title", status === 19 ? "تأیید مدیرعامل" : "بررسی اصلاحیه"));
+      actionsWrap.appendChild(el("div", "card__title", status === 19
+        ? "تأیید مدیرعامل"
+        : (typeValue === 3 ? "بررسی ابطال" : "بررسی اصلاحیه")));
       const row = el("div", "row");
       if (status === 19) {
-        const approveBtn = el("button", "btn btn--primary", "تایید اصلاحیه");
-        approveBtn.type = "button";
-        approveBtn.addEventListener("click", () => void handleAction({
-          id: "ceo-amendment-approve",
-          method: "POST",
-          path: "/ceo/amendment/approve",
-        }));
-        row.appendChild(approveBtn);
-        const rejectBtn = el("button", "btn btn--warn", "رد اصلاحیه");
+        if (typeValue === 3) {
+          const approveBtn = el("button", "btn btn--primary", "تایید ابطال");
+          approveBtn.type = "button";
+          approveBtn.addEventListener("click", () => {
+            void handleAction({
+              id: "approve-cancellation",
+              method: "POST",
+              path: "/amendment/cancellation/approve",
+            });
+          });
+          row.appendChild(approveBtn);
+        } else {
+          const approveBtn = el("button", "btn btn--primary", "تایید اصلاحیه");
+          approveBtn.type = "button";
+          approveBtn.addEventListener("click", () => void handleAction({
+            id: "ceo-amendment-approve",
+            method: "POST",
+            path: "/ceo/amendment/approve",
+          }));
+          row.appendChild(approveBtn);
+        }
+        const rejectBtn = el("button", "btn btn--warn", typeValue === 3 ? "رد ابطال" : "رد اصلاحیه");
         rejectBtn.type = "button";
         rejectBtn.addEventListener("click", () => void handleAction({
           id: "ceo-amendment-reject",
@@ -1703,7 +1773,7 @@
         }));
         row.appendChild(rejectBtn);
       } else {
-        const approveBtn = el("button", "btn btn--primary", "تایید اصلاحیه");
+        const approveBtn = el("button", "btn btn--primary", typeValue === 3 ? "تایید ابطال" : "تایید اصلاحیه");
         approveBtn.type = "button";
         approveBtn.addEventListener("click", () => {
           void handleAction({
@@ -1713,7 +1783,7 @@
         });
         });
         row.appendChild(approveBtn);
-        const rejectBtn = el("button", "btn btn--warn", "رد اصلاحیه");
+        const rejectBtn = el("button", "btn btn--warn", typeValue === 3 ? "رد ابطال" : "رد اصلاحیه");
         rejectBtn.type = "button";
         rejectBtn.addEventListener("click", () => void handleAction({ id: "reject-amendment", method: "POST", path: "/amendment/reject" }));
         row.appendChild(rejectBtn);
@@ -1731,7 +1801,7 @@
 
   function renderPrimaryActions(parent) {
     const status = pickStatus(state.caseData);
-    const step = model.stepForStatus(status);
+    const step = stepForCase(status);
     const role = getSessionRole();
     if (!model.canActOnCase(role, step.unit)) return;
 
@@ -2296,7 +2366,7 @@
     if (!state.caseData) return;
 
     const status = pickStatus(state.caseData);
-    const step = model.stepForStatus(status);
+    const step = stepForCase(status);
     const role = getSessionRole();
 
     const card = el("div", "portal-stage card portal-card");
@@ -2374,7 +2444,7 @@
           (status === 19 && (role === "CEO" || role === "Admin")) ||
           (status === 20 && (role === "LegalExpert" || role === "LegalManager" || role === "Admin"))
         );
-      renderAmendmentStage(card, status, (status === 18 || status === 19 || status === 20) ? canReviewAmendment : canEditAmendment);
+      renderAmendmentStage(card, status, (status === 18 || status === 19 || (status === 20 && currentAmendmentType() !== 3)) ? canReviewAmendment : canEditAmendment);
     }
 
     host.appendChild(card);
@@ -2538,7 +2608,6 @@
         body = {
           comment: readValue("gAmendmentApproveComment") || null,
           internalComment: readValue("gAmendmentInternalComment") || null,
-          legalOverrideActiveObligationCheck: !!qs("#gCancellationLegalOverride")?.checked,
         };
       } else if (action.id === "reject-amendment") {
         const message = readValue("gAmendmentRejectReason");

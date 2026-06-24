@@ -61,6 +61,65 @@
     23: { id: 23, title: "اصلاحیه رد شد", unit: "all", phase: 5 },
   };
 
+  const CANCELLATION_STEP_TITLES = {
+    14: "تکمیل ابطال",
+    16: "پیش‌نویس ابطال",
+    17: "ثبت اطلاعات ابطال",
+    18: "بررسی اعتبارات (ابطال)",
+    19: "تأیید مدیرعامل (ابطال)",
+    20: "بررسی حقوقی ابطال",
+    21: "تکمیل ابطال",
+    22: "تکمیل ابطال",
+    23: "ابطال رد شد",
+  };
+
+  const AMENDMENT_TYPE_BY_KEY = {
+    Extension: 1,
+    Reduction: 2,
+    Cancellation: 3,
+  };
+
+  function coerceAmendmentType(value) {
+    if (value == null || value === "") return 0;
+    const n = Number(value);
+    if (!Number.isNaN(n) && n > 0) return n;
+    return AMENDMENT_TYPE_BY_KEY[String(value)] ?? 0;
+  }
+
+  function pickField(obj, camel, pascal) {
+    if (!obj) return "";
+    const v = obj[camel] ?? obj[pascal];
+    return v == null ? "" : v;
+  }
+
+  function amendmentTypeFromCase(caseRow) {
+    if (!caseRow) return 0;
+    const amendment = caseRow.amendment || caseRow.Amendment;
+    const fromAmendment = amendment
+      ? pickField(amendment, "amendmentType", "AmendmentType")
+      : "";
+    const fromTop = pickField(caseRow, "amendmentType", "AmendmentType");
+    return coerceAmendmentType(fromAmendment || fromTop);
+  }
+
+  function isCancellationWorkflow(amendmentType) {
+    return Number(amendmentType || 0) === 3;
+  }
+
+  const MAIN_WORKFLOW_STEP_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+  const AMENDMENT_WORKFLOW_STEP_IDS = [16, 17, 18, 19, 20, 22];
+  const CANCELLATION_WORKFLOW_STEP_IDS = [16, 17, 18, 19, 14];
+
+  function stepForStatus(status, context) {
+    const value = coerceStatus(status);
+    const amendmentType = Number(context?.amendmentType || 0);
+    if (isCancellationWorkflow(amendmentType) && CANCELLATION_STEP_TITLES[value]) {
+      const base = STEPS[value] || { id: value, unit: "all", phase: 5 };
+      return { ...base, title: CANCELLATION_STEP_TITLES[value] };
+    }
+    return STEPS[value] || { id: value, title: "نامشخص", unit: "all", phase: 0 };
+  }
+
   /** مدارک ورود اطلاعات — مطابق mockup ضمانت‌نامه */
   const DATA_ENTRY_DOCUMENTS = [
     { type: 8, label: "فیش مبلغ تشکیل پرونده", hint: "ضروری — حداکثر ۱۰ مگابایت", required: true },
@@ -444,20 +503,43 @@
     getUnit(unitId) {
       return UNITS.find((u) => u.id === unitId) || null;
     },
-    getStepperSteps() {
-      const hiddenStepIds = new Set([13, 14, 15, 21, 23]);
-      return Object.values(STEPS)
-        .filter((step) => !hiddenStepIds.has(step.id))
-        .sort((a, b) => a.id - b.id);
+    getStepperSteps(context) {
+      const isCancellation = isCancellationWorkflow(context?.amendmentType);
+      const hiddenStepIds = new Set([13, 15, 21, 23]);
+
+      if (isCancellation) {
+        hiddenStepIds.add(20);
+        hiddenStepIds.add(22);
+      } else {
+        hiddenStepIds.add(14);
+      }
+
+      const orderedIds = isCancellation
+        ? MAIN_WORKFLOW_STEP_IDS.concat(CANCELLATION_WORKFLOW_STEP_IDS)
+        : MAIN_WORKFLOW_STEP_IDS.concat(AMENDMENT_WORKFLOW_STEP_IDS);
+
+      return orderedIds
+        .filter((id) => !hiddenStepIds.has(id))
+        .map((id) => {
+          const step = STEPS[id];
+          if (!step) return null;
+          if (isCancellation && CANCELLATION_STEP_TITLES[id]) {
+            return { ...step, title: CANCELLATION_STEP_TITLES[id] };
+          }
+          return step;
+        })
+        .filter(Boolean);
     },
-    getStepOrderIndex(status) {
+    getStepOrderIndex(status, context) {
       const value = coerceStatus(status);
-      return this.getStepperSteps().findIndex((step) => step.id === value);
+      return this.getStepperSteps(context).findIndex((step) => step.id === value);
     },
     coerceStatus,
-    stepForStatus(status) {
-      const value = coerceStatus(status);
-      return STEPS[value] || { id: value, title: "نامشخص", unit: "all", phase: 0 };
+    coerceAmendmentType,
+    amendmentTypeFromCase,
+    isCancellationWorkflow,
+    stepForStatus(status, context) {
+      return stepForStatus(status, context);
     },
   };
 })();

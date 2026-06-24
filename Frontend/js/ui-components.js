@@ -31,9 +31,22 @@
     return APPLICANT_TYPE_BY_KEY[String(value)] ?? 0;
   }
 
-  function statusTitle(module, status) {
+  function statusTitle(module, status, options) {
+    options = options || {};
     if (module === "guarantee" && window.GuaranteeWorkflowModel) {
-      const step = GuaranteeWorkflowModel.stepForStatus(status);
+      let amendmentType = options.amendmentType;
+      if ((amendmentType == null || amendmentType === "") && options.case) {
+        amendmentType = GuaranteeWorkflowModel.amendmentTypeFromCase(options.case);
+      }
+      if (typeof GuaranteeWorkflowModel.coerceAmendmentType === "function") {
+        amendmentType = GuaranteeWorkflowModel.coerceAmendmentType(amendmentType);
+      } else if (amendmentType != null && amendmentType !== "") {
+        amendmentType = Number(amendmentType);
+      } else {
+        amendmentType = 0;
+      }
+      const context = amendmentType > 0 ? { amendmentType } : undefined;
+      const step = GuaranteeWorkflowModel.stepForStatus(status, context);
       return step ? step.title : String(status);
     }
     if (module === "loan" && window.LoanWorkflowModel) {

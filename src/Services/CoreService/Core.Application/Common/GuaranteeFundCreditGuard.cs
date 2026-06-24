@@ -3,7 +3,6 @@ using BuildingBlocks.Application.Results;
 using Core.Application.Abstractions;
 using Core.Domain.Entities;
 using Core.Domain.Enums;
-using Microsoft.EntityFrameworkCore;
 
 namespace Core.Application.Common;
 
@@ -13,12 +12,12 @@ namespace Core.Application.Common;
 public static class GuaranteeFundCreditGuard
 {
     public static async Task<Result> ValidateAmendmentExtensionAsync(
-        ICoreDbContext db,
+        ICoreUnitOfWork unitOfWork,
         GuaranteeCase caseEntity,
         CancellationToken cancellationToken)
     {
         var settings = await GuaranteeApplicantCreditSnapshotCalculator.ResolveFundCreditLimitSettingsAsync(
-            db,
+            unitOfWork,
             cancellationToken);
 
         if (settings is null || settings.CreditLimitWithCheck <= 0)
@@ -39,12 +38,12 @@ public static class GuaranteeFundCreditGuard
     }
 
     public static async Task<Result> ValidateApprovalFormSubmitAsync(
-        ICoreDbContext db,
+        ICoreUnitOfWork unitOfWork,
         GuaranteeCase caseEntity,
         CancellationToken cancellationToken)
     {
         var settings = await GuaranteeApplicantCreditSnapshotCalculator.ResolveFundCreditLimitSettingsAsync(
-            db,
+            unitOfWork,
             cancellationToken);
 
         if (settings is null || settings.CreditLimitWithCheck <= 0)
@@ -62,7 +61,7 @@ public static class GuaranteeFundCreditGuard
             return Result.Fail(Error.Conflict(ApiMessages.GuaranteeApprovalFormAmountRequired));
 
         var snapshot = await GuaranteeApplicantCreditSnapshotCalculator.ComputeFundSnapshotAsync(
-            db,
+            unitOfWork,
             caseEntity,
             cancellationToken);
 

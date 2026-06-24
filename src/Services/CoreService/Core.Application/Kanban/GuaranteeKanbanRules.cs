@@ -73,7 +73,28 @@ public static class GuaranteeKanbanRules
         return WatchStatusesByRole.TryGetValue(resolvedRole, out var statuses) && statuses.Contains(status);
     }
 
-    public static string GetStatusTitle(GuaranteeCaseStatus status) => status switch
+    public static string GetStatusTitle(GuaranteeCaseStatus status, AmendmentType? amendmentType = null)
+    {
+        if (amendmentType == AmendmentType.Cancellation)
+            return GetCancellationStatusTitle(status);
+
+        return GetDefaultStatusTitle(status);
+    }
+
+    private static string GetCancellationStatusTitle(GuaranteeCaseStatus status) => status switch
+    {
+        GuaranteeCaseStatus.AmendmentDraft => "پیش‌نویس ابطال",
+        GuaranteeCaseStatus.AmendmentDataEntry => "ثبت اطلاعات ابطال",
+        GuaranteeCaseStatus.AmendmentCreditReview => "بررسی اعتباری ابطال",
+        GuaranteeCaseStatus.AmendmentCeoApproval => "تأیید مدیرعامل (ابطال)",
+        GuaranteeCaseStatus.AmendmentLegalReview => "بررسی حقوقی ابطال",
+        GuaranteeCaseStatus.AmendmentApproved => "ابطال تایید شد",
+        GuaranteeCaseStatus.AmendmentCompleted => "ابطال تکمیل‌شده",
+        GuaranteeCaseStatus.Cancelled => "تکمیل ابطال",
+        _ => GetDefaultStatusTitle(status)
+    };
+
+    private static string GetDefaultStatusTitle(GuaranteeCaseStatus status) => status switch
     {
         GuaranteeCaseStatus.Draft => "پیش‌نویس",
         GuaranteeCaseStatus.DataEntry => "ورود اطلاعات",

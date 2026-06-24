@@ -16,7 +16,7 @@
   function moduleLabel(item) {
     const m = Number(pick(item, "module", "Module") || 1);
     if (m === 2) return "ضمانت‌نامه";
-    if (m === 3) return "اصلاحیه";
+    if (m === 3) return "تمدید ضمانت";
     if (m === 4) return "تسهیلات";
     return "سرمایه‌گذاری";
   }

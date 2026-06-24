@@ -46,7 +46,7 @@ public sealed class KanbanDtoMapper : IKanbanDtoMapper
             nameof(GuaranteeCaseStatus),
             (int)projection.CurrentStatus,
             GuaranteeKanbanRules.GetPhaseTitle(projection.CurrentPhase),
-            GuaranteeKanbanRules.GetStatusTitle(projection.CurrentStatus),
+            GuaranteeKanbanRules.GetStatusTitle(projection.CurrentStatus, projection.AmendmentType),
             projection.ApplicantType,
             projection.RepresentativeName,
             projection.CompanyName,
@@ -120,7 +120,7 @@ public sealed class KanbanDtoMapper : IKanbanDtoMapper
             nameof(GuaranteeCaseStatus),
             (int)projection.CurrentStatus,
             GuaranteeKanbanRules.GetPhaseTitle(projection.CurrentPhase),
-            GuaranteeKanbanRules.GetStatusTitle(projection.CurrentStatus),
+            GuaranteeKanbanRules.GetStatusTitle(projection.CurrentStatus, projection.AmendmentType),
             projection.RepresentativeName,
             projection.CreatedAt,
             GuaranteeKanbanRules.GetPendingActionLabel(projection.CurrentStatus, role));

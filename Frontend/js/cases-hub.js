@@ -150,7 +150,11 @@
       subject: caseSubject(c),
       company: companyLabel(c),
       applicant: applicantName(c),
-      statusLabel: UIComponents.statusTitle(state.module, pick(c, "currentStatus", "CurrentStatus")),
+      statusLabel: UIComponents.statusTitle(
+        state.module,
+        pick(c, "currentStatus", "CurrentStatus"),
+        { case: c }
+      ),
     }));
     UIComponents.renderCaseTable(host, rows, {
       emptyText: "پرونده‌ای برای این ماژول یافت نشد.",

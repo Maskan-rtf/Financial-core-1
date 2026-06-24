@@ -92,6 +92,37 @@ public static class GuaranteeCaseWriteExtensions
                     .SetProperty(c => c.AmendmentCompletedAt, amendmentCompletedAt),
                 cancellationToken);
 
+    public static async Task<int> ApplyLatestPendingAmendmentAuditDecisionAsync(
+        this DbSet<GuaranteeAmendmentHistoryRecord> records,
+        Guid caseId,
+        GuaranteeAmendmentHistoryStatus status,
+        string approvalUser,
+        DateTimeOffset decidedAt,
+        string? decisionReason,
+        CancellationToken cancellationToken = default)
+    {
+        var auditId = await records
+            .AsNoTracking()
+            .Where(x => x.GuaranteeCaseId == caseId && x.Status == GuaranteeAmendmentHistoryStatus.PendingReview)
+            .OrderByDescending(x => x.CreatedAt)
+            .Select(x => x.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (auditId == Guid.Empty)
+            return 0;
+
+        return await records
+            .Where(x => x.Id == auditId)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(x => x.Status, status)
+                    .SetProperty(x => x.ApprovalUser, approvalUser)
+                    .SetProperty(x => x.ApprovedAt, decidedAt)
+                    .SetProperty(x => x.DecisionReason, decisionReason)
+                    .SetProperty(x => x.UpdatedAt, decidedAt),
+                cancellationToken);
+    }
+
     public static Task InsertWorkflowHistoryAsync(
         this DbContext db,
         GuaranteeCaseWorkflowHistory history,
@@ -124,35 +155,4 @@ public static class GuaranteeCaseWriteExtensions
             VALUES
                 ({record.Id}, {record.GuaranteeCaseId}, {(int)record.AmendmentType}, CAST({record.PreviousValues} AS jsonb), CAST({record.NewValues} AS jsonb), {record.Reason}, {record.CreatedBy}, {record.CreatedAt}, {(int)record.Status})
             """, cancellationToken);
-
-    public static async Task<int> ApplyLatestPendingAmendmentAuditDecisionAsync(
-        this DbSet<GuaranteeAmendmentHistoryRecord> records,
-        Guid caseId,
-        GuaranteeAmendmentHistoryStatus status,
-        string approvalUser,
-        DateTimeOffset decidedAt,
-        string? decisionReason,
-        CancellationToken cancellationToken = default)
-    {
-        var auditId = await records
-            .AsNoTracking()
-            .Where(x => x.GuaranteeCaseId == caseId && x.Status == GuaranteeAmendmentHistoryStatus.PendingReview)
-            .OrderByDescending(x => x.CreatedAt)
-            .Select(x => x.Id)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (auditId == Guid.Empty)
-            return 0;
-
-        return await records
-            .Where(x => x.Id == auditId)
-            .ExecuteUpdateAsync(
-                setters => setters
-                    .SetProperty(x => x.Status, status)
-                    .SetProperty(x => x.ApprovalUser, approvalUser)
-                    .SetProperty(x => x.ApprovedAt, decidedAt)
-                    .SetProperty(x => x.DecisionReason, decisionReason)
-                    .SetProperty(x => x.UpdatedAt, decidedAt),
-                cancellationToken);
-    }
 }

@@ -2,7 +2,6 @@ using Core.Application.Abstractions;
 using Core.Application.DTOs;
 using Core.Domain.Entities;
 using Core.Domain.Enums;
-using Microsoft.EntityFrameworkCore;
 
 namespace Core.Application.Common;
 
@@ -12,19 +11,19 @@ namespace Core.Application.Common;
 public static class GuaranteeApplicantCreditSnapshotCalculator
 {
     public static Task<GuaranteeApplicantCreditSnapshotDto> ComputeAsync(
-        ICoreDbContext db,
+        ICoreUnitOfWork unitOfWork,
         GuaranteeCase current,
         CancellationToken cancellationToken)
-        => ComputeFundSnapshotAsync(db, current, cancellationToken);
+        => ComputeFundSnapshotAsync(unitOfWork, current, cancellationToken);
 
     public static async Task<GuaranteeApplicantCreditSnapshotDto> ComputeFundSnapshotAsync(
-        ICoreDbContext db,
+        ICoreUnitOfWork unitOfWork,
         GuaranteeCase? currentCase,
         CancellationToken cancellationToken)
     {
         var referenceDate = DateOnly.FromDateTime(DateTime.UtcNow);
         var capacity = await FundCreditLimitCapacityCalculator.ComputeActiveAsync(
-            db,
+            unitOfWork,
             FundModuleType.Guarantee,
             referenceDate,
             cancellationToken);
@@ -37,21 +36,7 @@ public static class GuaranteeApplicantCreditSnapshotCalculator
         var totalUtilized = capacity.TotalUtilized ?? 0m;
         var creditLimit = capacity.TotalPeriodAllocation.Value;
 
-        var cases = await db.GuaranteeCases
-            .AsNoTracking()
-            .Where(c => !c.IsDeleted)
-            .Select(c => new CaseCreditProjection(
-                c.Id,
-                c.CurrentStatus,
-                c.CreatedAt,
-                c.CompletedAt,
-                c.ApprovalForm != null
-                    ? c.ApprovalForm.GuaranteeAmount
-                    : c.Application != null
-                        ? c.Application.RequestedGuaranteeAmount
-                        : null,
-                c.ApprovalForm != null ? c.ApprovalForm.IssuanceDate : null))
-            .ToListAsync(cancellationToken);
+        var cases = await unitOfWork.GuaranteeCases.GetCreditProjectionsAsync(cancellationToken);
 
         var fundIssued = cases
             .Where(c => c.Status == GuaranteeCaseStatus.Completed && c.Amount is > 0)
@@ -70,12 +55,12 @@ public static class GuaranteeApplicantCreditSnapshotCalculator
     }
 
     public static async Task<FundCreditLimitSettings?> ResolveFundCreditLimitSettingsAsync(
-        ICoreDbContext db,
+        ICoreUnitOfWork unitOfWork,
         CancellationToken cancellationToken)
     {
         var referenceDate = DateOnly.FromDateTime(DateTime.UtcNow);
         var pool = await FundCreditLimitCapacityCalculator.ResolveActivePoolAsync(
-            db,
+            unitOfWork,
             FundModuleType.Guarantee,
             referenceDate,
             cancellationToken);
@@ -90,10 +75,10 @@ public static class GuaranteeApplicantCreditSnapshotCalculator
     }
 
     public static async Task<decimal> ResolveFundCreditLimitAsync(
-        ICoreDbContext db,
+        ICoreUnitOfWork unitOfWork,
         CancellationToken cancellationToken)
     {
-        var settings = await ResolveFundCreditLimitSettingsAsync(db, cancellationToken);
+        var settings = await ResolveFundCreditLimitSettingsAsync(unitOfWork, cancellationToken);
         return settings?.CreditLimitWithCheck ?? 0m;
     }
 
@@ -107,7 +92,7 @@ public static class GuaranteeApplicantCreditSnapshotCalculator
     private static bool IsReferenceDateInPeriod(DateOnly? date, DateOnly periodStart, DateOnly expiresAt)
         => date is not null && date.Value >= periodStart && date.Value <= expiresAt;
 
-    private static DateOnly? GetIssuedReferenceDate(CaseCreditProjection c)
+    private static DateOnly? GetIssuedReferenceDate(GuaranteeCaseCreditProjection c)
     {
         if (c.IssuanceDate is not null)
             return c.IssuanceDate;
@@ -117,14 +102,6 @@ public static class GuaranteeApplicantCreditSnapshotCalculator
 
         return null;
     }
-
-    private sealed record CaseCreditProjection(
-        Guid Id,
-        GuaranteeCaseStatus Status,
-        DateTimeOffset CreatedAt,
-        DateTimeOffset? CompletedAt,
-        decimal? Amount,
-        DateOnly? IssuanceDate);
 
     public sealed record FundCreditLimitSettings(
         decimal CreditLimitWithCheck,
