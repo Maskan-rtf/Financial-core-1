@@ -503,9 +503,6 @@ public sealed class GuaranteeCaseAppService(
         bool legalOverrideActiveObligationCheck,
         CancellationToken ct)
     {
-        // #region agent log
-        DebugSessionLog.Write("E", "GuaranteeCaseAppService.ApproveCurrentAmendmentAsync", "entry", new { caseId });
-        // #endregion
         var auth = RequireUser();
         if (auth.IsFailure)
             return Result.Fail(auth.Error!);
@@ -549,9 +546,6 @@ public sealed class GuaranteeCaseAppService(
                 return auditGate;
         }
 
-        // #region agent log
-        DebugSessionLog.Write("E", "GuaranteeCaseAppService.ApproveCurrentAmendmentAsync", "before-apply-transition", new { caseId, status = entity.CurrentStatus.ToString() });
-        // #endregion
         return await ApplyTransitionAsync(
             caseId,
             GuaranteeWorkflowAction.Approve,
@@ -1268,10 +1262,6 @@ public sealed class GuaranteeCaseAppService(
             var persist = await PersistTransitionAsync(entity, commentsCountBefore, historyCountBefore, ct);
             if (persist.IsFailure) return persist;
 
-            // #region agent log
-            DebugSessionLog.Write("E", "GuaranteeCaseAppService.ApplyTransitionAsync", "after-persist", new { caseId, status = entity.CurrentStatus.ToString() });
-            // #endregion
-
             foreach (var historyEntry in entity.WorkflowHistory.Skip(historyCountBefore))
             {
                 WorkflowSmsBackgroundNotifier.NotifyGuaranteeStepChange(
@@ -1395,16 +1385,6 @@ public sealed class GuaranteeCaseAppService(
         int historyCountBefore,
         CancellationToken ct)
     {
-        // #region agent log
-        DebugSessionLog.Write("A", "GuaranteeCaseAppService.PersistTransitionAsync", "entry", new
-        {
-            caseId = entity.Id,
-            status = entity.CurrentStatus.ToString(),
-            pendingHistory = entity.WorkflowHistory.Count - historyCountBefore,
-            pendingComments = entity.Comments.Count - commentsCountBefore
-        });
-        // #endregion
-
         var pendingHistory = entity.WorkflowHistory.Skip(historyCountBefore).ToList();
         var pendingComments = entity.Comments.Skip(commentsCountBefore).ToList();
         var pendingNewAmendmentRecords = unitOfWork.GuaranteeCases.CapturePendingNewAmendmentHistory();
@@ -1413,17 +1393,11 @@ public sealed class GuaranteeCaseAppService(
 
         foreach (var history in pendingHistory)
         {
-            // #region agent log
-            DebugSessionLog.Write("D", "GuaranteeCaseAppService.PersistTransitionAsync", "before-audit-update", new { caseId = entity.Id, historyId = history.Id });
-            // #endregion
             var auditApplied = await ApplyAmendmentAuditDecisionAsync(entity, history, ct);
             if (auditApplied.IsFailure)
                 return auditApplied;
         }
 
-        // #region agent log
-        DebugSessionLog.Write("B", "GuaranteeCaseAppService.PersistTransitionAsync", "before-state-update", new { caseId = entity.Id, status = entity.CurrentStatus.ToString() });
-        // #endregion
         var rows = await unitOfWork.GuaranteeCases.ApplyStateAndAmendmentAsync(
             entity.Id,
             entity.CurrentStatus,
@@ -1444,53 +1418,26 @@ public sealed class GuaranteeCaseAppService(
             entity.AmendmentCompletedAt,
             ct);
 
-        // #region agent log
-        DebugSessionLog.Write("B", "GuaranteeCaseAppService.PersistTransitionAsync", "after-state-update", new { caseId = entity.Id, rows });
-        // #endregion
-
         if (rows == 0)
             return Result.Fail(Error.NotFound(ApiMessages.GuaranteeCaseNotFound));
 
         if (entity.CurrentStatus is GuaranteeCaseStatus.AmendmentApproved
             || (entity.CurrentStatus == GuaranteeCaseStatus.Cancelled && entity.AmendmentType == AmendmentType.Cancellation))
         {
-            // #region agent log
-            DebugSessionLog.Write("B", "GuaranteeCaseAppService.PersistTransitionAsync", "before-approved-data", new
-            {
-                caseId = entity.Id,
-                amendmentType = entity.AmendmentType?.ToString()
-            });
-            // #endregion
             await PersistApprovedAmendmentDataAsync(entity, ct);
-            // #region agent log
-            DebugSessionLog.Write("B", "GuaranteeCaseAppService.PersistTransitionAsync", "after-approved-data", new { caseId = entity.Id });
-            // #endregion
         }
 
         foreach (var record in pendingNewAmendmentRecords)
         {
-            // #region agent log
-            DebugSessionLog.Write("G", "GuaranteeCaseAppService.PersistTransitionAsync", "before-insert-amendment", new { caseId = entity.Id, recordId = record.Id });
-            // #endregion
             await unitOfWork.GuaranteeCases.InsertAmendmentHistoryRecordAsync(record, ct);
         }
         foreach (var history in pendingHistory)
         {
-            // #region agent log
-            DebugSessionLog.Write("G", "GuaranteeCaseAppService.PersistTransitionAsync", "before-insert-history", new { caseId = entity.Id, historyId = history.Id });
-            // #endregion
             await unitOfWork.GuaranteeCases.InsertWorkflowHistoryAsync(history, ct);
         }
         foreach (var comment in pendingComments)
             await unitOfWork.GuaranteeCases.InsertCommentAsync(comment, ct);
 
-        // #region agent log
-        DebugSessionLog.Write("A", "GuaranteeCaseAppService.PersistTransitionAsync", "after-inserts", new { caseId = entity.Id });
-        // #endregion
-
-        // #region agent log
-        DebugSessionLog.Write("A", "GuaranteeCaseAppService.PersistTransitionAsync", "exit", new { caseId = entity.Id });
-        // #endregion
         return Result.Ok();
     }
 

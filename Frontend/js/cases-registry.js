@@ -139,35 +139,7 @@
 
   function statusLabel(c) {
     const st = pick(c, "currentStatus", "CurrentStatus");
-    const label =
-      state.module === "guarantee" ? guaranteeStatusLabel(st, c) : investmentStatusLabel(st);
-    // #region agent log
-    if (state.module === "guarantee") {
-      fetch("http://127.0.0.1:7438/ingest/bf39201f-34dc-4f1d-8b2a-d1537a00d85c", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "f414f7" },
-        body: JSON.stringify({
-          sessionId: "f414f7",
-          runId: "stepper-fix",
-          hypothesisId: "B-E",
-          location: "cases-registry.js:statusLabel",
-          message: "list status label",
-          data: {
-            caseNumber: pick(c, "caseNumber", "CaseNumber"),
-            status: st,
-            amendmentType:
-              typeof GuaranteeWorkflowModel.amendmentTypeFromCase === "function"
-                ? GuaranteeWorkflowModel.amendmentTypeFromCase(c)
-                : pick(c, "amendmentType", "AmendmentType"),
-            amendmentNested: pick(c.amendment || c.Amendment || {}, "amendmentType", "AmendmentType"),
-            label,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(function () {});
-    }
-    // #endregion
-    return label;
+    return state.module === "guarantee" ? guaranteeStatusLabel(st, c) : investmentStatusLabel(st);
   }
 
   function phaseLabel(c) {

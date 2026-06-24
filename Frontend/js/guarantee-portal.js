@@ -637,28 +637,6 @@
     const track = el("div", "portal-stepper__track");
     const currentIndex = model.getStepOrderIndex(current, workflowContext());
     const ctx = workflowContext();
-    const stepIds = model.getStepperSteps(ctx).map((s) => s.id);
-    // #region agent log
-    fetch("http://127.0.0.1:7438/ingest/bf39201f-34dc-4f1d-8b2a-d1537a00d85c", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "f414f7" },
-      body: JSON.stringify({
-        sessionId: "f414f7",
-        runId: "stepper-fix",
-        hypothesisId: "A-C",
-        location: "guarantee-portal.js:renderStepper",
-        message: "stepper context",
-        data: {
-          current,
-          amendmentType: ctx.amendmentType,
-          stepIds,
-          currentIndex,
-          caseAmendmentType: pick(state.caseData, "amendmentType", "AmendmentType"),
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(function () {});
-    // #endregion
 
     model.getStepperSteps(ctx).forEach((step, index) => {
       const item = el("div", "portal-stepper__item");

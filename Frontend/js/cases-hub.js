@@ -148,33 +148,6 @@
       const status = pick(c, "currentStatus", "CurrentStatus");
       const statusOpts = state.module === "guarantee" ? { case: c } : {};
       const statusLabel = UIComponents.statusTitle(state.module, status, statusOpts);
-      // #region agent log
-      if (state.module === "guarantee") {
-        fetch("http://127.0.0.1:7438/ingest/bf39201f-34dc-4f1d-8b2a-d1537a00d85c", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "f414f7" },
-          body: JSON.stringify({
-            sessionId: "f414f7",
-            runId: "amendment-nested-fix",
-            hypothesisId: "B",
-            location: "cases-hub.js:renderList",
-            message: "hub status label",
-            data: {
-              caseNumber: pick(c, "caseNumber", "CaseNumber"),
-              status,
-              amendmentNested: (c.amendment || c.Amendment || {}).amendmentType ||
-                (c.amendment || c.Amendment || {}).AmendmentType,
-              resolvedType:
-                window.GuaranteeWorkflowModel && GuaranteeWorkflowModel.amendmentTypeFromCase
-                  ? GuaranteeWorkflowModel.amendmentTypeFromCase(c)
-                  : null,
-              statusLabel,
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(function () {});
-      }
-      // #endregion
       return {
         id: pick(c, "id", "Id"),
         caseNumber: pick(c, "caseNumber", "CaseNumber"),
