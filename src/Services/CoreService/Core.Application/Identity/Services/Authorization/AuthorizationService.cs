@@ -18,6 +18,8 @@ public class AuthorizationService : IAuthorizationService
         _unitOfWork = unitOfWork;
     }
 
+    #region Public API
+
     public async Task<bool> AuthorizeAsync(User user, string permission, CancellationToken cancellationToken = default)
     {
         return await _permissionService.HasPermissionAsync(user, permission, cancellationToken);
@@ -33,4 +35,6 @@ public class AuthorizationService : IAuthorizationService
 
         return await _permissionService.HasPermissionAsync(user, permission, cancellationToken);
     }
+
+    #endregion
 }

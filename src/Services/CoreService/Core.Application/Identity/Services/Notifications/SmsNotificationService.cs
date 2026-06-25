@@ -16,6 +16,8 @@ public class SmsNotificationService : ISmsNotificationService
         _smsService = smsService;
     }
 
+    #region Public API
+
     public async Task SendOtpNotificationAsync(string mobileNumber, string otpCode, DateTime validTime, CancellationToken cancellationToken = default)
     {
         await _smsService.SendOtpAsync(mobileNumber, otpCode, validTime);
@@ -29,4 +31,6 @@ public class SmsNotificationService : ISmsNotificationService
     {
         await _smsService.SendBulkSmsAsync(mobileNumbers, messageId);
     }
+
+    #endregion
 }

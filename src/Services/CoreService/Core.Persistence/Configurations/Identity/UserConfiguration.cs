@@ -21,7 +21,7 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
 
         builder.HasOne(e => e.Company).WithMany(x => x.Users).HasForeignKey(x => x.CompanyId);
         builder.HasIndex(e => e.PhoneNumber).IsUnique();
-        builder.HasIndex(e => e.Email).IsUnique();
+        builder.HasIndex(e => e.Email).IsUnique().HasFilter("\"Email\" IS NOT NULL");
         builder.HasIndex(e => e.NationalCode);
     }
 }

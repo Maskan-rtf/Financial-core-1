@@ -20,7 +20,8 @@ public sealed class GuaranteeCaseComment : Entity<Guid>, IAuditableEntity
         string message,
         bool isRevisionRequest,
         bool isInternal,
-        Guid? parentId = null)
+        Guid? parentId = null,
+        GuaranteeCaseStatus? workflowStatusAtCreation = null)
     {
         Id = Guid.NewGuid();
         CaseId = caseId;
@@ -31,6 +32,7 @@ public sealed class GuaranteeCaseComment : Entity<Guid>, IAuditableEntity
         IsRevisionRequest = isRevisionRequest;
         IsInternal = isInternal;
         ParentId = parentId;
+        WorkflowStatusAtCreation = workflowStatusAtCreation;
         CreatedAt = DateTimeOffset.UtcNow;
     }
 
@@ -43,6 +45,7 @@ public sealed class GuaranteeCaseComment : Entity<Guid>, IAuditableEntity
     public string Message { get; private set; }
     public bool IsRevisionRequest { get; private set; }
     public bool IsInternal { get; private set; }
+    public GuaranteeCaseStatus? WorkflowStatusAtCreation { get; private set; }
 
     public Guid? ParentId { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }

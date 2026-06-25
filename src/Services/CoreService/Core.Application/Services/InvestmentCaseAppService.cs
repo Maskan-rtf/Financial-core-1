@@ -35,6 +35,8 @@ public sealed class InvestmentCaseAppService(
     IUserDisplayLookup userDisplayLookup,
     ILogger<InvestmentCaseAppService> logger) : IInvestmentCaseAppService
 {
+    #region Core Management
+
     public async Task<Result<InvestmentCaseDto>> CreateAsync(CreateInvestmentCaseRequest request, CancellationToken cancellationToken)
     {
         var authResult = RequireUserId();
@@ -150,7 +152,8 @@ public sealed class InvestmentCaseAppService(
 
         CaseFinancialWorksheetDto? financialWorksheet = null;
         IReadOnlyList<CaseValuationDto>? valuations = null;
-        if (detail.CurrentStatus is CaseStatus.Completed or CaseStatus.Archived)
+        if (authorizationService.IsInternalUser
+            || detail.CurrentStatus is CaseStatus.Completed or CaseStatus.Archived)
         {
             var completion = await dbContext.InvestmentCases.AsNoTracking()
                 .Where(x => x.Id == caseId)
@@ -178,7 +181,8 @@ public sealed class InvestmentCaseAppService(
             if (completion is not null)
             {
                 financialWorksheet = completion.Worksheet;
-                valuations = completion.Valuations.Count == 0 ? null : completion.Valuations;
+                if (detail.CurrentStatus is CaseStatus.Completed or CaseStatus.Archived)
+                    valuations = completion.Valuations.Count == 0 ? null : completion.Valuations;
             }
         }
 
@@ -219,6 +223,10 @@ public sealed class InvestmentCaseAppService(
 
         return await GetAsync(caseId, cancellationToken);
     }
+
+    #endregion
+
+    #region Data Entry & Financial Worksheet
 
     public async Task<Result> UpdateDataEntry1Async(Guid caseId, UpdateDataEntry1Request request, CancellationToken cancellationToken)
     {
@@ -388,6 +396,48 @@ public sealed class InvestmentCaseAppService(
 
         return Result.Ok();
     }
+
+    public async Task<Result<CaseFinancialWorksheetDto>> GetFinancialWorksheetAsync(Guid caseId, CancellationToken cancellationToken)
+    {
+        var authResult = RequireUserId();
+        if (authResult.IsFailure)
+            return Result<CaseFinancialWorksheetDto>.Fail(authResult.Error!);
+
+        ApplicationLog.Started(logger, "GetFinancialWorksheet", authResult.Value, caseId);
+
+        var entity = await unitOfWork.InvestmentCases.GetScopedAsync(
+            caseId,
+            authResult.Value!,
+            authorizationService.IsInternalUser,
+            cancellationToken);
+        if (entity is null)
+        {
+            ApplicationLog.Blocked(logger, "GetFinancialWorksheet", "case not found", authResult.Value, caseId);
+            return Result<CaseFinancialWorksheetDto>.Fail(Error.NotFound(ApiMessages.CaseNotFound));
+        }
+
+        if (entity.FinancialWorksheet is null)
+        {
+            ApplicationLog.Blocked(logger, "GetFinancialWorksheet", "worksheet not found", authResult.Value, caseId);
+            return Result<CaseFinancialWorksheetDto>.Fail(Error.NotFound(ApiMessages.FinancialWorksheetNotFound));
+        }
+
+        var worksheet = entity.FinancialWorksheet;
+        ApplicationLog.Completed(logger,
+            "User {UserId} loaded financial worksheet for case {CaseId}",
+            authResult.Value, caseId);
+
+        return Result<CaseFinancialWorksheetDto>.Ok(new CaseFinancialWorksheetDto(
+            worksheet.BankName,
+            worksheet.Iban,
+            worksheet.ApprovedAmount,
+            worksheet.PaymentSchedule,
+            worksheet.Notes));
+    }
+
+    #endregion
+
+    #region Workflow Transitions
 
     public async Task<Result> SubmitDataEntry1Async(Guid caseId, string? comment, CancellationToken ct)
         => await ApplyTransitionAsync(caseId, WorkflowAction.Submit, comment, ct);
@@ -675,6 +725,10 @@ public sealed class InvestmentCaseAppService(
         return userContext.Roles.FirstOrDefault() ?? string.Empty;
     }
 
+    #endregion
+
+    #region Payments, Valuations & Evaluations
+
     public async Task<Result> RecordValuationAsync(Guid caseId, RecordValuationRequest request, CancellationToken cancellationToken)
     {
         var authResult = RequireUserId();
@@ -886,6 +940,10 @@ public sealed class InvestmentCaseAppService(
         return Result.Ok();
     }
 
+    #endregion
+
+    #region Documents, Comments & Evaluations
+
     public async Task<Result<IEnumerable<CaseCommentDto>>> GetCommentsAsync(Guid caseId, bool includeInternal, CancellationToken cancellationToken)
     {
         var authResult = RequireUserId();
@@ -914,7 +972,8 @@ public sealed class InvestmentCaseAppService(
         var comments = visibleComments
             .Select(c => caseDtoMapper.MapComment(
                 c,
-                userLookup is null ? null : userDisplayLookup.ResolveFullName(userLookup, c.SenderUserId)))
+                userLookup is null ? null : userDisplayLookup.ResolveFullName(userLookup, c.SenderUserId),
+                entity.WorkflowHistory))
             .OrderBy(x => x.CreatedAt)
             .ToList();
 
@@ -967,7 +1026,8 @@ public sealed class InvestmentCaseAppService(
                 request.Message,
                 isRevisionRequest: false,
                 isInternal: false,
-                parentId: request.ParentId),
+                parentId: request.ParentId,
+                workflowStatusAtCreation: caseMeta.Status),
             cancellationToken);
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -1643,6 +1703,10 @@ public sealed class InvestmentCaseAppService(
             new DocumentDownloadFileResult(stream, contentType, document.FileName));
     }
 
+    #endregion
+
+    #region Private
+
     private Result<string> RequireUserId()
     {
         var auth = authorizationService.EnsureAuthenticated();
@@ -2034,4 +2098,6 @@ public sealed class InvestmentCaseAppService(
 
         return user is null ? null : caseDtoMapper.MapApplicantContact(user);
     }
+
+    #endregion
 }

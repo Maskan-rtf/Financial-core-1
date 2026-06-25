@@ -180,7 +180,9 @@ public sealed record GuaranteeCaseCommentDto(
     string Message,
     bool IsRevisionRequest,
     bool IsInternal,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    GuaranteeCaseStatus? WorkflowStatusAtCreation = null,
+    string? WorkflowStatusLabel = null);
 
 public sealed record GuaranteeWorkflowHistoryDto(
     Guid Id,

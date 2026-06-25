@@ -8,6 +8,8 @@ namespace Core.Application.Dashboard;
 
 public sealed class DashboardModuleAggregators(ICoreDbContext dbContext)
 {
+    #region Configuration
+
     private static readonly int[] InvestmentTerminal =
     [
         (int)CaseStatus.Completed, (int)CaseStatus.Rejected, (int)CaseStatus.Cancelled, (int)CaseStatus.Archived
@@ -31,6 +33,10 @@ public sealed class DashboardModuleAggregators(ICoreDbContext dbContext)
         (int)LoanCaseStatus.CanceledByCeo,
         (int)LoanCaseStatus.RepaymentPhase
     ];
+
+    #endregion
+
+    #region Public API
 
     public async Task<IReadOnlyList<ModuleDashboardMetricsDto>> AggregateAllModulesAsync(
         DateTimeOffset computedAt,
@@ -247,6 +253,10 @@ public sealed class DashboardModuleAggregators(ICoreDbContext dbContext)
 
         return 0;
     }
+
+    #endregion
+
+    #region Private
 
     private async Task<ModuleDashboardMetricsDto> AggregateInvestmentAsync(
         DateTimeOffset sixMonthsAgo,
@@ -611,4 +621,6 @@ public sealed class DashboardModuleAggregators(ICoreDbContext dbContext)
             ? 0
             : Math.Round(samples.Average(s => (s.UpdatedAt - s.CreatedAt).TotalDays), 1);
     }
+
+    #endregion
 }

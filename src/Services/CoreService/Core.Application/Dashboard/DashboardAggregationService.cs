@@ -16,6 +16,8 @@ public sealed class DashboardAggregationService(
     DashboardModuleAggregators moduleAggregators,
     ILogger<DashboardAggregationService> logger) : IDashboardAggregationService
 {
+    #region Configuration
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private static readonly int[] InvestmentTerminal =
@@ -34,6 +36,10 @@ public sealed class DashboardAggregationService(
         (int)LoanCaseStatus.Completed, (int)LoanCaseStatus.Archived, (int)LoanCaseStatus.CanceledByCeo
     ];
 
+    #endregion
+
+    #region Public API
+
     public async Task AggregateAllAsync(CancellationToken cancellationToken = default)
     {
         var computedAt = DateTimeOffset.UtcNow;
@@ -48,6 +54,10 @@ public sealed class DashboardAggregationService(
 
         logger.LogInformation("Dashboard aggregation completed at {ComputedAt}", computedAt);
     }
+
+    #endregion
+
+    #region Private
 
     private async Task UpsertExecutiveAsync(DateTimeOffset computedAt, CancellationToken ct)
     {
@@ -501,4 +511,6 @@ public sealed class DashboardAggregationService(
 
         return Math.Clamp(status * 5, 5, 95);
     }
+
+    #endregion
 }

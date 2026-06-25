@@ -296,6 +296,19 @@
     const phases = getPhases(module);
     const phaseTitle = phases[phase] || "فاز " + phase;
     const createdAt = pick(comment, "createdAt", "CreatedAt");
+    const apiStatus = pick(comment, "workflowStatusAtCreation", "WorkflowStatusAtCreation");
+    const apiLabel = pick(comment, "workflowStatusLabel", "WorkflowStatusLabel");
+    if (apiStatus !== undefined && apiStatus !== null && apiStatus !== "") {
+      const status = Number(apiStatus);
+      const step = stepMetaForStatus(module, status);
+      return {
+        phase,
+        phaseTitle,
+        status,
+        stepTitle: apiLabel || (step && (step.title || step.Title)) || phaseTitle,
+        unit: (step && (step.unit || step.Unit)) || "all",
+      };
+    }
     const status = resolveStatusAtTime(history, createdAt);
     const step = stepMetaForStatus(module, status);
     const stepTitle = (step && (step.title || step.Title)) || phaseTitle;

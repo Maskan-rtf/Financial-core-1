@@ -12,4 +12,5 @@ public sealed record LoanCaseCommentListProjection(
     bool IsInternal,
     Guid? ParentId,
     DateTimeOffset CreatedAt,
-    string? SenderFullName);
+    string? SenderFullName,
+    LoanCaseStatus? WorkflowStatusAtCreation);

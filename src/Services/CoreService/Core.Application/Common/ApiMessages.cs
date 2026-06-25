@@ -27,6 +27,7 @@ public static class ApiMessages
     public const string DataEntry1NotEditable = "در وضعیت فعلی امکان ویرایش ورود اطلاعات ۱ وجود ندارد.";
     public const string DataEntry2NotEditable = "در وضعیت فعلی امکان ویرایش ورود اطلاعات ۲ وجود ندارد.";
     public const string FinancialWorksheetNotEditable = "در وضعیت فعلی امکان ویرایش کاربرگ مالی وجود ندارد.";
+    public const string FinancialWorksheetNotFound = "کاربرگ مالی برای این پرونده یافت نشد.";
     public const string DataEntry1NotCurrentPhase = "مرحله فعلی پرونده، ورود اطلاعات ۱ نیست.";
     public const string DataEntry2NotCurrentPhase = "مرحله فعلی پرونده، ورود اطلاعات ۲ نیست.";
     public const string FinancialWorksheetNotCurrentPhase = "مرحله فعلی پرونده، کاربرگ مالی نیست.";

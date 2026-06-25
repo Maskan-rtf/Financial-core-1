@@ -17,6 +17,8 @@ public sealed class FundCreditLimitAppService(
     IUserDisplayLookup userDisplayLookup,
     IFundCreditLimitDtoMapper fundCreditLimitDtoMapper) : IFundCreditLimitAppService
 {
+    #region Public API
+
     public async Task<Result<FundCreditLimitDto>> CreateAsync(CreateFundCreditLimitRequest request, CancellationToken ct)
     {
         if (!FundCreditLimitAuthorization.CanAccessFundCreditLimits(userContext.Roles))
@@ -176,6 +178,10 @@ public sealed class FundCreditLimitAppService(
         return Result<FundCreditLimitDashboardSectionDto>.Ok(new FundCreditLimitDashboardSectionDto(active, all));
     }
 
+    #endregion
+
+    #region Private
+
     private static Result ValidateAmount(decimal amount)
     {
         if (amount <= 0)
@@ -204,4 +210,6 @@ public sealed class FundCreditLimitAppService(
             utilized,
             userDisplayLookup.ResolveFullName(userLookup, row.LastSetByUserId));
     }
+
+    #endregion
 }

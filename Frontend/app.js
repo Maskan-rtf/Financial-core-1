@@ -102,25 +102,33 @@
     }
   }
 
+  function envelopeField(body, camelKey, pascalKey) {
+    if (!body || typeof body !== "object") return undefined;
+    if (body[camelKey] !== undefined) return body[camelKey];
+    if (pascalKey && body[pascalKey] !== undefined) return body[pascalKey];
+    const pascal = camelKey.charAt(0).toUpperCase() + camelKey.slice(1);
+    return body[pascal];
+  }
+
   function unwrapEnvelope(body) {
     if (!body || typeof body !== "object") {
       return { envelope: null, payload: body };
     }
 
-    if (Object.prototype.hasOwnProperty.call(body, "success")) {
-      if (body.success === false) {
-        const validation = Array.isArray(body.validationErrors) ? body.validationErrors.join(", ") : "";
-        const message = body.message || "درخواست ناموفق بود";
+    const success = envelopeField(body, "success");
+    if (success !== undefined) {
+      if (success === false) {
+        const validationErrors = envelopeField(body, "validationErrors", "ValidationErrors");
+        const validation = Array.isArray(validationErrors) ? validationErrors.join(", ") : "";
+        const message = envelopeField(body, "message", "Message") || "درخواست ناموفق بود";
         throw new Error(validation ? message + ": " + validation : message);
       }
 
+      const data = envelopeField(body, "data", "Data");
+      const list = envelopeField(body, "list", "List");
       return {
         envelope: body,
-        payload: body.data !== undefined && body.data !== null
-          ? body.data
-          : body.list !== undefined
-            ? body.list
-            : body,
+        payload: data !== undefined && data !== null ? data : list !== undefined ? list : body,
       };
     }
 
@@ -447,9 +455,11 @@
     inspector.log = inspector.log.slice(0, inspector.maxLog);
     renderInspector();
 
-    if (parsed && typeof parsed === "object" && parsed.success === false) {
-      const validation = Array.isArray(parsed.validationErrors) ? parsed.validationErrors.join(", ") : "";
-      const message = parsed.message || "درخواست ناموفق بود";
+    const success = envelopeField(parsed, "success");
+    if (parsed && typeof parsed === "object" && success === false) {
+      const validationErrors = envelopeField(parsed, "validationErrors", "ValidationErrors");
+      const validation = Array.isArray(validationErrors) ? validationErrors.join(", ") : "";
+      const message = envelopeField(parsed, "message", "Message") || "درخواست ناموفق بود";
       throw new Error(validation ? message + ": " + validation : message);
     }
 
@@ -819,14 +829,14 @@
   }
 
   function wireUsers() {
-    qs("#btnCreateUser").addEventListener("click", () =>
+    qs("#btnCreateUser")?.addEventListener("click", () =>
       withUiError(async () => {
         const dto = {
-          phoneNumber: qs("#createUserPhone").value.trim(),
-          email: qs("#createUserEmail").value.trim() || null,
-          firstName: qs("#createUserFirst").value.trim(),
-          lastName: qs("#createUserLast").value.trim(),
-          nationalCode: qs("#createUserNat").value.trim() || null,
+          phoneNumber: qs("#createUserPhone")?.value.trim(),
+          email: qs("#createUserEmail")?.value.trim() || null,
+          firstName: qs("#createUserFirst")?.value.trim(),
+          lastName: qs("#createUserLast")?.value.trim(),
+          nationalCode: qs("#createUserNat")?.value.trim() || null,
         };
         if (!dto.phoneNumber) throw new Error("شماره موبایل الزامی است.");
         if (!dto.firstName || !dto.lastName) throw new Error("نام و نام خانوادگی الزامی هستند.");
@@ -834,12 +844,12 @@
       })
     );
 
-    qs("#btnUpdateUser").addEventListener("click", () =>
+    qs("#btnUpdateUser")?.addEventListener("click", () =>
       withUiError(async () => {
-        const id = qs("#updateUserId").value.trim();
+        const id = qs("#updateUserId")?.value.trim();
         if (!id) throw new Error("شناسه کاربر الزامی است.");
-        const roleRaw = qs("#updateUserRole").value;
-        const isActiveRaw = qs("#updateUserActive").value;
+        const roleRaw = qs("#updateUserRole")?.value;
+        const isActiveRaw = qs("#updateUserActive")?.value;
         const dto = {};
         if (roleRaw !== "") dto.role = Number(roleRaw);
         if (isActiveRaw !== "") dto.isActive = isActiveRaw === "true";
@@ -847,18 +857,18 @@
       })
     );
 
-    qs("#btnGetUser").addEventListener("click", () =>
+    qs("#btnGetUser")?.addEventListener("click", () =>
       withUiError(async () => {
-        const id = qs("#getUserId").value.trim();
+        const id = qs("#getUserId")?.value.trim();
         if (!id) throw new Error("شناسه کاربر الزامی است.");
         await apiRequest({ method: "GET", path: "/api/v1/identity/users/" + encodeURIComponent(id) });
       })
     );
 
-    qs("#btnListUsers").addEventListener("click", () =>
+    qs("#btnListUsers")?.addEventListener("click", () =>
       withUiError(async () => {
-        const take = qs("#usersTake").value.trim() || "10";
-        const skip = qs("#usersSkip").value.trim() || "0";
+        const take = qs("#usersTake")?.value.trim() || "10";
+        const skip = qs("#usersSkip")?.value.trim() || "0";
         await apiRequest({ method: "GET", path: "/api/v1/identity/users?take=" + encodeURIComponent(take) + "&skip=" + encodeURIComponent(skip) });
       })
     );
@@ -1638,6 +1648,7 @@
     wireTabs();
     wireConfigModal();
     wireAuth();
+    wireUsers();
     renderInspector();
     renderSessionsList();
     renderTopbar();
@@ -1690,6 +1701,7 @@
     if (typeof window.initAdminDashboard === "function") window.initAdminDashboard(window.TestPanel);
     if (typeof window.initAdminUsers === "function") window.initAdminUsers(window.TestPanel);
     if (typeof window.initAdminCompanies === "function") window.initAdminCompanies(window.TestPanel);
+    if (typeof window.initAdminCommentsAudit === "function") window.initAdminCommentsAudit(window.TestPanel);
   }
 
   document.addEventListener("DOMContentLoaded", init);

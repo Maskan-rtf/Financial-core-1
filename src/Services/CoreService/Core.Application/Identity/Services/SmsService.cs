@@ -11,6 +11,8 @@ namespace Core.Application.Identity.Services;
 
 public class SmsService : ISmsService
 {
+    #region Configuration
+
     private readonly HttpClient _httpClient;
     private readonly ILogger<SmsService> _logger;
     private readonly string _apiBaseUrl;
@@ -25,6 +27,10 @@ public class SmsService : ISmsService
         { 3, "در صورت نیاز به راهنمایی با پشتیبانی تماس بگیرید. اطلاعات ورود شما محرمانه است." },
         { 4, "وضعیت درخواست شما به‌روزرسانی شد." }
     };
+
+    #endregion
+
+    #region Public API
 
     public SmsService(HttpClient httpClient, IOptions<SmsOptions> options, ILogger<SmsService> logger)
     {
@@ -73,19 +79,6 @@ public class SmsService : ISmsService
             return false;
         }
     }
-
-
-    private string BuildOtpMessage(string otpCode, DateTime validUntil)
-    {
-        var validMinutes = (int)(validUntil - DateTime.UtcNow).TotalMinutes;
-
-        return
-            $"کد ورود شما: {otpCode}\n\n" +
-            $"این کد تا {validMinutes} دقیقه معتبر است.\n" +
-            $"کد را با کسی به اشتراک نگذارید.\n\n" +
-            $"صندوق پژوهش و فناوری غیردولتی مسکن";
-    }
-
 
     public Task<bool> SendSmsAsync(string mobileNumber, int messageId)
     {
@@ -156,4 +149,21 @@ public class SmsService : ISmsService
             return false;
         }
     }
+
+    #endregion
+
+    #region Private
+
+    private string BuildOtpMessage(string otpCode, DateTime validUntil)
+    {
+        var validMinutes = (int)(validUntil - DateTime.UtcNow).TotalMinutes;
+
+        return
+            $"کد ورود شما: {otpCode}\n\n" +
+            $"این کد تا {validMinutes} دقیقه معتبر است.\n" +
+            $"کد را با کسی به اشتراک نگذارید.\n\n" +
+            $"صندوق پژوهش و فناوری غیردولتی مسکن";
+    }
+
+    #endregion
 }

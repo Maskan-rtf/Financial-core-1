@@ -1,9 +1,10 @@
+using BuildingBlocks.Application.Errors;
+using BuildingBlocks.Application.Results;
+using BuildingBlocks.Domain.Abstractions;
 using Core.Application.Abstractions;
 using Core.Application.Common;
 using Core.Application.Logging;
 using Core.Application.Requests;
-using BuildingBlocks.Application.Errors;
-using BuildingBlocks.Application.Results;
 using Core.Domain.Identity;
 using Core.Domain.Identity.Entities;
 using MapsterMapper;
@@ -23,9 +24,12 @@ public interface ICompanyAppService
 public sealed class CompanyAppService(
     ICoreUnitOfWork unitOfWork,
     ICurrentUserAccessor currentUser,
+    IUserContext userContext,
     IMapper mapper,
     ILogger<CompanyAppService> logger) : ICompanyAppService
 {
+    #region Public API
+
     public async Task<Result<IReadOnlyList<CompanyDto>>> GetMyCompaniesAsync(CancellationToken cancellationToken)
     {
         if (!TryGetCurrentUserId(out var userId))
@@ -217,6 +221,10 @@ public sealed class CompanyAppService(
         return Result.Ok();
     }
 
+    #endregion
+
+    #region Private
+
     private bool TryGetCurrentUserId(out Guid userId)
     {
         userId = currentUser.UserId ?? Guid.Empty;
@@ -225,9 +233,31 @@ public sealed class CompanyAppService(
 
     private async Task<bool> CanManageAllCompaniesAsync(Guid userId, CancellationToken cancellationToken)
     {
+        if (HasCompanyListAllRole())
+            return true;
+
         var user = await unitOfWork.Users.GetByIdAsync(userId);
         if (user is null) return false;
-        return user.Role is UserRole.Admin or UserRole.Ceo or UserRole.TechnicalExpert;
+        return user.Role is UserRole.Admin or UserRole.Ceo or UserRole.TechnicalExpert or UserRole.TechnicalManager or UserRole.InvestmentManager;
+    }
+
+    private bool HasCompanyListAllRole()
+    {
+        foreach (var role in userContext.Roles)
+        {
+            var normalized = UserRoleClaims.Normalize(role);
+            if (normalized.Equals(UserRoleClaims.Admin, StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals(UserRoleClaims.Ceo, StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("CEO", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals(UserRoleClaims.TechnicalExpert, StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals(UserRoleClaims.TechnicalManager, StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals(UserRoleClaims.InvestmentManager, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string? FormatOwnerName(User? owner)
@@ -236,4 +266,6 @@ public sealed class CompanyAppService(
         var name = $"{owner.FirstName} {owner.LastName}".Trim();
         return string.IsNullOrWhiteSpace(name) ? null : name;
     }
+
+    #endregion
 }

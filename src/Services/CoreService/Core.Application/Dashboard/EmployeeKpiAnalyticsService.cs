@@ -15,8 +15,14 @@ public sealed class EmployeeKpiAnalyticsService(
     IUserContext userContext,
     ILogger<EmployeeKpiAnalyticsService> logger) : IEmployeeKpiAnalyticsService
 {
+    #region Configuration
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly TimeSpan StaleThreshold = TimeSpan.FromHours(6);
+
+    #endregion
+
+    #region Public API
 
     public async Task<Result<EmployeeKpiResponseDto>> GetEmployeeKpisAsync(
         EmployeeKpiPeriod period,
@@ -72,6 +78,10 @@ public sealed class EmployeeKpiAnalyticsService(
         });
     }
 
+    #endregion
+
+    #region Private
+
     private static EmployeeKpiResponseDto EmptyResponse(EmployeeKpiPeriod period)
     {
         var now = DateTimeOffset.UtcNow;
@@ -86,4 +96,6 @@ public sealed class EmployeeKpiAnalyticsService(
             Departments = []
         };
     }
+
+    #endregion
 }

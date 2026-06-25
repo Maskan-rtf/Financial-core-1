@@ -8,6 +8,8 @@ namespace Core.Application.Authorization;
 
 public sealed class GuaranteeAuthorizationService(IUserContext userContext) : IGuaranteeAuthorizationService
 {
+    #region Permission Maps
+
     private static readonly string[] CreditDepartmentPermissions =
     [
         GuaranteePermissions.ReadAll,
@@ -83,6 +85,10 @@ public sealed class GuaranteeAuthorizationService(IUserContext userContext) : IG
             ]
         };
 
+    #endregion
+
+    #region Public API
+
     public string? UserId => userContext.UserId;
 
     public bool IsInternalUser => DepartmentPermissionEvaluator.IsInternalUser(userContext.Roles);
@@ -106,4 +112,6 @@ public sealed class GuaranteeAuthorizationService(IUserContext userContext) : IG
             RolePermissions,
             DepartmentPermissions);
     }
+
+    #endregion
 }

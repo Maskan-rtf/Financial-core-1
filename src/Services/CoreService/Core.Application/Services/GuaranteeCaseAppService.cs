@@ -42,6 +42,8 @@ public sealed class GuaranteeCaseAppService(
     IWorkflowSmsNotifier workflowSmsNotifier,
     ILogger<GuaranteeCaseAppService> logger) : IGuaranteeCaseAppService
 {
+    #region Core Management
+
     public async Task<Result<GuaranteeCaseDto>> CreateAsync(CreateGuaranteeCaseRequest request, CancellationToken ct)
     {
         var auth = RequireUser();
@@ -198,6 +200,10 @@ public sealed class GuaranteeCaseAppService(
 
         return Result<IEnumerable<GuaranteeWorkflowHistoryDto>>.Ok(history.Select(dtoMapper.MapHistory));
     }
+
+    #endregion
+
+    #region Amendments & Cancellation
 
     public async Task<Result<GuaranteeAmendmentDto>> GetAmendmentAsync(Guid caseId, CancellationToken ct)
     {
@@ -579,6 +585,10 @@ public sealed class GuaranteeCaseAppService(
             ct);
     }
 
+    #endregion
+
+    #region Application & Workflow
+
     public async Task<Result> UpdateApplicationAsync(Guid caseId, UpdateGuaranteeApplicationRequest request,
         CancellationToken ct)
     {
@@ -714,6 +724,10 @@ public sealed class GuaranteeCaseAppService(
 
     public Task<Result> ConfirmIssuanceDocumentsUploadedAsync(Guid caseId, CancellationToken ct)
         => ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.UploadIssuanceDocuments, null, ct);
+
+    #endregion
+
+    #region Documents & Comments
 
     public async Task<Result<PresignGuaranteeUploadResponse>> PresignDocumentUploadAsync(
         Guid caseId,
@@ -875,13 +889,20 @@ public sealed class GuaranteeCaseAppService(
                     Error.NotFound(ApiMessages.GuaranteeCaseNotFound));
         }
 
-        var canViewInternal = authorizationService.HasPermission(GuaranteePermissions.ViewInternalComments);
+        var workflowHistory = await unitOfWork.GuaranteeCases.GetWorkflowHistoryAsync(
+            caseId, auth.Value!, authorizationService.IsInternalUser, ct);
+
+        var canViewInternal = includeInternal && authorizationService.HasPermission(GuaranteePermissions.ViewInternalComments);
         var filtered = comments
-            .Where(x => (includeInternal && canViewInternal) || !x.IsInternal)
-            .Select(dtoMapper.MapComment);
+            .Where(x => canViewInternal || !x.IsInternal)
+            .Select(c => dtoMapper.MapComment(c, workflowHistory));
 
         return Result<IEnumerable<GuaranteeCaseCommentDto>>.Ok(filtered);
     }
+
+    #endregion
+
+    #region Fund Credit Limits
 
     public async Task<Result<GuaranteeFundCreditLimitDto>> GetFundCreditLimitAsync(CancellationToken ct)
     {
@@ -985,6 +1006,10 @@ public sealed class GuaranteeCaseAppService(
 
         return Result<GuaranteeFundCreditLimitDto>.Ok(await BuildFundCreditLimitDtoAsync(ct));
     }
+
+    #endregion
+
+    #region Private
 
     private static bool IsNumericFieldOverflow(Exception exception)
     {
@@ -1705,4 +1730,6 @@ public sealed class GuaranteeCaseAppService(
             logger.LogWarning(ex, "Workflow SMS notification failed for guarantee case {CaseId}", caseId);
         }
     }
+
+    #endregion
 }

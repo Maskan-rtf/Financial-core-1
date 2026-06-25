@@ -1,6 +1,7 @@
 using Core.Application.Abstractions;
 using Core.Application.Authorization;
 using Core.Application.DTOs;
+using Core.Application.Kanban;
 using Core.Application.Requests;
 using Core.Domain.Entities;
 using Core.Domain.Enums;
@@ -39,7 +40,10 @@ public interface ICaseDtoMapper
         ApplicantContactDto? applicantContact = null,
         CaseFinancialWorksheetDto? financialWorksheet = null,
         IReadOnlyList<CaseValuationDto>? valuations = null);
-    CaseCommentDto MapComment(InvestmentCaseComment comment, string? senderFullName = null);
+    CaseCommentDto MapComment(
+        InvestmentCaseComment comment,
+        string? senderFullName = null,
+        IReadOnlyList<InvestmentCaseWorkflowHistory>? workflowHistory = null);
     CaseWorkflowHistoryDto MapHistory(InvestmentCaseWorkflowHistory history, string? changedByFullName = null);
     CaseEvaluationDto MapEvaluation(InvestmentCaseEvaluation evaluation);
 }
@@ -290,9 +294,13 @@ public sealed class CaseDtoMapper(
             ? null
             : new DataEntry2Dto(dataEntry.InvestmentAttractionBasis);
 
-    public CaseCommentDto MapComment(InvestmentCaseComment comment, string? senderFullName = null)
+    public CaseCommentDto MapComment(
+        InvestmentCaseComment comment,
+        string? senderFullName = null,
+        IReadOnlyList<InvestmentCaseWorkflowHistory>? workflowHistory = null)
     {
         var attachments = comment.Attachments.Select(MapCommentAttachment).ToArray();
+        var (workflowStatus, workflowStatusLabel) = ResolveInvestmentWorkflowStatus(comment, workflowHistory);
 
         if (authorizationService.IsInternalUser)
         {
@@ -308,7 +316,9 @@ public sealed class CaseDtoMapper(
                 comment.IsInternal,
                 comment.ParentId,
                 attachments,
-                comment.CreatedAt);
+                comment.CreatedAt,
+                workflowStatus,
+                workflowStatusLabel);
         }
 
         return new CaseCommentApplicantDto(
@@ -319,7 +329,31 @@ public sealed class CaseDtoMapper(
             comment.IsRevisionRequest,
             comment.ParentId,
             attachments,
-            comment.CreatedAt);
+            comment.CreatedAt,
+            workflowStatus,
+            workflowStatusLabel);
+    }
+
+    private static (CaseStatus? Status, string? Label) ResolveInvestmentWorkflowStatus(
+        InvestmentCaseComment comment,
+        IReadOnlyList<InvestmentCaseWorkflowHistory>? workflowHistory)
+    {
+        var snapshots = workflowHistory?
+            .Select(h => new WorkflowHistorySnapshot<CaseStatus>(h.CreatedAt, h.FromStatus, h.ToStatus, h.Comment))
+            .ToArray();
+
+        var resolved = CaseCommentWorkflowStatusResolver.ResolveFromHistory(
+            comment.WorkflowStatusAtCreation.HasValue ? (int)comment.WorkflowStatusAtCreation.Value : null,
+            comment.CreatedAt,
+            comment.Message,
+            comment.IsRevisionRequest,
+            snapshots);
+
+        if (!resolved.HasValue)
+            return (null, null);
+
+        var status = (CaseStatus)resolved.Value;
+        return (status, CaseKanbanRules.GetStatusTitle(status));
     }
 
     private CaseCommentAttachmentDto MapCommentAttachment(InvestmentCaseCommentAttachment attachment)

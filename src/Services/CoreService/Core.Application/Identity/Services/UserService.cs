@@ -40,6 +40,8 @@ public class UserService(
     IPermissionCacheService permissionCacheService,
     ILogger<UserService> logger) : IUserService
 {
+    #region Authentication & Sessions
+
     public async Task<ApiOperationResult<UserDto>> SendOtpAsync(SendOtpDto dto)
     {
         var result = new ApiOperationResult<UserDto>();
@@ -451,6 +453,10 @@ public class UserService(
         return result.Succeed(IdentityMessages.OperationSucceeded, list, list.Count);
     }
 
+    #endregion
+
+    #region User Administration
+
     public async Task<ApiOperationResult<UserDto>> CreateAsync(CreateUserDto dto)
     {
         var result = new ApiOperationResult<UserDto>();
@@ -470,11 +476,15 @@ public class UserService(
             return result.Failed(IdentityMessages.PhoneAlreadyRegistered, HttpStatusCode.Conflict);
         }
 
-        var existEmail = await unitOfWork.Users.GetAsync(user => user.Email == dto.Email);
-        if (existEmail is not null)
+        var normalizedEmail = NormalizeEmail(dto.Email);
+        if (!string.IsNullOrWhiteSpace(normalizedEmail))
         {
-            ApplicationLog.Blocked(logger, "CreateUser", "email already registered");
-            return result.Failed(IdentityMessages.EmailAlreadyRegistered, HttpStatusCode.Conflict);
+            var existEmail = await unitOfWork.Users.GetAsync(user => user.Email == normalizedEmail);
+            if (existEmail is not null)
+            {
+                ApplicationLog.Blocked(logger, "CreateUser", "email already registered");
+                return result.Failed(IdentityMessages.EmailAlreadyRegistered, HttpStatusCode.Conflict);
+            }
         }
 
         var existNationalCode = string.IsNullOrWhiteSpace(dto.NationalCode)
@@ -487,6 +497,7 @@ public class UserService(
         }
 
         var user = dto.Adapt<User>();
+        user.Email = NormalizeEmail(dto.Email);
         user.CreatedAt = DateTime.UtcNow;
         user.Role = otpOptions.Value.DevBypassEnabled
             && !string.IsNullOrWhiteSpace(otpOptions.Value.SeedAdminPhone)
@@ -816,6 +827,10 @@ public class UserService(
         return result.Succeed(IdentityMessages.OperationSucceeded, user is null ? new UserDto() : user.Adapt<UserDto>());
     }
 
+    #endregion
+
+    #region Private
+
     private static ApiOperationResult<LoginDto> BuildOtpFailure(
         ApiOperationResult<LoginDto> result,
         OtpValidationResult otpValidation)
@@ -987,4 +1002,14 @@ public class UserService(
         await sessionCacheService.RevokeAllSessionsAsync(userId, cancellationToken);
         return sessions.Count;
     }
+
+    private static string? NormalizeEmail(string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return null;
+
+        return email.Trim();
+    }
+
+    #endregion
 }

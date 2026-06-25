@@ -1,7 +1,9 @@
 using Core.Application.Abstractions;
 using Core.Application.DTOs;
+using Core.Application.Kanban;
 using Core.Application.Requests;
 using Core.Domain.Entities;
+using Core.Domain.Enums;
 using Core.Domain.Identity.Entities;
 
 namespace Core.Application.Mappers;
@@ -26,8 +28,13 @@ public interface IGuaranteeCaseDtoMapper
     GuaranteeApprovalFormDto? MapApprovalForm(GuaranteeApprovalForm? form);
     GuaranteeAmendmentDto? MapAmendment(GuaranteeCase entity);
     GuaranteeCaseDocumentDto MapDocument(GuaranteeCaseDocument document);
-    GuaranteeCaseCommentDto MapComment(GuaranteeCaseComment comment, string? senderFullName = null);
-    GuaranteeCaseCommentDto MapComment(GuaranteeCaseCommentListProjection projection);
+    GuaranteeCaseCommentDto MapComment(
+        GuaranteeCaseComment comment,
+        string? senderFullName = null,
+        IReadOnlyList<GuaranteeWorkflowHistoryListProjection>? workflowHistory = null);
+    GuaranteeCaseCommentDto MapComment(
+        GuaranteeCaseCommentListProjection projection,
+        IReadOnlyList<GuaranteeWorkflowHistoryListProjection>? workflowHistory = null);
     GuaranteeWorkflowHistoryDto MapHistory(GuaranteeCaseWorkflowHistory history, string? changedByFullName = null);
     GuaranteeWorkflowHistoryDto MapHistory(GuaranteeWorkflowHistoryListProjection projection);
     GuaranteeRenewalDto MapRenewal(
@@ -385,20 +392,30 @@ public sealed class GuaranteeCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) :
             document.Version,
             document.UploadedAt);
 
-    public GuaranteeCaseCommentDto MapComment(GuaranteeCaseComment comment, string? senderFullName = null)
-        => new(
-            comment.Id,
-            comment.Phase,
-            comment.SenderUserId,
-            senderFullName,
-            comment.SenderRole,
-            comment.Message,
-            comment.IsRevisionRequest,
-            comment.IsInternal,
-            comment.CreatedAt);
+    public GuaranteeCaseCommentDto MapComment(
+        GuaranteeCaseComment comment,
+        string? senderFullName = null,
+        IReadOnlyList<GuaranteeWorkflowHistoryListProjection>? workflowHistory = null) =>
+        MapComment(
+            new GuaranteeCaseCommentListProjection(
+                comment.Id,
+                comment.Phase,
+                comment.SenderUserId,
+                comment.SenderRole,
+                comment.Message,
+                comment.IsRevisionRequest,
+                comment.IsInternal,
+                comment.CreatedAt,
+                senderFullName,
+                comment.WorkflowStatusAtCreation),
+            workflowHistory);
 
-    public GuaranteeCaseCommentDto MapComment(GuaranteeCaseCommentListProjection projection)
-        => new(
+    public GuaranteeCaseCommentDto MapComment(
+        GuaranteeCaseCommentListProjection projection,
+        IReadOnlyList<GuaranteeWorkflowHistoryListProjection>? workflowHistory = null)
+    {
+        var (workflowStatus, workflowStatusLabel) = ResolveGuaranteeWorkflowStatus(projection, workflowHistory);
+        return new(
             projection.Id,
             projection.Phase,
             projection.SenderUserId,
@@ -407,7 +424,32 @@ public sealed class GuaranteeCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) :
             projection.Message,
             projection.IsRevisionRequest,
             projection.IsInternal,
-            projection.CreatedAt);
+            projection.CreatedAt,
+            workflowStatus,
+            workflowStatusLabel);
+    }
+
+    private static (GuaranteeCaseStatus? Status, string? Label) ResolveGuaranteeWorkflowStatus(
+        GuaranteeCaseCommentListProjection projection,
+        IReadOnlyList<GuaranteeWorkflowHistoryListProjection>? workflowHistory)
+    {
+        var snapshots = workflowHistory?
+            .Select(h => new WorkflowHistorySnapshot<GuaranteeCaseStatus>(h.CreatedAt, h.FromStatus, h.ToStatus, h.Comment))
+            .ToArray();
+
+        var resolved = CaseCommentWorkflowStatusResolver.ResolveFromHistory(
+            projection.WorkflowStatusAtCreation.HasValue ? (int)projection.WorkflowStatusAtCreation.Value : null,
+            projection.CreatedAt,
+            projection.Message,
+            projection.IsRevisionRequest,
+            snapshots);
+
+        if (!resolved.HasValue)
+            return (null, null);
+
+        var status = (GuaranteeCaseStatus)resolved.Value;
+        return (status, GuaranteeKanbanRules.GetStatusTitle(status));
+    }
 
     public GuaranteeWorkflowHistoryDto MapHistory(GuaranteeCaseWorkflowHistory history, string? changedByFullName = null)
         => new(

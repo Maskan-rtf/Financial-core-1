@@ -16,6 +16,7 @@ public interface IInvestmentCaseAppService
     Task<Result> UpdateDataEntry1Async(Guid caseId, UpdateDataEntry1Request request, CancellationToken cancellationToken);
     Task<Result> UpdateDataEntry2Async(Guid caseId, UpdateDataEntry2Request request, CancellationToken cancellationToken);
     Task<Result> UpdateFinancialWorksheetAsync(Guid caseId, UpdateFinancialWorksheetRequest request, CancellationToken cancellationToken);
+    Task<Result<CaseFinancialWorksheetDto>> GetFinancialWorksheetAsync(Guid caseId, CancellationToken cancellationToken);
 
     Task<Result> SubmitDataEntry1Async(Guid caseId, string? comment, CancellationToken ct);
     Task<Result> ApproveDataEntry1Async(Guid caseId, string? comment, string? internalComment, CancellationToken ct);

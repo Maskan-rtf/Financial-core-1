@@ -27,6 +27,8 @@ public sealed class InvestmentWorkflowCoordinator(
     IHttpContextAccessor httpContextAccessor,
     ILogger<InvestmentWorkflowCoordinator> logger) : IInvestmentWorkflowCoordinator
 {
+    #region Public API
+
     public async Task<Result> ApplyTransitionAsync(
         InvestmentWorkflowTransitionRequest request,
         CancellationToken cancellationToken)
@@ -121,6 +123,10 @@ public sealed class InvestmentWorkflowCoordinator(
         return Result.Ok();
     }
 
+    #endregion
+
+    #region Private
+
     private async Task NotifyWorkflowSmsSafeAsync(
         Guid caseId,
         string applicantUserId,
@@ -196,4 +202,6 @@ public sealed class InvestmentWorkflowCoordinator(
         var guidBytes = bytes.Take(16).ToArray();
         return new Guid(guidBytes);
     }
+
+    #endregion
 }

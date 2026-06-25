@@ -23,6 +23,7 @@ public sealed class KanbanAppService(
     ILoanCaseStateManager loanStateManager,
     IKanbanDtoMapper kanbanDtoMapper) : IKanbanAppService
 {
+    #region Public API
 
     public Task<Result<IReadOnlyList<KanbanCaseCardDto>>> GetActionRequiredAsync(CancellationToken cancellationToken)
         => GetActionRequiredAsync(module: null, cancellationToken);
@@ -35,6 +36,10 @@ public sealed class KanbanAppService(
 
     public Task<Result<IReadOnlyList<KanbanCaseSummaryDto>>> GetWatchingInvestmentOnlyAsync(CancellationToken cancellationToken)
         => GetWatchingAsync(CaseModuleType.Investment, cancellationToken);
+
+    #endregion
+
+    #region Private
 
     private async Task<Result<IReadOnlyList<KanbanCaseCardDto>>> GetActionRequiredAsync(
         CaseModuleType? module,
@@ -215,4 +220,6 @@ public sealed class KanbanAppService(
 
         return Result<(string, string)>.Ok((caseAuthorizationService.UserId!, role));
     }
+
+    #endregion
 }

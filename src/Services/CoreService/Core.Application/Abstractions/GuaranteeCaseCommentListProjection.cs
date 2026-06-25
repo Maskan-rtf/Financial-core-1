@@ -11,4 +11,5 @@ public sealed record GuaranteeCaseCommentListProjection(
     bool IsRevisionRequest,
     bool IsInternal,
     DateTimeOffset CreatedAt,
-    string? SenderFullName);
+    string? SenderFullName,
+    GuaranteeCaseStatus? WorkflowStatusAtCreation);

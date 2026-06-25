@@ -16,6 +16,7 @@ public sealed class LoanCaseCommentConfiguration : IEntityTypeConfiguration<Loan
         builder.Property(x => x.SenderRole).HasMaxLength(64);
         builder.Property(x => x.Message).HasMaxLength(4000).IsRequired();
         builder.Property(x => x.Phase).HasConversion<int>().IsRequired();
+        builder.Property(x => x.WorkflowStatusAtCreation).HasConversion<int?>();
 
         builder.Property(x => x.CreatedAt).HasDefaultValueSql("timezone('utc', now())");
         builder.Property(x => x.UpdatedAt);

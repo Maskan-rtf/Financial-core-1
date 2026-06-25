@@ -235,7 +235,8 @@ public sealed class LoanCase : AggregateRoot<Guid>, IAuditableEntity, ISoftDelet
             senderRole: actorRole,
             message: message,
             isRevisionRequest: true,
-            isInternal: isInternal));
+            isInternal: isInternal,
+            workflowStatusAtCreation: fromStatus));
 
         WorkflowHistory.Add(new LoanCaseWorkflowHistory(
             Id,
@@ -268,7 +269,8 @@ public sealed class LoanCase : AggregateRoot<Guid>, IAuditableEntity, ISoftDelet
             senderRole: senderRole,
             message: message.Trim(),
             isRevisionRequest: isRevisionRequest,
-            isInternal: isInternal));
+            isInternal: isInternal,
+            workflowStatusAtCreation: CurrentStatus));
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 

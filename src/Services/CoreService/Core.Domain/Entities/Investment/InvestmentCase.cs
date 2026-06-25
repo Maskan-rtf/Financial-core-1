@@ -232,7 +232,8 @@ public sealed class InvestmentCase : AggregateRoot<Guid>, IAuditableEntity, ISof
             senderRole: actorRole,
             message: message,
             isRevisionRequest: true,
-            isInternal: isInternal));
+            isInternal: isInternal,
+            workflowStatusAtCreation: fromStatus));
 
         WorkflowHistory.Add(new InvestmentCaseWorkflowHistory(
             Id,
@@ -267,7 +268,8 @@ public sealed class InvestmentCase : AggregateRoot<Guid>, IAuditableEntity, ISof
             senderRole: senderRole,
             message: message.Trim(),
             isRevisionRequest: isRevisionRequest,
-            isInternal: isInternal));
+            isInternal: isInternal,
+            workflowStatusAtCreation: CurrentStatus));
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 

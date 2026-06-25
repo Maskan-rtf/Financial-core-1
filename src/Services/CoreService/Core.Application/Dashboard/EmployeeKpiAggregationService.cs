@@ -13,6 +13,8 @@ public sealed class EmployeeKpiAggregationService(
     IUserDisplayLookup userDisplayLookup,
     ILogger<EmployeeKpiAggregationService> logger) : IEmployeeKpiAggregationService
 {
+    #region Configuration
+
     private const int MaxSamplesPerEmployee = 120;
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -24,6 +26,10 @@ public sealed class EmployeeKpiAggregationService(
         EmployeeKpiPeriod.ThisQuarter,
         EmployeeKpiPeriod.AllTime
     ];
+
+    #endregion
+
+    #region Public API
 
     public async Task<DateTimeOffset> AggregateAsync(CancellationToken cancellationToken = default)
     {
@@ -62,6 +68,10 @@ public sealed class EmployeeKpiAggregationService(
 
         return computedAt;
     }
+
+    #endregion
+
+    #region Private
 
     private async Task<List<WorkflowSegment>> LoadWorkflowSegmentsAsync(CancellationToken ct)
     {
@@ -215,4 +225,6 @@ public sealed class EmployeeKpiAggregationService(
     private sealed record WorkflowHistoryRow(Guid CaseId, string ChangedByUserId, string ActorRole, DateTimeOffset CreatedAt);
 
     private sealed record WorkflowSegment(string UserId, string ActorRole, DateTimeOffset ResolvedAt, double ResolutionHours);
+
+    #endregion
 }

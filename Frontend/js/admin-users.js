@@ -30,7 +30,14 @@
     { value: "100", label: "مدیر سیستم (100)" },
   ];
 
-  const PRIVILEGED_ROLES = new Set(["Admin", "CEO", "TechnicalExpert"]);
+  const PRIVILEGED_ROLES = new Set([
+    "Admin",
+    "CEO",
+    "Ceo",
+    "TechnicalExpert",
+    "TechnicalManager",
+    "InvestmentManager",
+  ]);
 
   function qs(sel) {
     return document.querySelector(sel);

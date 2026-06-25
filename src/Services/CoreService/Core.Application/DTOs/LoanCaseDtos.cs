@@ -149,6 +149,8 @@ public sealed record LoanCaseCommentDto(
     bool IsRevisionRequest,
     bool IsInternal,
     Guid? ParentId,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    LoanCaseStatus? WorkflowStatusAtCreation = null,
+    string? WorkflowStatusLabel = null);
 
 public sealed record PresignLoanUploadResponse(string S3Key, string Url, DateTimeOffset ExpiresAt, int Version);

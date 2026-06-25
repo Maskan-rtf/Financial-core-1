@@ -280,7 +280,8 @@ public sealed class GuaranteeCase : AggregateRoot<Guid>, IAuditableEntity, ISoft
             senderRole: actorRole,
             message: message,
             isRevisionRequest: true,
-            isInternal: isInternal));
+            isInternal: isInternal,
+            workflowStatusAtCreation: fromStatus));
 
         WorkflowHistory.Add(new GuaranteeCaseWorkflowHistory(
             Id,
@@ -313,7 +314,8 @@ public sealed class GuaranteeCase : AggregateRoot<Guid>, IAuditableEntity, ISoft
             senderRole: senderRole,
             message: message.Trim(),
             isRevisionRequest: isRevisionRequest,
-            isInternal: isInternal));
+            isInternal: isInternal,
+            workflowStatusAtCreation: CurrentStatus));
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 

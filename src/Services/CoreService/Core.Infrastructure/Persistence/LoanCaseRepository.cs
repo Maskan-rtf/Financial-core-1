@@ -345,7 +345,8 @@ public sealed class LoanCaseRepository(CoreDbContext dbContext) : ILoanCaseRepos
                 dbContext.Users
                     .Where(u => u.Id.ToString() == comment.SenderUserId)
                     .Select(u => (u.FirstName + " " + u.LastName).Trim())
-                    .FirstOrDefault()))
+                    .FirstOrDefault(),
+                comment.WorkflowStatusAtCreation))
             .ToListAsync(cancellationToken);
     }
 

@@ -13,6 +13,7 @@ public static class Permissions
     public const string Companies_Read = "companies:read";
     public const string Companies_Write = "companies:write";
     public const string Companies_Delete = "companies:delete";
+    public const string Companies_ListAll = "companies:list_all";
 
     public const string Sessions_Read = "sessions:read";
     public const string Sessions_Write = "sessions:write";
@@ -52,6 +53,7 @@ public static class RolePermissions
         Permissions.Companies_Read,
         Permissions.Companies_Write,
         Permissions.Companies_Delete,
+        Permissions.Companies_ListAll,
         Permissions.Sessions_Read,
         Permissions.Sessions_Write,
         Permissions.Sessions_Revoke,
@@ -153,6 +155,7 @@ public static class RolePermissions
                 Permissions.Users_Delete,
                 Permissions.Users_ViewOnline,
                 Permissions.Companies_Read,
+                Permissions.Companies_ListAll,
                 Permissions.Sessions_Read,
                 Permissions.Sessions_Revoke,
                 Permissions.InvestmentCases_Read,
@@ -160,6 +163,16 @@ public static class RolePermissions
                 Permissions.GuaranteeCases_Read,
                 Permissions.GuaranteeCases_CeoApprove,
                 Permissions.GuaranteeCases_SetApplicantCreditLimit
+            ],
+            [UserRoleClaims.InvestmentManager] =
+            [
+                Permissions.Users_Read,
+                Permissions.Companies_Read,
+                Permissions.Companies_ListAll,
+                Permissions.Sessions_Read,
+                Permissions.InvestmentCases_Read,
+                Permissions.InvestmentCases_Review,
+                Permissions.GuaranteeCases_Read
             ]
         };
 

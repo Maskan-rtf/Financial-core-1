@@ -33,6 +33,8 @@ public sealed class CaseStageRollbackAppService(
     IServiceScopeFactory serviceScopeFactory,
     ILogger<CaseStageRollbackAppService> logger) : ICaseStageRollbackAppService
 {
+    #region Public API
+
     public async Task<Result<CaseStageRollbackOptionsDto>> GetOptionsAsync(
         CaseModuleType module,
         Guid caseId,
@@ -139,6 +141,10 @@ public sealed class CaseStageRollbackAppService(
             request.TargetStatus,
             CaseStageOrder.GetTitle(module, request.TargetStatus)));
     }
+
+    #endregion
+
+    #region Private
 
     private Result<string> RequireAuthorizedUser()
     {
@@ -436,4 +442,6 @@ public sealed class CaseStageRollbackAppService(
 
         return Guid.TryParse(raw, out var parsed) ? parsed : Guid.NewGuid();
     }
+
+    #endregion
 }

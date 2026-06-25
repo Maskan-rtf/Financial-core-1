@@ -14,6 +14,8 @@ public class PermissionService : IPermissionService
         _cacheService = cacheService;
     }
 
+    #region Public API
+
     public async Task<bool> HasPermissionAsync(User user, string permission, CancellationToken cancellationToken = default)
     {
         if (user.Role == UserRole.Admin)
@@ -52,4 +54,6 @@ public class PermissionService : IPermissionService
 
         return Task.FromResult<IEnumerable<string>>(Array.Empty<string>());
     }
+
+    #endregion
 }

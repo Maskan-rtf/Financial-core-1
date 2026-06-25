@@ -42,9 +42,17 @@ public sealed class DashboardAnalyticsService(
 
 {
 
+    #region Configuration
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private static readonly TimeSpan StaleThreshold = TimeSpan.FromHours(6);
+
+
+
+    #endregion
+
+    #region Public API
 
 
 
@@ -289,6 +297,12 @@ public sealed class DashboardAnalyticsService(
         });
 
     }
+
+
+
+    #endregion
+
+    #region Private
 
 
 
@@ -802,6 +816,6 @@ public sealed class DashboardAnalyticsService(
 
     }
 
+    #endregion
+
 }
-
-

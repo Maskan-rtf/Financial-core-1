@@ -11,6 +11,8 @@ namespace Core.Application.Services;
 
 public sealed class GuaranteeCaseStateManager : IGuaranteeCaseStateManager
 {
+    #region Transition Definitions
+
     private static readonly HashSet<GuaranteeCaseStatus> TerminalStates =
     [
         GuaranteeCaseStatus.Rejected,
@@ -79,6 +81,10 @@ public sealed class GuaranteeCaseStateManager : IGuaranteeCaseStateManager
         WorkflowRoleExpander.MirrorUnitManager(Transitions, UserRoleClaims.LegalExpert, UserRoleClaims.LegalManager);
         WorkflowRoleExpander.MirrorUnitManager(Transitions, UserRoleClaims.FinancialExpert, UserRoleClaims.FinancialManager);
     }
+
+    #endregion
+
+    #region State Machine
 
     public bool IsTerminalState(GuaranteeCaseStatus status) => TerminalStates.Contains(status);
 
@@ -401,4 +407,6 @@ public sealed class GuaranteeCaseStateManager : IGuaranteeCaseStateManager
             .Distinct()
             .ToArray();
     }
+
+    #endregion
 }

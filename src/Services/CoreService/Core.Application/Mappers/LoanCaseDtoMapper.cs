@@ -1,7 +1,9 @@
 using Core.Application.Abstractions;
 using Core.Application.DTOs;
+using Core.Application.Kanban;
 using Core.Application.Requests;
 using Core.Domain.Entities;
+using Core.Domain.Enums;
 using Core.Domain.Identity.Entities;
 
 namespace Core.Application.Mappers;
@@ -330,21 +332,31 @@ public sealed class LoanCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) : ILoa
             projection.Comment,
             projection.CreatedAt);
 
-    public LoanCaseCommentDto MapComment(LoanCaseComment comment, string? senderFullName = null) =>
-        new(
-            comment.Id,
-            comment.Phase,
-            comment.SenderUserId,
-            senderFullName,
-            comment.SenderRole,
-            comment.Message,
-            comment.IsRevisionRequest,
-            comment.IsInternal,
-            comment.ParentId,
-            comment.CreatedAt);
+    public LoanCaseCommentDto MapComment(
+        LoanCaseComment comment,
+        string? senderFullName = null,
+        IReadOnlyList<LoanCaseWorkflowHistory>? workflowHistory = null) =>
+        MapComment(
+            new LoanCaseCommentListProjection(
+                comment.Id,
+                comment.Phase,
+                comment.SenderUserId,
+                comment.SenderRole,
+                comment.Message,
+                comment.IsRevisionRequest,
+                comment.IsInternal,
+                comment.ParentId,
+                comment.CreatedAt,
+                senderFullName,
+                comment.WorkflowStatusAtCreation),
+            workflowHistory);
 
-    public LoanCaseCommentDto MapComment(LoanCaseCommentListProjection projection) =>
-        new(
+    public LoanCaseCommentDto MapComment(
+        LoanCaseCommentListProjection projection,
+        IReadOnlyList<LoanCaseWorkflowHistory>? workflowHistory = null)
+    {
+        var (workflowStatus, workflowStatusLabel) = ResolveLoanWorkflowStatus(projection, workflowHistory);
+        return new(
             projection.Id,
             projection.Phase,
             projection.SenderUserId,
@@ -354,5 +366,30 @@ public sealed class LoanCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) : ILoa
             projection.IsRevisionRequest,
             projection.IsInternal,
             projection.ParentId,
-            projection.CreatedAt);
+            projection.CreatedAt,
+            workflowStatus,
+            workflowStatusLabel);
+    }
+
+    private static (LoanCaseStatus? Status, string? Label) ResolveLoanWorkflowStatus(
+        LoanCaseCommentListProjection projection,
+        IReadOnlyList<LoanCaseWorkflowHistory>? workflowHistory)
+    {
+        var snapshots = workflowHistory?
+            .Select(h => new WorkflowHistorySnapshot<LoanCaseStatus>(h.CreatedAt, h.FromStatus, h.ToStatus, h.Comment))
+            .ToArray();
+
+        var resolved = CaseCommentWorkflowStatusResolver.ResolveFromHistory(
+            projection.WorkflowStatusAtCreation.HasValue ? (int)projection.WorkflowStatusAtCreation.Value : null,
+            projection.CreatedAt,
+            projection.Message,
+            projection.IsRevisionRequest,
+            snapshots);
+
+        if (!resolved.HasValue)
+            return (null, null);
+
+        var status = (LoanCaseStatus)resolved.Value;
+        return (status, LoanKanbanRules.GetStatusTitle(status));
+    }
 }

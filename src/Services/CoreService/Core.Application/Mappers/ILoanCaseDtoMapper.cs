@@ -34,6 +34,11 @@ public interface ILoanCaseDtoMapper
     LoanPaymentDto MapPayment(LoanPayment payment, string? createdByFullName = null);
     LoanWorkflowHistoryDto MapHistory(LoanCaseWorkflowHistory history, string? changedByFullName = null);
     LoanWorkflowHistoryDto MapHistory(LoanWorkflowHistoryListProjection projection);
-    LoanCaseCommentDto MapComment(LoanCaseComment comment, string? senderFullName = null);
-    LoanCaseCommentDto MapComment(LoanCaseCommentListProjection projection);
+    LoanCaseCommentDto MapComment(
+        LoanCaseComment comment,
+        string? senderFullName = null,
+        IReadOnlyList<LoanCaseWorkflowHistory>? workflowHistory = null);
+    LoanCaseCommentDto MapComment(
+        LoanCaseCommentListProjection projection,
+        IReadOnlyList<LoanCaseWorkflowHistory>? workflowHistory = null);
 }

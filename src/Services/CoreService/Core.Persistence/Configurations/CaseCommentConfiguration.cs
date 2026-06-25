@@ -20,6 +20,7 @@ public sealed class CaseCommentConfiguration : IEntityTypeConfiguration<Investme
         builder.Property(x => x.Phase).HasConversion<int>().IsRequired();
         builder.Property(x => x.IsRevisionRequest).IsRequired();
         builder.Property(x => x.IsInternal).IsRequired();
+        builder.Property(x => x.WorkflowStatusAtCreation).HasConversion<int?>();
 
         builder.Property(x => x.CreatedAt).HasDefaultValueSql("timezone('utc', now())");
         builder.Property(x => x.UpdatedAt);

@@ -9,7 +9,14 @@
     busy: false,
   };
 
-  const PRIVILEGED_ROLES = new Set(["Admin", "CEO", "TechnicalExpert"]);
+  const PRIVILEGED_ROLES = new Set([
+    "Admin",
+    "CEO",
+    "Ceo",
+    "TechnicalExpert",
+    "TechnicalManager",
+    "InvestmentManager",
+  ]);
 
   function qs(sel) {
     return document.querySelector(sel);
@@ -79,7 +86,7 @@
       access?.classList.remove("hidden");
       if (access) {
         access.textContent = loggedIn
-          ? "دسترسی به مدیریت شرکت‌ها فقط برای مدیرعامل، کارشناس فنی و مدیر سیستم مجاز است."
+          ? "دسترسی به مدیریت شرکت‌ها فقط برای مدیر سیستم، مدیرعامل، هیئت مدیره و کارشناسان فنی مجاز است."
           : "برای مشاهده شرکت‌ها ابتدا وارد شوید.";
       }
       panel?.classList.add("hidden");

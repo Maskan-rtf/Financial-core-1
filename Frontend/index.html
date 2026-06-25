@@ -36,6 +36,7 @@
         <button class="navbtn hidden" data-tab="tabAdminDashboard" id="navAdminDashboard">داشبورد مدیریت</button>
         <button class="navbtn hidden" data-tab="tabAdminUsers" id="navAdminUsers">کاربران</button>
         <button class="navbtn hidden" data-tab="tabAdminCompanies" id="navAdminCompanies">شرکت‌ها</button>
+        <button class="navbtn hidden" data-tab="tabAdminCommentsAudit" id="navAdminCommentsAudit">گزارش نظرات</button>
       </aside>
 
       <section class="content">
@@ -299,6 +300,16 @@
           <div class="card">
             <div class="card__title">نشست‌های ذخیره‌شده (تعویض نقش)</div>
             <div id="sessionsList" class="list"></div>
+          </div>
+          <div class="card">
+            <div class="card__title">ثبت‌نام کاربر جدید</div>
+            <p class="muted">شماره موبایل، نام و نام خانوادگی الزامی است. ایمیل اختیاری است.</p>
+            <div class="formrow"><label>موبایل</label><input id="createUserPhone" placeholder="09xxxxxxxxx" /></div>
+            <div class="formrow"><label>ایمیل (اختیاری)</label><input id="createUserEmail" type="email" placeholder="example@domain.com" /></div>
+            <div class="formrow"><label>نام</label><input id="createUserFirst" /></div>
+            <div class="formrow"><label>نام خانوادگی</label><input id="createUserLast" /></div>
+            <div class="formrow"><label>کد ملی (اختیاری)</label><input id="createUserNat" class="mono" maxlength="10" /></div>
+            <button id="btnCreateUser" type="button" class="btn btn--primary">ثبت‌نام</button>
           </div>
         </div>
 
@@ -599,7 +610,7 @@
           <div id="adminCompaniesPanel" class="admin-mgmt hidden">
             <div class="card">
               <div class="card__title">فهرست شرکت‌ها</div>
-              <p class="muted">مشاهده، ویرایش و حذف شرکت‌های ثبت‌شده — فقط مدیرعامل، کارشناس فنی و مدیر سیستم.</p>
+              <p class="muted">مشاهده، ویرایش و حذف شرکت‌های ثبت‌شده — برای مدیر سیستم، مدیرعامل، هیئت مدیره و کارشناسان فنی.</p>
               <div id="adminCompaniesError" class="alert alert--error hidden"></div>
               <div id="adminCompaniesInfo" class="alert alert--ok hidden"></div>
               <div class="admin-mgmt__toolbar">
@@ -629,6 +640,32 @@
                 <button id="adminCompanySave" type="button" class="btn btn--primary">ذخیره شرکت</button>
                 <button id="adminCompanyCancelEdit" type="button" class="btn hidden">انصراف از ویرایش</button>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="tabAdminCommentsAudit" class="tab hidden">
+          <div id="adminCommentsAuditAccess" class="alert alert--error hidden"></div>
+          <div id="adminCommentsAuditPanel" class="admin-mgmt hidden">
+            <div class="card">
+              <div class="card__title">گزارش یکپارچه نظرات پرونده‌ها</div>
+              <p class="muted">نمایش نظرات پرونده‌هایی که به آن‌ها دسترسی دارید — متقاضی فقط پرونده‌های خود و کارشناسان پرونده‌های مربوط به نقش خود را می‌بینند.</p>
+              <div id="adminCommentsAuditError" class="alert alert--error hidden"></div>
+              <div id="adminCommentsAuditInfo" class="alert alert--ok hidden"></div>
+              <div class="admin-mgmt__toolbar">
+                <label class="formrow">نوع پرونده
+                  <select id="adminCommentsAuditCaseType"></select>
+                </label>
+                <label class="formrow">شناسه پرونده (اختیاری)
+                  <input id="adminCommentsAuditCaseId" class="mono" placeholder="guid" />
+                </label>
+                <label class="formrow"><input id="adminCommentsAuditIncludeInternal" type="checkbox" checked /> شامل نظرات داخلی</label>
+                <button id="adminCommentsAuditLoad" type="button" class="btn btn--primary">بارگذاری</button>
+                <button id="adminCommentsAuditPrevPage" type="button" class="btn btn--small">صفحه قبل</button>
+                <button id="adminCommentsAuditNextPage" type="button" class="btn btn--small">صفحه بعد</button>
+                <span id="adminCommentsAuditMeta" class="muted admin-mgmt__meta"></span>
+              </div>
+              <div id="adminCommentsAuditGrid" class="admin-mgmt-grid-wrap"></div>
             </div>
           </div>
         </div>
@@ -693,6 +730,7 @@
     <script src="js/admin-dashboard.js"></script>
     <script src="js/admin-users.js"></script>
     <script src="js/admin-companies.js"></script>
+    <script src="js/admin-comments-audit.js"></script>
     <script src="js/home-dashboard.js"></script>
     <script src="js/employee-kpi-dashboard.js"></script>
     <script src="app.js"></script>

@@ -8,6 +8,8 @@ namespace Core.Application.Authorization;
 
 public sealed class LoanAuthorizationService(IUserContext userContext) : ILoanAuthorizationService
 {
+    #region Permission Maps
+
     private static readonly string[] CreditDepartmentPermissions =
     [
         LoanPermissions.ReadAll,
@@ -84,6 +86,10 @@ public sealed class LoanAuthorizationService(IUserContext userContext) : ILoanAu
             ]
         };
 
+    #endregion
+
+    #region Public API
+
     public string? UserId => userContext.UserId;
 
     public bool IsInternalUser => DepartmentPermissionEvaluator.IsInternalUser(userContext.Roles);
@@ -107,4 +113,6 @@ public sealed class LoanAuthorizationService(IUserContext userContext) : ILoanAu
             RolePermissions,
             DepartmentPermissions);
     }
+
+    #endregion
 }

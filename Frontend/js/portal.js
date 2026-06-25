@@ -338,6 +338,15 @@
         pickProp(de2, "investmentAttractionBasis", "InvestmentAttractionBasis")
       );
     }
+
+    const worksheet = pickFinancialWorksheet(state.caseData);
+    if (worksheet) {
+      setFieldValue("wsBank", pick(worksheet, "bankName", "BankName"));
+      setFieldValue("wsIban", pick(worksheet, "iban", "Iban"));
+      setFieldValue("wsApproved", pick(worksheet, "approvedAmount", "ApprovedAmount"));
+      setFieldValue("wsSchedule", pick(worksheet, "paymentSchedule", "PaymentSchedule"));
+      setFieldValue("wsNotes", pick(worksheet, "notes", "Notes"));
+    }
   }
 
   async function uploadDocument(caseId, documentType, file) {
@@ -446,6 +455,22 @@
     }
     state.caseData = unwrap(caseRes.body);
 
+    const caseStatus = pickStatus(state.caseData);
+    if (isInternalSession() && caseStatus >= 13 && !pickFinancialWorksheet(state.caseData)) {
+      try {
+        const worksheetRes = await state.panel.apiRequest({
+          method: "GET",
+          path: casesPath("/" + caseId + "/financial-worksheet"),
+        });
+        const worksheet = unwrap(worksheetRes.body);
+        if (worksheet) {
+          state.caseData = Object.assign({}, state.caseData, { financialWorksheet: worksheet });
+        }
+      } catch {
+        // Worksheet may not exist yet at step 13.
+      }
+    }
+
     const historyRes = await state.panel.apiRequest({ method: "GET", path: casesPath("/" + caseId + "/history") });
     state.history = unwrap(historyRes.body) || [];
 
@@ -466,7 +491,6 @@
       state.documentsLatest = [];
     }
 
-    const caseStatus = pickStatus(state.caseData);
     const role = getSessionRole();
     let versionScope = null;
     if (isInternalSession() && (caseStatus === 3 || caseStatus === 5)) {

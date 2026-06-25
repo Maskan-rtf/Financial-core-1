@@ -9,6 +9,8 @@ namespace Core.Application.Authorization;
 
 public sealed class CaseAuthorizationService(IUserContext userContext) : ICaseAuthorizationService
 {
+    #region Permission Maps
+
     private static readonly string[] InvestmentDepartmentPermissions =
     [
         CasePermissions.ReadAll,
@@ -97,6 +99,10 @@ public sealed class CaseAuthorizationService(IUserContext userContext) : ICaseAu
             ]
         };
 
+    #endregion
+
+    #region Public API
+
     public string? UserId => userContext.UserId;
 
     public bool IsInternalUser => DepartmentPermissionEvaluator.IsInternalUser(userContext.Roles);
@@ -126,4 +132,6 @@ public sealed class CaseAuthorizationService(IUserContext userContext) : ICaseAu
             RolePermissions,
             DepartmentPermissions);
     }
+
+    #endregion
 }

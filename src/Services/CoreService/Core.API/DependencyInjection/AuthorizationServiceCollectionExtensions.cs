@@ -106,11 +106,7 @@ public static class AuthorizationServiceCollectionExtensions
                 UserRoleClaims.TechnicalExpert,
                 "CEO"));
 
-            options.AddPolicy("Companies.Manage", p => p.RequireRole(
-                UserRoleClaims.Ceo,
-                UserRoleClaims.Admin,
-                UserRoleClaims.TechnicalExpert,
-                "CEO"));
+            options.AddPolicy("Companies.Manage", p => p.Requirements.Add(new PermissionRequirement(Permissions.Companies_ListAll)));
 
             options.AddPolicy("CaseStages.Rollback", p => p.RequireRole(
                 UserRoleClaims.Admin,

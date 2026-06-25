@@ -248,6 +248,14 @@ public sealed class InvestmentCasesController(
         return Respond(result, CaseSuccessMessages.FinancialWorksheetUpdated);
     }
 
+    [HttpGet("{id:guid}/financial-worksheet")]
+    [Authorize(Policy = "InternalOnly")]
+    public async Task<IActionResult> GetFinancialWorksheet(Guid id, CancellationToken ct)
+    {
+        var result = await service.GetFinancialWorksheetAsync(id, ct);
+        return Respond(result, CaseSuccessMessages.FinancialWorksheetRetrieved);
+    }
+
     [HttpPost("{id:guid}/financial-worksheet/submit")]
     [Authorize(Policy = "InternalOnly")]
     public async Task<IActionResult> SubmitFinancialWorksheet(Guid id, [FromBody] SemanticTransitionRequest request, CancellationToken ct)

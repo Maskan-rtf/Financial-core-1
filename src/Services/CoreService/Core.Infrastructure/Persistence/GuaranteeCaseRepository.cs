@@ -307,7 +307,8 @@ public sealed class GuaranteeCaseRepository(CoreDbContext dbContext) : IGuarante
                 dbContext.Users
                     .Where(u => u.Id.ToString() == comment.SenderUserId)
                     .Select(u => (u.FirstName + " " + u.LastName).Trim())
-                    .FirstOrDefault()))
+                    .FirstOrDefault(),
+                comment.WorkflowStatusAtCreation))
             .ToListAsync(cancellationToken);
     }
 

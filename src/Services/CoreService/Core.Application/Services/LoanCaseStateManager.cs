@@ -11,6 +11,8 @@ namespace Core.Application.Services;
 
 public sealed class LoanCaseStateManager : ILoanCaseStateManager
 {
+    #region Transition Definitions
+
     private static readonly HashSet<LoanCaseStatus> TerminalStates =
     [
         LoanCaseStatus.CanceledByCeo,
@@ -59,6 +61,10 @@ public sealed class LoanCaseStateManager : ILoanCaseStateManager
         WorkflowRoleExpander.MirrorUnitManager(Transitions, UserRoleClaims.LegalExpert, UserRoleClaims.LegalManager);
         WorkflowRoleExpander.MirrorUnitManager(Transitions, UserRoleClaims.FinancialExpert, UserRoleClaims.FinancialManager);
     }
+
+    #endregion
+
+    #region State Machine
 
     public bool IsTerminalState(LoanCaseStatus status) => TerminalStates.Contains(status);
 
@@ -254,4 +260,6 @@ public sealed class LoanCaseStateManager : ILoanCaseStateManager
             .Distinct()
             .ToArray();
     }
+
+    #endregion
 }

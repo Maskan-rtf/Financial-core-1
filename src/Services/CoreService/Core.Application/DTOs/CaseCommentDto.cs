@@ -10,7 +10,9 @@ public abstract record CaseCommentDto(
     bool IsRevisionRequest,
     Guid? ParentId,
     IEnumerable<CaseCommentAttachmentDto> Attachments,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    CaseStatus? WorkflowStatusAtCreation = null,
+    string? WorkflowStatusLabel = null);
 
 public sealed record CaseCommentApplicantDto(
     Guid Id,
@@ -20,8 +22,10 @@ public sealed record CaseCommentApplicantDto(
     bool IsRevisionRequest,
     Guid? ParentId,
     IEnumerable<CaseCommentAttachmentDto> Attachments,
-    DateTimeOffset CreatedAt)
-    : CaseCommentDto(Id, CaseId, Phase, Message, IsRevisionRequest, ParentId, Attachments, CreatedAt);
+    DateTimeOffset CreatedAt,
+    CaseStatus? WorkflowStatusAtCreation = null,
+    string? WorkflowStatusLabel = null)
+    : CaseCommentDto(Id, CaseId, Phase, Message, IsRevisionRequest, ParentId, Attachments, CreatedAt, WorkflowStatusAtCreation, WorkflowStatusLabel);
 
 public sealed record CaseCommentInternalDto(
     Guid Id,
@@ -35,8 +39,10 @@ public sealed record CaseCommentInternalDto(
     bool IsInternal,
     Guid? ParentId,
     IEnumerable<CaseCommentAttachmentDto> Attachments,
-    DateTimeOffset CreatedAt)
-    : CaseCommentDto(Id, CaseId, Phase, Message, IsRevisionRequest, ParentId, Attachments, CreatedAt);
+    DateTimeOffset CreatedAt,
+    CaseStatus? WorkflowStatusAtCreation = null,
+    string? WorkflowStatusLabel = null)
+    : CaseCommentDto(Id, CaseId, Phase, Message, IsRevisionRequest, ParentId, Attachments, CreatedAt, WorkflowStatusAtCreation, WorkflowStatusLabel);
 
 public abstract record CaseCommentAttachmentDto(
     Guid Id,

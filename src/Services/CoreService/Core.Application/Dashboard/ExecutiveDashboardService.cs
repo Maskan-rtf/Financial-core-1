@@ -12,6 +12,8 @@ public sealed class ExecutiveDashboardService(
     IUserContext userContext,
     ILogger<ExecutiveDashboardService> logger) : IExecutiveDashboardService
 {
+    #region Public API
+
     public async Task<Result<CeoDashboardDto>> GetCeoDashboardAsync(CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(userContext.UserId))
@@ -35,4 +37,6 @@ public sealed class ExecutiveDashboardService(
         ApplicationLog.Started(logger, "GetBoardDashboard", userContext.UserId);
         return await analyticsService.GetBoardDashboardAsync(cancellationToken);
     }
+
+    #endregion
 }

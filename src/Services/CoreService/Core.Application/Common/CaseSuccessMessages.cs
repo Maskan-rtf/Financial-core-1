@@ -26,6 +26,7 @@ public static class CaseSuccessMessages
     public const string ContractSignatureConfirmed = "امضای قرارداد تأیید شد.";
     public const string SignedContractUploaded = "قرارداد امضاشده بارگذاری شد.";
     public const string FinancialWorksheetUpdated = "کاربرگ مالی به‌روزرسانی شد.";
+    public const string FinancialWorksheetRetrieved = "کاربرگ مالی دریافت شد.";
     public const string FinancialWorksheetSubmitted = "کاربرگ مالی ارسال شد.";
     public const string FinancialWorksheetApproved = "کاربرگ مالی تأیید شد.";
     public const string FinancialWorksheetRevisionRequested = "درخواست اصلاح کاربرگ مالی ثبت شد.";

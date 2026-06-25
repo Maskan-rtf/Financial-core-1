@@ -39,6 +39,8 @@ public sealed class LoanCaseAppService(
     IWorkflowSmsNotifier workflowSmsNotifier,
     ILogger<LoanCaseAppService> logger) : ILoanCaseAppService
 {
+    #region Core Management
+
     public async Task<Result<LoanCaseDto>> CreateAsync(CreateLoanCaseRequest request, CancellationToken ct)
     {
         var auth = RequireUser();
@@ -209,6 +211,10 @@ public sealed class LoanCaseAppService(
         return Result<IEnumerable<LoanWorkflowHistoryDto>>.Ok(history.Select(dtoMapper.MapHistory));
     }
 
+    #endregion
+
+    #region Application & Workflow
+
     public async Task<Result> UpdateApplicationAsync(Guid caseId, UpdateLoanApplicationRequest request, CancellationToken ct)
     {
         var auth = RequireUser();
@@ -378,6 +384,10 @@ public sealed class LoanCaseAppService(
     public Task<Result> CeoRejectFinalAsync(Guid caseId, string reason, CancellationToken ct)
         => ApplyTransitionAsync(caseId, LoanWorkflowAction.Reject, reason, ct);
 
+    #endregion
+
+    #region Payments & Installments
+
     public async Task<Result> RegisterPaymentAsync(Guid caseId, RegisterLoanPaymentRequest request, CancellationToken ct)
     {
         var auth = RequireUser();
@@ -533,6 +543,10 @@ public sealed class LoanCaseAppService(
 
     public Task<Result> CompleteRepaymentAsync(Guid caseId, CancellationToken ct)
         => ApplyTransitionAsync(caseId, LoanWorkflowAction.Approve, null, ct);
+
+    #endregion
+
+    #region Documents & Comments
 
     public async Task<Result<PresignLoanUploadResponse>> PresignDocumentUploadAsync(
         Guid caseId,
@@ -694,13 +708,22 @@ public sealed class LoanCaseAppService(
                 return Result<IEnumerable<LoanCaseCommentDto>>.Fail(Error.NotFound(ApiMessages.LoanCaseNotFound));
         }
 
-        var canViewInternal = authorizationService.HasPermission(LoanPermissions.ViewInternalComments);
+        var workflowHistory = await dbContext.LoanCaseWorkflowHistories
+            .AsNoTracking()
+            .Where(x => x.CaseId == caseId)
+            .ToListAsync(ct);
+
+        var canViewInternal = includeInternal && authorizationService.HasPermission(LoanPermissions.ViewInternalComments);
         var filtered = comments
-            .Where(x => (includeInternal && canViewInternal) || !x.IsInternal)
-            .Select(dtoMapper.MapComment);
+            .Where(x => canViewInternal || !x.IsInternal)
+            .Select(c => dtoMapper.MapComment(c, workflowHistory));
 
         return Result<IEnumerable<LoanCaseCommentDto>>.Ok(filtered);
     }
+
+    #endregion
+
+    #region Private
 
     private async Task<UserDisplayDto?> ResolveApplicantDisplayAsync(string applicantUserId, CancellationToken ct)
     {
@@ -948,4 +971,6 @@ public sealed class LoanCaseAppService(
             logger.LogWarning(ex, "Workflow SMS notification failed for loan case {CaseId}", caseId);
         }
     }
+
+    #endregion
 }

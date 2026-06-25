@@ -25,6 +25,7 @@ public static class ApplicationServiceCollectionExtensions
         services.AddScoped<ICaseStageRollbackAppService, CaseStageRollbackAppService>();
         services.AddScoped<IKanbanAppService, KanbanAppService>();
         services.AddScoped<ICompanyAppService, CompanyAppService>();
+        services.AddScoped<ICaseCommentsAuditAppService, CaseCommentsAuditAppService>();
         services.AddScoped<ICaseAuthorizationService, CaseAuthorizationService>();
         services.AddScoped<IGuaranteeAuthorizationService, GuaranteeAuthorizationService>();
         services.AddScoped<ILoanAuthorizationService, LoanAuthorizationService>();
