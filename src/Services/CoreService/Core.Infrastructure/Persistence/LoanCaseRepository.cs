@@ -377,6 +377,7 @@ public sealed class LoanCaseRepository(CoreDbContext dbContext) : ILoanCaseRepos
                 x.ApplicantType,
                 x.CurrentPhase,
                 x.CurrentStatus,
+                x.WorkflowInstanceId,
                 x.CreatedAt,
                 x.UpdatedAt,
                 x.Application != null ? x.Application.RequestedAmount : null,

@@ -1,5 +1,6 @@
 using Core.Domain.Entities;
 using Core.Domain.Entities.Fund;
+using Core.Domain.Entities.Workflow;
 using Core.Domain.Identity.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -44,6 +45,7 @@ public interface ICoreDbContext
     DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<UserSession> UserSessions { get; }
     DbSet<DashboardStatsSnapshot> DashboardStatsSnapshots { get; }
+    DbSet<ProcessInstance> ProcessInstances { get; }
 
     Task<int> SaveChangesAsync(CancellationToken ct);
 }

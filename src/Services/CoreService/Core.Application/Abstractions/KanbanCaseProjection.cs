@@ -8,6 +8,7 @@ public sealed record KanbanCaseProjection(
     ApplicantType ApplicantType,
     CasePhase CurrentPhase,
     CaseStatus CurrentStatus,
+    string? WorkflowInstanceId,
     DateTimeOffset CreatedAt,
     DateTimeOffset? UpdatedAt,
     string? StartupTitle,

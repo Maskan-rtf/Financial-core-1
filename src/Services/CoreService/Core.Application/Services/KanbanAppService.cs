@@ -18,9 +18,9 @@ public sealed class KanbanAppService(
     IGuaranteeAuthorizationService guaranteeAuthorizationService,
     ILoanAuthorizationService loanAuthorizationService,
     IUserContext userContext,
-    ICaseStateManager investmentStateManager,
-    IGuaranteeCaseStateManager guaranteeStateManager,
-    ILoanCaseStateManager loanStateManager,
+    IInvestmentWorkflowActionProvider investmentWorkflowActionProvider,
+    IGuaranteeWorkflowActionProvider guaranteeWorkflowActionProvider,
+    ILoanWorkflowActionProvider loanWorkflowActionProvider,
     IKanbanDtoMapper kanbanDtoMapper) : IKanbanAppService
 {
     #region Public API
@@ -97,17 +97,18 @@ public sealed class KanbanAppService(
         var projections = await unitOfWork.InvestmentCases.ListActiveKanbanProjectionsAsync(
             userId, caseAuthorizationService.IsInternalUser, ct);
 
-        return projections
-            .Where(x => CaseKanbanRules.IsActionRequired(x.CurrentStatus, iRole))
-            .Select(x =>
-            {
-                var allowed = investmentStateManager
-                    .GetAllowedActions(x.CurrentStatus, iRole)
-                    .Select(a => a.ToString())
-                    .ToArray();
+        var cards = new List<KanbanCaseCardDto>();
+        foreach (var projection in projections.Where(x => CaseKanbanRules.IsActionRequired(x.CurrentStatus, iRole)))
+        {
+            var allowed = (await investmentWorkflowActionProvider
+                    .GetAllowedActionsAsync(projection.Id, projection.WorkflowInstanceId, iRole, ct))
+                .Select(a => a.ToString())
+                .ToArray();
 
-                return kanbanDtoMapper.MapInvestmentActionCard(x, iRole, allowed);
-            });
+            cards.Add(kanbanDtoMapper.MapInvestmentActionCard(projection, iRole, allowed));
+        }
+
+        return cards;
     }
 
     private async Task<IEnumerable<KanbanCaseCardDto>> LoadGuaranteeActionCardsAsync(
@@ -119,17 +120,18 @@ public sealed class KanbanAppService(
         var projections = await unitOfWork.GuaranteeCases.ListActiveKanbanProjectionsAsync(
             userId, guaranteeAuthorizationService.IsInternalUser, ct);
 
-        return projections
-            .Where(x => GuaranteeKanbanRules.IsActionRequired(x.CurrentStatus, gRole))
-            .Select(x =>
-            {
-                var allowed = guaranteeStateManager
-                    .GetAllowedActions(x.CurrentStatus, gRole)
-                    .Select(a => a.ToString())
-                    .ToArray();
+        var cards = new List<KanbanCaseCardDto>();
+        foreach (var projection in projections.Where(x => GuaranteeKanbanRules.IsActionRequired(x.CurrentStatus, gRole)))
+        {
+            var allowed = (await guaranteeWorkflowActionProvider
+                    .GetAllowedActionsAsync(projection.Id, projection.WorkflowInstanceId, gRole, ct))
+                .Select(a => a.ToString())
+                .ToArray();
 
-                return kanbanDtoMapper.MapGuaranteeActionCard(x, gRole, allowed);
-            });
+            cards.Add(kanbanDtoMapper.MapGuaranteeActionCard(projection, gRole, allowed));
+        }
+
+        return cards;
     }
 
     private async Task<IEnumerable<KanbanCaseCardDto>> LoadLoanActionCardsAsync(
@@ -140,17 +142,18 @@ public sealed class KanbanAppService(
         var projections = await unitOfWork.LoanCases.ListActiveKanbanProjectionsAsync(
             userId, loanAuthorizationService.IsInternalUser, ct);
 
-        return projections
-            .Where(x => LoanKanbanRules.IsActionRequired(x.CurrentStatus, lRole))
-            .Select(x =>
-            {
-                var allowed = loanStateManager
-                    .GetAllowedActions(x.CurrentStatus, lRole)
-                    .Select(a => a.ToString())
-                    .ToArray();
+        var cards = new List<KanbanCaseCardDto>();
+        foreach (var projection in projections.Where(x => LoanKanbanRules.IsActionRequired(x.CurrentStatus, lRole)))
+        {
+            var allowed = (await loanWorkflowActionProvider
+                    .GetAllowedActionsAsync(projection.Id, projection.WorkflowInstanceId, lRole, ct))
+                .Select(a => a.ToString())
+                .ToArray();
 
-                return kanbanDtoMapper.MapLoanActionCard(x, lRole, allowed);
-            });
+            cards.Add(kanbanDtoMapper.MapLoanActionCard(projection, lRole, allowed));
+        }
+
+        return cards;
     }
 
     private async Task<IEnumerable<KanbanCaseSummaryDto>> LoadInvestmentWatchAsync(

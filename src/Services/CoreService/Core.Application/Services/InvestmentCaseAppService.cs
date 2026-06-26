@@ -25,7 +25,7 @@ public sealed class InvestmentCaseAppService(
     ICoreUnitOfWork unitOfWork,
     ICoreDbContext dbContext,
     IInvestmentWorkflowCoordinator workflowCoordinator,
-    ICaseWorkflowOrchestrator workflowOrchestrator,
+    IProcessManager processManager,
     ICaseNumberGenerator caseNumberGenerator,
     IDocumentStorage documentStorage,
     BuildingBlocks.Domain.Abstractions.IClock clock,
@@ -86,7 +86,13 @@ public sealed class InvestmentCaseAppService(
 
             entity.SetTitle(request.Title);
 
-            var workflowInstanceId = await workflowOrchestrator.StartAsync(entity.Id, cancellationToken);
+            var processStart = await processManager.StartAsync(
+                new ProcessStartCommand(CaseModuleType.Investment, entity.Id),
+                cancellationToken);
+            if (processStart.IsFailure)
+                return Result<InvestmentCaseDto>.Fail(processStart.Error!);
+
+            var workflowInstanceId = processStart.Value!.WorkflowInstanceId;
             entity.AttachWorkflowInstance(workflowInstanceId);
 
             await unitOfWork.InvestmentCases.AddAsync(entity, cancellationToken);

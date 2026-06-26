@@ -344,6 +344,7 @@ public sealed class GuaranteeCaseRepository(CoreDbContext dbContext) : IGuarante
                 x.CurrentPhase,
                 x.CurrentStatus,
                 x.AmendmentType,
+                x.WorkflowInstanceId,
                 x.CreatedAt,
                 x.UpdatedAt,
                 null,

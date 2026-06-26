@@ -237,6 +237,7 @@ public sealed class InvestmentCaseRepository(CoreDbContext dbContext) : IInvestm
                 x.ApplicantType,
                 x.CurrentPhase,
                 x.CurrentStatus,
+                x.WorkflowInstanceId,
                 x.CreatedAt,
                 x.UpdatedAt,
                 x.ApplicantProfile != null ? x.ApplicantProfile.RepresentativeFullName : null,

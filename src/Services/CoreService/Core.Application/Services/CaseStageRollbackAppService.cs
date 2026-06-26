@@ -17,7 +17,6 @@ using Core.Domain.Enums;
 using Core.Domain.Identity;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Core.Application.Services;
@@ -27,10 +26,8 @@ public sealed class CaseStageRollbackAppService(
     ICoreDbContext dbContext,
     IClock clock,
     IUserContext userContext,
-    ICaseWorkflowOrchestrator investmentWorkflowOrchestrator,
-    ILoanWorkflowOrchestrator loanWorkflowOrchestrator,
+    IProcessManager processManager,
     IHttpContextAccessor httpContextAccessor,
-    IServiceScopeFactory serviceScopeFactory,
     ILogger<CaseStageRollbackAppService> logger) : ICaseStageRollbackAppService
 {
     #region Public API
@@ -407,19 +404,26 @@ public sealed class CaseStageRollbackAppService(
             source.CorrelationId,
             source.Comment);
 
-    private Task SignalWorkflowAsync(CaseModuleType module, Guid caseId, CancellationToken cancellationToken)
+    private async Task SignalWorkflowAsync(CaseModuleType module, Guid caseId, CancellationToken cancellationToken)
     {
-        switch (module)
+        if (module is not (CaseModuleType.Investment or CaseModuleType.Guarantee or CaseModuleType.Loan))
+            return;
+
+        var signal = await processManager.DispatchAsync(
+            new ProcessCommand(
+                module,
+                caseId,
+                "StageRollback",
+                Signal: WorkflowSignals.StatusChanged),
+            cancellationToken);
+
+        if (signal.IsFailure)
         {
-            case CaseModuleType.Investment:
-                return investmentWorkflowOrchestrator.SignalAsync(caseId, WorkflowSignals.StatusChanged, null, cancellationToken);
-            case CaseModuleType.Guarantee:
-                GuaranteeWorkflowBackgroundSignaler.SignalStatusChanged(serviceScopeFactory, logger, caseId);
-                return Task.CompletedTask;
-            case CaseModuleType.Loan:
-                return loanWorkflowOrchestrator.SignalLoanCaseAsync(caseId, WorkflowSignals.StatusChanged, null, cancellationToken);
-            default:
-                return Task.CompletedTask;
+            logger.LogWarning(
+                "Workflow signal failed after stage rollback for module {Module} case {CaseId}: {Message}",
+                module,
+                caseId,
+                signal.Error?.Message);
         }
     }
 

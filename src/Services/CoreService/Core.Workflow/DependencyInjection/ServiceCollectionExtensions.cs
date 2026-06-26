@@ -35,6 +35,11 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICaseWorkflowOrchestrator, ElsaCaseWorkflowOrchestrator>();
         services.AddScoped<IGuaranteeWorkflowOrchestrator, ElsaGuaranteeWorkflowOrchestrator>();
         services.AddScoped<ILoanWorkflowOrchestrator, ElsaLoanWorkflowOrchestrator>();
+        services.AddScoped<ElsaCommandBookmarkReader>();
+        services.AddScoped<IWorkflowRuntime, ElsaWorkflowRuntime>();
+        services.AddScoped<IInvestmentWorkflowActionProvider, InvestmentWorkflowActionProvider>();
+        services.AddScoped<IGuaranteeWorkflowActionProvider, GuaranteeWorkflowActionProvider>();
+        services.AddScoped<ILoanWorkflowActionProvider, LoanWorkflowActionProvider>();
         return services;
     }
 }

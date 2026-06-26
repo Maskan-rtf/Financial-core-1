@@ -8,6 +8,7 @@ public sealed record LoanKanbanCaseProjection(
     ApplicantType ApplicantType,
     LoanCasePhase CurrentPhase,
     LoanCaseStatus CurrentStatus,
+    string? WorkflowInstanceId,
     DateTimeOffset CreatedAt,
     DateTimeOffset? UpdatedAt,
     decimal? RequestedAmount,

@@ -13,13 +13,16 @@ public static class ApplicationServiceCollectionExtensions
         services.AddValidatorsFromAssemblyContaining<InvestmentCaseAppService>();
         services.AddFluentValidationAutoValidation();
 
-        services.AddScoped<ICaseStateManager, CaseStateManager>();
+        services.AddScoped<IProcessManager, ProcessManager>();
+        services.AddScoped<IWorkflowCommandDispatcher, WorkflowCommandDispatcher>();
+        services.AddScoped<IProcessReadModelProjector, ProcessReadModelProjector>();
+        services.AddScoped<IInvestmentWorkflowCommandExecutor, InvestmentWorkflowCommandExecutor>();
+        services.AddScoped<IGuaranteeWorkflowCommandExecutor, GuaranteeWorkflowCommandExecutor>();
+        services.AddScoped<ILoanWorkflowCommandExecutor, LoanWorkflowCommandExecutor>();
         services.AddScoped<IInvestmentWorkflowCoordinator, InvestmentWorkflowCoordinator>();
         services.AddScoped<IInvestmentCaseAppService, InvestmentCaseAppService>();
-        services.AddScoped<IGuaranteeCaseStateManager, GuaranteeCaseStateManager>();
         services.AddScoped<IGuaranteeCaseAppService, GuaranteeCaseAppService>();
         services.AddScoped<IGuaranteeRenewalAppService, GuaranteeRenewalAppService>();
-        services.AddScoped<ILoanCaseStateManager, LoanCaseStateManager>();
         services.AddScoped<IFundCreditLimitAppService, FundCreditLimitAppService>();
         services.AddScoped<ILoanCaseAppService, LoanCaseAppService>();
         services.AddScoped<ICaseStageRollbackAppService, CaseStageRollbackAppService>();

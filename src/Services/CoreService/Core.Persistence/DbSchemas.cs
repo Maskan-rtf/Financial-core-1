@@ -8,4 +8,5 @@ public static class DbSchemas
     public const string Loan = "Loan";
     public const string Analytics = "Analytics";
     public const string Fund = "Fund";
+    public const string Process = "Process";
 }

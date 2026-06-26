@@ -5,7 +5,7 @@ using Core.Domain.Identity;
 namespace Core.Application.Kanban;
 
 /// <summary>
-/// Role/status ownership for the kanban board. Keep aligned with CaseStateManager transitions.
+/// Role/status ownership for the kanban board. Keep aligned with the investment workflow route provider.
 /// </summary>
 public static class CaseKanbanRules
 {

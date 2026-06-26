@@ -3,6 +3,7 @@ using BuildingBlocks.Persistence.Db.DomainEvents;
 using Core.Application.Abstractions;
 using Core.Domain.Entities;
 using Core.Domain.Entities.Fund;
+using Core.Domain.Entities.Workflow;
 using Core.Domain.Identity.Entities;
 using Core.Persistence.Db;
 using Microsoft.EntityFrameworkCore;
@@ -54,6 +55,7 @@ public sealed class CoreDbContext : DbContextBase, ICoreDbContext
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<UserSession> UserSessions => Set<UserSession>();
     public DbSet<DashboardStatsSnapshot> DashboardStatsSnapshots => Set<DashboardStatsSnapshot>();
+    public DbSet<ProcessInstance> ProcessInstances => Set<ProcessInstance>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

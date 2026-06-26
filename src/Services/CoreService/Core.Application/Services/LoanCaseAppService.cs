@@ -26,8 +26,7 @@ namespace Core.Application.Services;
 public sealed class LoanCaseAppService(
     ICoreUnitOfWork unitOfWork,
     ICoreDbContext dbContext,
-    ILoanCaseStateManager stateManager,
-    ILoanWorkflowOrchestrator workflowOrchestrator,
+    IProcessManager processManager,
     ILoanCaseNumberGenerator caseNumberGenerator,
     IDocumentStorage documentStorage,
     BuildingBlocks.Domain.Abstractions.IClock clock,
@@ -80,7 +79,13 @@ public sealed class LoanCaseAppService(
 
             entity.SetTitle(request.Title);
 
-            var workflowInstanceId = await workflowOrchestrator.StartLoanCaseAsync(entity.Id, ct);
+            var processStart = await processManager.StartAsync(
+                new ProcessStartCommand(CaseModuleType.Loan, entity.Id),
+                ct);
+            if (processStart.IsFailure)
+                return Result<LoanCaseDto>.Fail(processStart.Error!);
+
+            var workflowInstanceId = processStart.Value!.WorkflowInstanceId;
             entity.AttachWorkflowInstance(workflowInstanceId);
 
             await unitOfWork.LoanCases.AddAsync(entity, ct);
@@ -760,51 +765,25 @@ public sealed class LoanCaseAppService(
         if (entity is null)
             return Result.Fail(Error.NotFound(ApiMessages.LoanCaseNotFound));
 
-        var statusBefore = entity.CurrentStatus;
-        var phaseBefore = entity.CurrentPhase;
-        var historyCountBefore = entity.WorkflowHistory.Count;
-        var commentsCountBefore = entity.Comments.Count;
         var correlationId = ResolveCorrelationGuid(httpContextAccessor.HttpContext);
 
-        var transition = await stateManager.TransitionAsync(
-            entity, action, auth.Value!, actorRole, comment, correlationId);
-
-        if (transition.IsFailure)
-            return transition;
-
-        if (!string.IsNullOrWhiteSpace(internalComment) && SupportsInternalComment(action, statusBefore))
+        if (!string.IsNullOrWhiteSpace(internalComment) && !authorizationService.HasPermission(LoanPermissions.CreateInternalComment))
         {
-            if (!authorizationService.HasPermission(LoanPermissions.CreateInternalComment))
-                return Result.Fail(Error.Forbidden(ApiMessages.NotAllowed));
-
-            entity.AddDiscussionComment(phaseBefore, auth.Value!, actorRole, internalComment, false, true);
+            return Result.Fail(Error.Forbidden(ApiMessages.NotAllowed));
         }
 
-        if (entity.WorkflowHistory.Count > historyCountBefore)
-        {
-            var persist = await PersistTransitionAsync(entity, commentsCountBefore, ct);
-            if (persist.IsFailure) return persist;
-
-            await NotifyWorkflowSmsSafeAsync(
-                entity.Id,
-                entity.ApplicantUserId,
-                entity.CaseNumber,
-                (int)statusBefore,
-                (int)entity.CurrentStatus,
-                ct);
-
-            try
-            {
-                await workflowOrchestrator.SignalLoanCaseAsync(
-                    caseId, WorkflowSignals.StatusChanged, null, ct);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Loan workflow signal failed for case {CaseId}", caseId);
-            }
-        }
-
-        return Result.Ok();
+        return await processManager.DispatchAsync(
+            new ProcessCommand(
+                CaseModuleType.Loan,
+                caseId,
+                action.ToString(),
+                auth.Value,
+                actorRole,
+                correlationId,
+                comment,
+                WorkflowSignals.StatusChanged,
+                new LoanWorkflowCommandPayload(internalComment)),
+            ct);
     }
 
     private static bool SupportsInternalComment(LoanWorkflowAction action, LoanCaseStatus statusBefore) =>

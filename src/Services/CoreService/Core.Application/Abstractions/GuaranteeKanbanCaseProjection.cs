@@ -9,6 +9,7 @@ public sealed record GuaranteeKanbanCaseProjection(
     GuaranteeCasePhase CurrentPhase,
     GuaranteeCaseStatus CurrentStatus,
     AmendmentType? AmendmentType,
+    string? WorkflowInstanceId,
     DateTimeOffset CreatedAt,
     DateTimeOffset? UpdatedAt,
     string? RepresentativeName,
