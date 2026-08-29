@@ -27,6 +27,7 @@ public static class ServiceCollectionExtensions
                 elsa.UseWorkflowRuntime(runtime => runtime.UseEntityFrameworkCore(ef => ef.UsePostgreSql(connectionString)));
             }
 
+            elsa.UseWorkflowsApi();
             elsa.AddWorkflow<InvestmentCaseWorkflow>();
             elsa.AddWorkflow<GuaranteeCaseWorkflow>();
             elsa.AddWorkflow<LoanCaseWorkflow>();

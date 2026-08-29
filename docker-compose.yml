@@ -1,0 +1,62 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: financial-core-postgres
+    environment:
+      POSTGRES_DB: FinancialCoreplus
+      POSTGRES_USER: financial_core
+      POSTGRES_PASSWORD: financial_core_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - financial-core-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U financial_core -d FinancialCoreplus"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: financial-core-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  core-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: financial-core-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+      ASPNETCORE_HTTP_PORTS: 8080
+      ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=FinancialCoreplus;Username=financial_core;Password=financial_core_password;Ssl Mode=Disable
+      ConnectionStrings__Redis: redis:6379,abortConnect=false
+      Elsa__Studio__Enabled: "true"
+      Elsa__Studio__ApiBasePath: /elsa/api
+      Elsa__Studio__RequireAuthentication: "false"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  elsa-studio:
+    image: elsaworkflows/elsa-studio-v3:latest
+    container_name: financial-core-elsa-studio
+    environment:
+      ELSASERVER__URL: http://localhost:8080/elsa/api
+    ports:
+      - "13000:8080"
+    depends_on:
+      - core-api
+
+volumes:
+  financial-core-postgres:

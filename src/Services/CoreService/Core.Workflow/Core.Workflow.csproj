@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <PackageReference Include="Elsa" />
+    <PackageReference Include="Elsa.Http" />
     <PackageReference Include="Elsa.Persistence.EFCore.PostgreSql" />
   </ItemGroup>
 

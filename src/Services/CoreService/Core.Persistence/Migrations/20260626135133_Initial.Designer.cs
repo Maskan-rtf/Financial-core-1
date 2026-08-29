@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Core.Persistence.Migrations
 {
     [DbContext(typeof(CoreDbContext))]
-    [Migration("20260622192148_guarantee_refactor")]
-    partial class guarantee_refactor
+    [Migration("20260626135133_Initial")]
+    partial class Initial
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -562,6 +562,9 @@ namespace Core.Persistence.Migrations
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("WorkflowStatusAtCreation")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CaseId");
@@ -960,6 +963,9 @@ namespace Core.Persistence.Migrations
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("WorkflowStatusAtCreation")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 
@@ -1683,6 +1689,9 @@ namespace Core.Persistence.Migrations
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int?>("WorkflowStatusAtCreation")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
                     b.HasIndex("CaseId");
@@ -1938,6 +1947,65 @@ namespace Core.Persistence.Migrations
                     b.ToTable("loan_payments", "Loan");
                 });
 
+            modelBuilder.Entity("Core.Domain.Entities.Workflow.ProcessInstance", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CaseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CurrentProcessStep")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid?>("LastCommandCorrelationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Module")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("timezone('utc', now())");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("WorkflowDefinitionId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int?>("WorkflowDefinitionVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("WorkflowInstanceId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LastCommandCorrelationId");
+
+                    b.HasIndex("WorkflowInstanceId");
+
+                    b.HasIndex("Module", "CaseId")
+                        .IsUnique();
+
+                    b.HasIndex("Module", "Status");
+
+                    b.ToTable("process_instances", "Process");
+                });
+
             modelBuilder.Entity("Core.Domain.Identity.Entities.Company", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2135,7 +2203,8 @@ namespace Core.Persistence.Migrations
                     b.HasIndex("CompanyId");
 
                     b.HasIndex("Email")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("\"Email\" IS NOT NULL");
 
                     b.HasIndex("NationalCode");
 
