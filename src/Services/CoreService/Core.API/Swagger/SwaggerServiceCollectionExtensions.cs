@@ -41,6 +41,15 @@ public static class SwaggerServiceCollectionExtensions
                 }
             });
 
+            options.DocInclusionPredicate((documentName, api) =>
+            {
+                var path = api.RelativePath ?? string.Empty;
+                if (path.StartsWith("elsa/", StringComparison.OrdinalIgnoreCase))
+                    return false;
+
+                return string.IsNullOrEmpty(api.GroupName)
+                    || string.Equals(api.GroupName, documentName, StringComparison.OrdinalIgnoreCase);
+            });
             options.TagActionsBy(api =>
             {
                 var controller = api.ActionDescriptor.RouteValues.TryGetValue("controller", out var name)

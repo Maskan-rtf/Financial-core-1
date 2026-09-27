@@ -1,0 +1,8 @@
+{
+  "app": "financial-panel-api",
+  "port": 8080,
+  "build": {
+    "location": "germany"
+  },
+  "disks": []
+}

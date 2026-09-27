@@ -87,7 +87,9 @@ public static class WebApplicationPipelineExtensions
                 });
         }
 
-        app.UseWorkflowsApi(apiBasePath);
+        // FastEndpoints always inserts a leading '/'. A prefix that already starts with '/'
+        // becomes '//elsa/api/...' and route parsing throws on startup.
+        app.UseWorkflowsApi(apiBasePath.Trim('/'));
 
         return app;
     }
