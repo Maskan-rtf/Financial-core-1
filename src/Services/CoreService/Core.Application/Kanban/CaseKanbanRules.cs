@@ -249,6 +249,7 @@ public static class CaseKanbanRules
         [UserRoleClaims.TechnicalExpert] = "کارشناس فنی",
         [UserRoleClaims.TechnicalManager] = "مدیر فنی",
         [UserRoleClaims.Ceo] = "مدیرعامل",
+        [UserRoleClaims.BoardMember] = "عضو هیئت‌مدیره",
         [UserRoleClaims.Admin] = "مدیر سیستم"
     };
 }

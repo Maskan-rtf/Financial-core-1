@@ -46,7 +46,7 @@ public static class DashboardRoleResolver
                 r.Equals("CEO", StringComparison.OrdinalIgnoreCase)))
             return DashboardViewKind.Executive;
 
-        if (normalized.Any(r => r.Equals("BoardMember", StringComparison.OrdinalIgnoreCase)))
+        if (normalized.Any(r => r.Equals(UserRoleClaims.BoardMember, StringComparison.OrdinalIgnoreCase)))
             return DashboardViewKind.Executive;
 
         if (normalized.Any(r =>
@@ -70,7 +70,7 @@ public static class DashboardRoleResolver
 
     public static bool IsBoardMember(IReadOnlyCollection<string> roles)
         => roles.Select(UserRoleClaims.Normalize).Any(r =>
-            r.Equals("BoardMember", StringComparison.OrdinalIgnoreCase));
+            r.Equals(UserRoleClaims.BoardMember, StringComparison.OrdinalIgnoreCase));
 
     public static bool CanViewEmployeeKpi(IReadOnlyCollection<string> roles)
     {
@@ -79,7 +79,7 @@ public static class DashboardRoleResolver
             r.Equals(UserRoleClaims.Admin, StringComparison.OrdinalIgnoreCase) ||
             r.Equals(UserRoleClaims.Ceo, StringComparison.OrdinalIgnoreCase) ||
             r.Equals("CEO", StringComparison.OrdinalIgnoreCase) ||
-            r.Equals("BoardMember", StringComparison.OrdinalIgnoreCase) ||
+            r.Equals(UserRoleClaims.BoardMember, StringComparison.OrdinalIgnoreCase) ||
             r.Equals(UserRoleClaims.TechnicalExpert, StringComparison.OrdinalIgnoreCase));
     }
 

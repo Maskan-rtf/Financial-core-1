@@ -8,6 +8,7 @@ public enum UserRole
     InvestmentManager = 11,
 
     Ceo = 12,
+    BoardMember = 13,
 
     LegalExpert = 20,
     LegalManager = 21,
@@ -30,6 +31,7 @@ public static class UserRoleClaims
     public const string InvestmentExpert = nameof(UserRole.InvestmentExpert);
     public const string InvestmentManager = nameof(UserRole.InvestmentManager);
     public const string Ceo = nameof(UserRole.Ceo);
+    public const string BoardMember = nameof(UserRole.BoardMember);
     public const string Admin = nameof(UserRole.Admin);
     public const string LegalExpert = nameof(UserRole.LegalExpert);
     public const string LegalManager = nameof(UserRole.LegalManager);

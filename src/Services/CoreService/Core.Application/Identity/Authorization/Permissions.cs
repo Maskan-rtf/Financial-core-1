@@ -164,6 +164,15 @@ public static class RolePermissions
                 Permissions.GuaranteeCases_CeoApprove,
                 Permissions.GuaranteeCases_SetApplicantCreditLimit
             ],
+            [UserRoleClaims.BoardMember] =
+            [
+                Permissions.Users_Read,
+                Permissions.Companies_Read,
+                Permissions.Companies_ListAll,
+                Permissions.Sessions_Read,
+                Permissions.InvestmentCases_Read,
+                Permissions.GuaranteeCases_Read
+            ],
             [UserRoleClaims.InvestmentManager] =
             [
                 Permissions.Users_Read,

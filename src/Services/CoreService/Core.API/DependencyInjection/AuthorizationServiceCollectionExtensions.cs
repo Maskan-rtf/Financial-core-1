@@ -68,7 +68,7 @@ public static class AuthorizationServiceCollectionExtensions
                 UserRoleClaims.InvestmentManager,
                 UserRoleClaims.Admin,
                 "CEO",
-                "BoardMember"));
+                UserRoleClaims.BoardMember));
             options.AddPolicy("Dashboard.Executive", p => p.RequireRole(
                 UserRoleClaims.Ceo,
                 UserRoleClaims.InvestmentManager,
@@ -77,7 +77,7 @@ public static class AuthorizationServiceCollectionExtensions
                 UserRoleClaims.TechnicalManager,
                 UserRoleClaims.Admin,
                 "CEO",
-                "BoardMember"));
+                UserRoleClaims.BoardMember));
             options.AddPolicy("Dashboard.Department", p => p.RequireRole(
                 UserRoleClaims.InvestmentExpert,
                 UserRoleClaims.InvestmentManager,
@@ -98,7 +98,7 @@ public static class AuthorizationServiceCollectionExtensions
                 UserRoleClaims.TechnicalExpert,
                 UserRoleClaims.Admin,
                 "CEO",
-                "BoardMember"));
+                UserRoleClaims.BoardMember));
 
             options.AddPolicy("Companies.Delete", p => p.RequireRole(
                 UserRoleClaims.Ceo,
