@@ -9,10 +9,13 @@ using Elsa.Workflows.Helpers;
 using Elsa.Workflows.Runtime;
 using Elsa.Workflows.Runtime.Entities;
 using Elsa.Workflows.Runtime.Filters;
+using Microsoft.Extensions.Logging;
 
 namespace Core.Workflow.Orchestration;
 
-public sealed class ElsaCommandBookmarkReader(IBookmarkStore bookmarkStore)
+public sealed class ElsaCommandBookmarkReader(
+    IBookmarkStore bookmarkStore,
+    ILogger<ElsaCommandBookmarkReader> logger)
 {
     private static readonly string ActivityTypeName = ActivityTypeNameHelper.GenerateTypeName<WaitForCaseCommandActivity>();
 
@@ -43,7 +46,26 @@ public sealed class ElsaCommandBookmarkReader(IBookmarkStore bookmarkStore)
             .ToArray();
 
         if (matchingCommand.Length == 0)
-            return Result<IReadOnlyCollection<ElsaCommandBookmark>>.Fail(Error.Conflict(ApiMessages.InvalidTransition));
+        {
+            if (bookmarks.Count == 0)
+            {
+                logger.LogWarning(
+                    "Workflow {WorkflowInstanceId} for case {CaseId} has no open step, so command {CommandName} was rejected",
+                    workflowInstanceId,
+                    caseId,
+                    commandName);
+                return Result<IReadOnlyCollection<ElsaCommandBookmark>>.Fail(
+                    Error.Conflict(ApiMessages.WorkflowStepUnavailable(DescribeCommand(commandName))));
+            }
+
+            logger.LogWarning(
+                "Command {CommandName} is not open on workflow {WorkflowInstanceId} for case {CaseId}. Open commands: {OpenCommands}",
+                commandName,
+                workflowInstanceId,
+                caseId,
+                string.Join(", ", bookmarks.Select(DescribeBookmark).Where(x => x.Length > 0).Distinct()));
+            return Result<IReadOnlyCollection<ElsaCommandBookmark>>.Fail(Error.Conflict(ApiMessages.WorkflowActionNotOpen));
+        }
 
         var authorized = matchingCommand
             .Select(ToCommandBookmark)
@@ -123,6 +145,30 @@ public sealed class ElsaCommandBookmarkReader(IBookmarkStore bookmarkStore)
         => bookmark.Metadata is not null && bookmark.Metadata.TryGetValue(key, out var value)
             ? Convert.ToString(value) ?? string.Empty
             : string.Empty;
+
+    private static string DescribeBookmark(StoredBookmark bookmark)
+    {
+        var payload = bookmark.GetPayload<CaseCommandStimulus>();
+        return payload?.CommandName ?? string.Empty;
+    }
+
+    private static string DescribeCommand(string commandName) => commandName.ToLowerInvariant() switch
+    {
+        "submit" => "ارسال",
+        "approve" => "تأیید",
+        "requestrevision" => "درخواست اصلاح",
+        "reject" => "رد",
+        "cancel" => "لغو",
+        "archive" => "بایگانی",
+        "uploadpreliminarycontract" => "بارگذاری پیش‌قرارداد",
+        "uploadsignedcontract" => "بارگذاری قرارداد امضاشده",
+        "submitfinancialworksheet" => "ارسال کاربرگ مالی",
+        "approvefinancialworksheet" => "تأیید کاربرگ مالی",
+        "completepayment" => "تکمیل پرداخت",
+        "finalizecontractdraft" => "نهایی‌کردن پیش‌نویس قرارداد",
+        "confirmsignature" => "تأیید امضا",
+        _ => "این عمل"
+    };
 
     private static bool RoleMatches(IReadOnlyCollection<string> allowedRoles, string actorRole)
     {

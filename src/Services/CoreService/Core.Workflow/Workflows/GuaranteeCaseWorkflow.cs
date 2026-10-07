@@ -125,6 +125,7 @@ public sealed class GuaranteeCaseWorkflow : WorkflowBase
         AddArchiveRoute(flow, amendmentApproved, "AmendmentApproved", caseId, archived);
         AddArchiveRoute(flow, amendmentRejected, "AmendmentRejected", caseId, archived);
 
+        FlowchartInboundJoins.PreferFirstArrival(flow);
         builder.Root = flow;
     }
 

@@ -91,6 +91,7 @@ public sealed class LoanCaseWorkflow : WorkflowBase
         AddArchiveRoute(flow, payment, "Payment", caseId, archived);
         AddArchiveRoute(flow, repayment, "Repayment", caseId, archived);
 
+        FlowchartInboundJoins.PreferFirstArrival(flow);
         builder.Root = flow;
     }
 

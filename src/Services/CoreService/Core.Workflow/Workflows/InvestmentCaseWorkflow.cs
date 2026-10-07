@@ -116,6 +116,7 @@ public sealed class InvestmentCaseWorkflow : WorkflowBase
         AddArchiveRoute(flow, ceoApproval, "CeoApproval", caseId, archived);
         AddArchiveRoute(flow, payment, "Payment", caseId, archived);
 
+        FlowchartInboundJoins.PreferFirstArrival(flow);
         builder.Root = flow;
     }
 

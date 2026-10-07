@@ -44,7 +44,11 @@ public static class ApiMessages
     public const string DocumentConfirmationNotAllowed = "در وضعیت فعلی امکان تأیید سند وجود ندارد.";
     public const string CannotTransitionFromTerminalState = "از وضعیت پایانی نمی‌توان به مرحله بعد رفت.";
     public const string OnlyAdminCanArchive = "فقط مدیر سیستم می‌تواند پرونده را بایگانی کند.";
-    public const string InvalidTransition = "انتقال وضعیت درخواستی مجاز نیست.";
+    public const string InvalidTransition = "این تغییر وضعیت با مرحلهٔ فعلی پرونده هم‌خوان نیست.";
+    public const string WorkflowActionNotOpen = "این عمل در مرحلهٔ فعلی پرونده مجاز نیست. صفحه را تازه‌سازی کنید تا فقط کارهایی که همین مرحله اجازه می‌دهد دیده شود.";
+
+    public static string WorkflowStepUnavailable(string actionLabel) =>
+        $"{actionLabel} انجام نشد، چون گردش‌کار پرونده الان روی این مرحله منتظر نیست. اطلاعاتی که ذخیره کرده‌اید باقی است. صفحه را تازه‌سازی کنید و یک بار دیگر تلاش کنید. اگر همان خطا آمد، پرونده باید توسط پشتیبانی به مرحلهٔ درست برگردد.";
     public const string CaseEntityIsNull = "پرونده برای پردازش در دسترس نیست.";
     public const string CannotSubmitDataEntry1BeforeSave = "ابتدا ورود اطلاعات ۱ را ذخیره کنید.";
     public const string DataEntry1Incomplete = "ورود اطلاعات ۱ ناقص است.";
