@@ -98,6 +98,18 @@ public sealed class ElsaCommandBookmarkReader(
             .ToArray();
     }
 
+    public async Task<IReadOnlyCollection<ElsaCommandBookmark>> ListCommandsAsync(
+        string workflowInstanceId,
+        CancellationToken cancellationToken)
+    {
+        var bookmarks = await GetCommandBookmarksAsync(workflowInstanceId, cancellationToken);
+        return bookmarks
+            .Select(ToCommandBookmark)
+            .Where(x => x is not null)
+            .Cast<ElsaCommandBookmark>()
+            .ToArray();
+    }
+
     public async Task BurnSiblingCommandBookmarksAsync(
         string workflowInstanceId,
         string selectedBookmarkId,

@@ -123,7 +123,7 @@ public sealed class LoanCaseWorkflow : WorkflowBase
     }
 
     private static void Link(Flowchart flow, IActivity source, IActivity target)
-        => flow.Connections.Add(new Connection(source, target));
+        => flow.Connections.Add(new Connection(new Endpoint(source, "Done"), new Endpoint(target)));
 
     private static Input<Guid> GetCaseId(IWorkflowBuilder builder) => new(ctx => ctx.GetInput<Guid>("CaseId"));
 }

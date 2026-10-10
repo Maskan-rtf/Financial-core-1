@@ -3,8 +3,12 @@ using BuildingBlocks.Application.Results;
 using Core.Application.Abstractions;
 using Core.Application.Common;
 using Core.Domain.Enums;
+using Core.Workflow.Workflows;
+using Elsa.Workflows.Models;
 using Elsa.Workflows.Runtime.Filters;
+using Elsa.Workflows.Runtime.Messages;
 using IWorkflowResumer = Elsa.Workflows.Runtime.IWorkflowResumer;
+using IElsaWorkflowRuntime = Elsa.Workflows.Runtime.IWorkflowRuntime;
 using IProcessWorkflowRuntime = Core.Application.Abstractions.IWorkflowRuntime;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -20,6 +24,7 @@ public sealed class ElsaWorkflowRuntime(
     ILoanWorkflowCommandExecutor loanWorkflowCommandExecutor,
     ElsaCommandBookmarkReader commandBookmarkReader,
     IWorkflowResumer workflowResumer,
+    IElsaWorkflowRuntime elsaWorkflowRuntime,
     ICoreDbContext dbContext,
     ILogger<ElsaWorkflowRuntime> logger) : IProcessWorkflowRuntime
 {
@@ -152,12 +157,27 @@ public sealed class ElsaWorkflowRuntime(
         if (string.IsNullOrWhiteSpace(processCommand.ActorRole))
             return Result.Fail(Error.Forbidden(ApiMessages.NotAllowed));
 
+        var workflowInstanceId = GetWorkflowInstanceId(processCommand.CaseId);
         var bookmarks = await commandBookmarkReader.FindCommandsAsync(
-            GetWorkflowInstanceId(processCommand.CaseId),
+            workflowInstanceId,
             processCommand.CaseId,
             action.ToString(),
             processCommand.ActorRole,
             cancellationToken);
+        if (bookmarks.IsFailure)
+        {
+            var open = await commandBookmarkReader.ListCommandsAsync(workflowInstanceId, cancellationToken);
+            if (open.Count == 0 && await TryRealignGuaranteeWorkflowAsync(processCommand.CaseId, cancellationToken))
+            {
+                bookmarks = await commandBookmarkReader.FindCommandsAsync(
+                    workflowInstanceId,
+                    processCommand.CaseId,
+                    action.ToString(),
+                    processCommand.ActorRole,
+                    cancellationToken);
+            }
+        }
+
         if (bookmarks.IsFailure)
             return Result.Fail(bookmarks.Error!);
 
@@ -243,6 +263,65 @@ public sealed class ElsaWorkflowRuntime(
 
         await BurnAndResumeAsync(GetWorkflowInstanceId(processCommand.CaseId), bookmark.Value!.BookmarkId, cancellationToken);
         return Result.Ok();
+    }
+
+    /// <summary>
+    /// A case can sit on data entry while its workflow has no open command.
+    /// That happens after draft is consumed and the join back into data entry never parks.
+    /// Recreate the instance and, when the case is already in data entry, step the workflow forward once.
+    /// </summary>
+    private async Task<bool> TryRealignGuaranteeWorkflowAsync(Guid caseId, CancellationToken cancellationToken)
+    {
+        var status = await dbContext.GuaranteeCases
+            .AsNoTracking()
+            .Where(x => x.Id == caseId)
+            .Select(x => (GuaranteeCaseStatus?)x.CurrentStatus)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (status is not (GuaranteeCaseStatus.Draft or GuaranteeCaseStatus.DataEntry))
+            return false;
+
+        var workflowInstanceId = GetWorkflowInstanceId(caseId);
+        try
+        {
+            var client = await elsaWorkflowRuntime.CreateClientAsync(workflowInstanceId, cancellationToken);
+            if (await client.InstanceExistsAsync(cancellationToken))
+                await client.DeleteAsync(cancellationToken);
+
+            await client.CreateAndRunInstanceAsync(new CreateAndRunWorkflowInstanceRequest
+            {
+                WorkflowDefinitionHandle = WorkflowDefinitionHandle.ByDefinitionId(
+                    GuaranteeCaseWorkflow.DefinitionId,
+                    Elsa.Common.Models.VersionOptions.Latest),
+                CorrelationId = workflowInstanceId,
+                Input = new Dictionary<string, object> { ["CaseId"] = caseId }
+            }, cancellationToken);
+
+            if (status == GuaranteeCaseStatus.DataEntry)
+            {
+                var open = await commandBookmarkReader.ListCommandsAsync(workflowInstanceId, cancellationToken);
+                var enterDataEntry = open.FirstOrDefault(x =>
+                    x.CommandName.Equals(nameof(GuaranteeWorkflowAction.Submit), StringComparison.OrdinalIgnoreCase)
+                    && x.TargetStatus.Equals(nameof(GuaranteeCaseStatus.DataEntry), StringComparison.OrdinalIgnoreCase));
+                if (enterDataEntry is null)
+                    return false;
+
+                await BurnAndResumeAsync(workflowInstanceId, enterDataEntry.BookmarkId, cancellationToken);
+            }
+
+            var parked = await commandBookmarkReader.ListCommandsAsync(workflowInstanceId, cancellationToken);
+            logger.LogInformation(
+                "Realigned guarantee workflow for case {CaseId} at status {Status} with {BookmarkCount} open commands",
+                caseId,
+                status,
+                parked.Count);
+            return parked.Count > 0;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not realign guarantee workflow for case {CaseId}", caseId);
+            return false;
+        }
     }
 
     private async Task BurnAndResumeAsync(

@@ -3,17 +3,16 @@ using Core.Workflow.Common;
 using Core.Workflow.Workflows;
 using Elsa.Common.Models;
 using Elsa.Workflows.Management;
-using Elsa.Workflows.Management.Filters;
-using Elsa.Workflows.Runtime;
-using Elsa.Workflows.Runtime.Contracts;
-using Elsa.Workflows.Runtime.Requests;
+using Elsa.Workflows.Models;
+using Elsa.Workflows.Runtime.Messages;
+using IElsaWorkflowRuntime = Elsa.Workflows.Runtime.IWorkflowRuntime;
 using Microsoft.Extensions.Logging;
 
 namespace Core.Workflow.Orchestration;
 
 public sealed class ElsaGuaranteeWorkflowOrchestrator(
     IWorkflowDefinitionService workflowDefinitionService,
-    IWorkflowDispatcher workflowDispatcher,
+    IElsaWorkflowRuntime workflowRuntime,
     ILogger<ElsaGuaranteeWorkflowOrchestrator> logger) : IGuaranteeWorkflowOrchestrator
 {
     public Task<string> StartGuaranteeCaseAsync(Guid caseId, CancellationToken ct)
@@ -42,14 +41,13 @@ public sealed class ElsaGuaranteeWorkflowOrchestrator(
             throw new InvalidOperationException(WorkflowMessages.DefinitionNotFound);
 
         var instanceId = caseId.ToString("D");
-        var request = new DispatchWorkflowDefinitionRequest(definition.Id)
+        var client = await workflowRuntime.CreateClientAsync(instanceId, ct);
+        await client.CreateAndRunInstanceAsync(new CreateAndRunWorkflowInstanceRequest
         {
-            Input = new Dictionary<string, object> { ["CaseId"] = caseId },
-            InstanceId = instanceId,
-            CorrelationId = instanceId
-        };
-
-        await workflowDispatcher.DispatchAsync(request, ct);
+            WorkflowDefinitionHandle = WorkflowDefinitionHandle.ByDefinitionVersionId(definition.Id),
+            CorrelationId = instanceId,
+            Input = new Dictionary<string, object> { ["CaseId"] = caseId }
+        }, ct);
         return instanceId;
     }
 }
