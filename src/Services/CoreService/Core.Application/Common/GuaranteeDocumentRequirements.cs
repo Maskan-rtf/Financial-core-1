@@ -5,16 +5,15 @@ namespace Core.Application.Common;
 
 public static class GuaranteeDocumentRequirements
 {
+    /// <summary>Same set the applicant form marks required, before type-specific extras.</summary>
     public static readonly GuaranteeDocumentType[] RequiredForDataEntrySubmit =
     [
+        GuaranteeDocumentType.CaseFormationFeeReceipt,
         GuaranteeDocumentType.EstablishmentGazette,
+        GuaranteeDocumentType.CeoBoardIdCards,
         GuaranteeDocumentType.FinancialStatements3Years,
         GuaranteeDocumentType.ActivityLicenses,
-        GuaranteeDocumentType.BankAccountTurnover,
-        GuaranteeDocumentType.CreditInformationForm,
-        GuaranteeDocumentType.CaseFormationFeeReceipt,
-        GuaranteeDocumentType.GuaranteeIssuanceRequestForm,
-        GuaranteeDocumentType.CeoBoardIdCards
+        GuaranteeDocumentType.CreditInquiryResult
     ];
 
     public static IEnumerable<GuaranteeDocumentType> GetRequiredForDataEntrySubmit(GuaranteeType? guaranteeType)
@@ -60,7 +59,7 @@ public static class GuaranteeDocumentRequirements
         GuaranteeDocumentType.LeaseOrOwnershipDeed => "قرارداد اجاره یا سند مالکیت محل شرکت",
         GuaranteeDocumentType.FeasibilityReport => "گزارش امکان‌سنجی فنی و اقتصادی",
         GuaranteeDocumentType.SalesContractsScan => "اسکن قراردادهای فروش و تاییدیه‌ها",
-        GuaranteeDocumentType.CreditInquiryResult => "استعلام اعتباری شرکت و مدیران",
+        GuaranteeDocumentType.CreditInquiryResult => "نتیجه استعلام به‌روز شرکت و مدیران از سامانه شرکت اعتبارسنجی ایران",
         GuaranteeDocumentType.DraftContract => "پیش‌قرارداد (قرارداد خام)",
         GuaranteeDocumentType.SignedContract => "قرارداد امضاشده",
         GuaranteeDocumentType.SignedAttachment1 => "پیوست امضاشده 1",
@@ -76,6 +75,10 @@ public static class GuaranteeDocumentRequirements
         GuaranteeDocumentType.OriginalGuaranteeReference => "مرجع ضمانت‌نامه اصلی",
         GuaranteeDocumentType.SettlementConfirmation => "تاییدیه تسویه",
         GuaranteeDocumentType.AmendmentContract => "قرارداد اصلاحیه",
+        GuaranteeDocumentType.SignedApprovalFormFirstPage => "فرم تصویب امضاشده — صفحه اول",
+        GuaranteeDocumentType.CreditCommitteeMinutes => "صورتجلسه کمیته اعتباری",
+        GuaranteeDocumentType.SiteVisitReport => "گزارش بازدید از محل",
+        GuaranteeDocumentType.GuaranteeDeliveryReceipt => "رسید تحویل ضمانت‌نامه",
         GuaranteeDocumentType.Other => "سایر",
         _ => type.ToString()
     };
@@ -97,7 +100,7 @@ public static class GuaranteeDocumentRequirements
     public static readonly GuaranteeDocumentType[] RequiredForIssuance =
     [
         GuaranteeDocumentType.GuaranteeInstrument,
-        GuaranteeDocumentType.IssuanceReceipt
+        GuaranteeDocumentType.GuaranteeDeliveryReceipt
     ];
 
     public static IReadOnlyList<GuaranteeDocumentType> GetMissingForCancellation(GuaranteeCase caseEntity)

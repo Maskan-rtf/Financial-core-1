@@ -112,12 +112,36 @@ public sealed class ElsaWorkflowRuntime(
         if (string.IsNullOrWhiteSpace(processCommand.ActorRole))
             return Result.Fail(Error.Forbidden(ApiMessages.NotAllowed));
 
-        var bookmark = await commandBookmarkReader.FindCommandAsync(
-            GetWorkflowInstanceId(processCommand.CaseId),
+        var workflowInstanceId = GetWorkflowInstanceId(processCommand.CaseId);
+        var status = await dbContext.LoanCases
+            .AsNoTracking()
+            .Where(x => x.Id == processCommand.CaseId)
+            .Select(x => (LoanCaseStatus?)x.CurrentStatus)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var bookmark = await FindLoanBookmarkAsync(
+            workflowInstanceId,
             processCommand.CaseId,
-            action.ToString(),
+            action,
             processCommand.ActorRole,
+            status,
             cancellationToken);
+
+        if (bookmark.IsFailure
+            && bookmark.Error!.Code == "conflict"
+            && action == LoanWorkflowAction.Submit
+            && status is (LoanCaseStatus.Draft or LoanCaseStatus.DataEntry or LoanCaseStatus.RevisionRequestedByCredit)
+            && await TryRealignLoanWorkflowAsync(processCommand.CaseId, status.Value, cancellationToken))
+        {
+            bookmark = await FindLoanBookmarkAsync(
+                workflowInstanceId,
+                processCommand.CaseId,
+                action,
+                processCommand.ActorRole,
+                status,
+                cancellationToken);
+        }
+
         if (bookmark.IsFailure)
             return Result.Fail(bookmark.Error!);
 
@@ -140,8 +164,108 @@ public sealed class ElsaWorkflowRuntime(
         if (execution.IsFailure)
             return execution;
 
-        await BurnAndResumeAsync(GetWorkflowInstanceId(processCommand.CaseId), bookmark.Value!.BookmarkId, cancellationToken);
+        await BurnAndResumeAsync(workflowInstanceId, bookmark.Value!.BookmarkId, cancellationToken);
         return Result.Ok();
+    }
+
+    private async Task<Result<ElsaCommandBookmark>> FindLoanBookmarkAsync(
+        string workflowInstanceId,
+        Guid caseId,
+        LoanWorkflowAction action,
+        string actorRole,
+        LoanCaseStatus? status,
+        CancellationToken cancellationToken)
+    {
+        var found = await commandBookmarkReader.FindCommandsAsync(
+            workflowInstanceId,
+            caseId,
+            action.ToString(),
+            actorRole,
+            cancellationToken);
+        if (found.IsFailure)
+            return Result<ElsaCommandBookmark>.Fail(found.Error!);
+
+        var expectedTarget = ExpectedLoanSubmitTarget(action, status);
+        if (expectedTarget is null)
+            return Result<ElsaCommandBookmark>.Ok(found.Value!.First());
+
+        var match = found.Value!.FirstOrDefault(x =>
+            string.Equals(x.TargetStatus, expectedTarget, StringComparison.OrdinalIgnoreCase));
+        return match is null
+            ? Result<ElsaCommandBookmark>.Fail(Error.Conflict(ApiMessages.WorkflowActionNotOpen))
+            : Result<ElsaCommandBookmark>.Ok(match);
+    }
+
+    /// <summary>
+    /// Draft and data-entry both expose a Submit command. The bookmark must be the one
+    /// that leaves the case's current status; otherwise submit is a no-op or a 409.
+    /// </summary>
+    private static string? ExpectedLoanSubmitTarget(LoanWorkflowAction action, LoanCaseStatus? status)
+    {
+        if (action != LoanWorkflowAction.Submit || status is null)
+            return null;
+
+        return status switch
+        {
+            LoanCaseStatus.Draft => nameof(LoanCaseStatus.DataEntry),
+            LoanCaseStatus.DataEntry or LoanCaseStatus.RevisionRequestedByCredit => nameof(LoanCaseStatus.PendingCreditReview),
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Applicant save moves Draft to DataEntry. If that resume never parks the next Submit
+    /// bookmark, or parks one that does not match this case, recreate the instance and
+    /// step it forward to the wait the current status actually needs.
+    /// </summary>
+    private async Task<bool> TryRealignLoanWorkflowAsync(
+        Guid caseId,
+        LoanCaseStatus status,
+        CancellationToken cancellationToken)
+    {
+        var workflowInstanceId = GetWorkflowInstanceId(caseId);
+        try
+        {
+            var client = await elsaWorkflowRuntime.CreateClientAsync(workflowInstanceId, cancellationToken);
+            if (await client.InstanceExistsAsync(cancellationToken))
+                await client.DeleteAsync(cancellationToken);
+
+            await client.CreateAndRunInstanceAsync(new CreateAndRunWorkflowInstanceRequest
+            {
+                WorkflowDefinitionHandle = WorkflowDefinitionHandle.ByDefinitionId(
+                    LoanCaseWorkflow.DefinitionId,
+                    Elsa.Common.Models.VersionOptions.Latest),
+                CorrelationId = workflowInstanceId,
+                Input = new Dictionary<string, object> { ["CaseId"] = caseId }
+            }, cancellationToken);
+
+            if (status is LoanCaseStatus.DataEntry or LoanCaseStatus.RevisionRequestedByCredit)
+            {
+                var open = await commandBookmarkReader.ListCommandsAsync(workflowInstanceId, cancellationToken);
+                var enterDataEntry = open.FirstOrDefault(x =>
+                    x.CommandName.Equals(nameof(LoanWorkflowAction.Submit), StringComparison.OrdinalIgnoreCase)
+                    && x.TargetStatus.Equals(nameof(LoanCaseStatus.DataEntry), StringComparison.OrdinalIgnoreCase));
+                if (enterDataEntry is null)
+                    return false;
+
+                await BurnAndResumeAsync(workflowInstanceId, enterDataEntry.BookmarkId, cancellationToken);
+            }
+
+            var parked = await commandBookmarkReader.ListCommandsAsync(workflowInstanceId, cancellationToken);
+            logger.LogInformation(
+                "Realigned loan workflow for case {CaseId} at status {Status} with {BookmarkCount} open commands",
+                caseId,
+                status,
+                parked.Count);
+            return parked.Any(x =>
+                x.CommandName.Equals(nameof(LoanWorkflowAction.Submit), StringComparison.OrdinalIgnoreCase)
+                && string.Equals(x.TargetStatus, ExpectedLoanSubmitTarget(LoanWorkflowAction.Submit, status), StringComparison.OrdinalIgnoreCase));
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not realign loan workflow for case {CaseId}", caseId);
+            return false;
+        }
     }
 
     private async Task<Result> ExecuteGuaranteeCommandAsync(

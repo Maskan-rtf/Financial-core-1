@@ -34,5 +34,9 @@ public enum GuaranteeDocumentType
     OriginalGuaranteeReference = 30,
     SettlementConfirmation = 31,
     AmendmentContract = 32,
+    SignedApprovalFormFirstPage = 33,
+    CreditCommitteeMinutes = 35,
+    SiteVisitReport = 36,
+    GuaranteeDeliveryReceipt = 37,
     Other = 99
 }

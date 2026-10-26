@@ -13,7 +13,7 @@ public sealed class LoanWorkflowActionProvider(ElsaCommandBookmarkReader bookmar
     {
         var commands = await bookmarkReader.GetAllowedCommandsAsync(workflowInstanceId, actorRole, cancellationToken);
         return commands
-            .Where(x => x.CaseId == caseId)
+            .Where(x => x.CaseId == Guid.Empty || x.CaseId == caseId)
             .Select(x => Enum.TryParse<LoanWorkflowAction>(x.CommandName, out var action) ? (LoanWorkflowAction?)action : null)
             .Where(x => x.HasValue && x.Value != LoanWorkflowAction.StageRollback)
             .Select(x => x!.Value)

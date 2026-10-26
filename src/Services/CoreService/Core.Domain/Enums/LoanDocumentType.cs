@@ -25,5 +25,10 @@ public enum LoanDocumentType
     SignedAttachment6 = 21,
     FinalContract = 22,
     PaymentReceipt = 23,
+    SignedApprovalFormFirstPage = 24,
+    CreditCommitteeMinutes = 26,
+    SiteVisitReport = 27,
+    ThreeYearActualFinancialStatements = 30,
+    CreditRatingReport = 31,
     Other = 99
 }

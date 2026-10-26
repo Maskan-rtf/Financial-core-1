@@ -13,7 +13,7 @@ public sealed class GuaranteeWorkflowActionProvider(ElsaCommandBookmarkReader bo
     {
         var commands = await bookmarkReader.GetAllowedCommandsAsync(workflowInstanceId, actorRole, cancellationToken);
         return commands
-            .Where(x => x.CaseId == caseId)
+            .Where(x => x.CaseId == Guid.Empty || x.CaseId == caseId)
             .Select(x => Enum.TryParse<GuaranteeWorkflowAction>(x.CommandName, out var action) ? (GuaranteeWorkflowAction?)action : null)
             .Where(x => x.HasValue && x.Value != GuaranteeWorkflowAction.StageRollback)
             .Select(x => x!.Value)

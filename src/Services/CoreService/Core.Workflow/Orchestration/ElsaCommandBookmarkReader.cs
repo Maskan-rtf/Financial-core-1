@@ -131,18 +131,24 @@ public sealed class ElsaCommandBookmarkReader(
     private static bool MatchesCommand(StoredBookmark bookmark, Guid caseId, string commandName)
     {
         var payload = bookmark.GetPayload<CaseCommandStimulus>();
-        return payload is not null
-               && payload.CaseId == caseId
-               && string.Equals(payload.CommandName, commandName, StringComparison.OrdinalIgnoreCase);
+        var actualCommand = FirstNonEmpty(
+            GetMetadata(bookmark, WaitForCaseCommandActivity.CommandNameMetadataKey),
+            payload?.CommandName ?? string.Empty);
+        if (!string.Equals(actualCommand, commandName, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        // Bookmarks are already loaded for this case's workflow instance.
+        // A resumed step can persist Guid.Empty when the original CaseId input does not round-trip.
+        var bookmarkCaseId = ResolveBookmarkCaseId(bookmark, payload);
+        return bookmarkCaseId == Guid.Empty || bookmarkCaseId == caseId;
     }
 
     private static ElsaCommandBookmark? ToCommandBookmark(StoredBookmark bookmark)
     {
         var payload = bookmark.GetPayload<CaseCommandStimulus>();
-        if (payload is null)
-            return null;
-
-        var commandName = GetMetadata(bookmark, WaitForCaseCommandActivity.CommandNameMetadataKey);
+        var commandName = FirstNonEmpty(
+            GetMetadata(bookmark, WaitForCaseCommandActivity.CommandNameMetadataKey),
+            payload?.CommandName ?? string.Empty);
         var targetStatus = GetMetadata(bookmark, WaitForCaseCommandActivity.TargetStatusMetadataKey);
         var allowedRoles = GetMetadata(bookmark, WaitForCaseCommandActivity.AllowedRolesMetadataKey)
             .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -150,8 +156,21 @@ public sealed class ElsaCommandBookmarkReader(
         if (string.IsNullOrWhiteSpace(commandName) || string.IsNullOrWhiteSpace(targetStatus))
             return null;
 
-        return new ElsaCommandBookmark(bookmark.Id, payload.CaseId, commandName, targetStatus, allowedRoles);
+        return new ElsaCommandBookmark(bookmark.Id, ResolveBookmarkCaseId(bookmark, payload), commandName, targetStatus, allowedRoles);
     }
+
+    private static Guid ResolveBookmarkCaseId(StoredBookmark bookmark, CaseCommandStimulus? payload)
+    {
+        if (payload is not null && payload.CaseId != Guid.Empty)
+            return payload.CaseId;
+
+        return Guid.TryParse(GetMetadata(bookmark, WaitForCaseCommandActivity.CaseIdMetadataKey), out var metadataCaseId)
+            ? metadataCaseId
+            : Guid.Empty;
+    }
+
+    private static string FirstNonEmpty(string? primary, string fallback)
+        => string.IsNullOrWhiteSpace(primary) ? fallback : primary;
 
     private static string GetMetadata(StoredBookmark bookmark, string key)
         => bookmark.Metadata is not null && bookmark.Metadata.TryGetValue(key, out var value)

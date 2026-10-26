@@ -5,17 +5,21 @@ namespace Core.Application.Common;
 
 public static class LoanDocumentRequirements
 {
+    /// <summary>Same set the applicant form marks required in loan data entry.</summary>
     public static readonly LoanDocumentType[] RequiredForDataEntrySubmit =
     [
-        LoanDocumentType.SupplementaryAttachmentForm,
         LoanDocumentType.FundRequiredDocsAndCompanySpecs,
         LoanDocumentType.EstablishmentGazette,
         LoanDocumentType.CeoBoardIdCards,
         LoanDocumentType.FinancialAndCreditContracts,
         LoanDocumentType.FinancialStatements,
+        LoanDocumentType.ThreeYearActualFinancialStatements,
         LoanDocumentType.BankAccountTurnover,
-        LoanDocumentType.MainLoanRequestForm,
-        LoanDocumentType.ProposedFinancingContract
+        LoanDocumentType.EmployeeInsuranceReceipt,
+        LoanDocumentType.ProposedFinancingContract,
+        LoanDocumentType.ActivityLicenses,
+        LoanDocumentType.CreditInquiryResult,
+        LoanDocumentType.CreditRatingReport
     ];
 
     public static IReadOnlyList<LoanDocumentType> GetMissingForDataEntrySubmit(IEnumerable<LoanCaseDocument> documents)
@@ -37,13 +41,15 @@ public static class LoanDocumentRequirements
         LoanDocumentType.EstablishmentGazette => "آگهی تأسیس و آخرین روزنامه رسمی",
         LoanDocumentType.CeoBoardIdCards => "کارت ملی و شناسنامه مدیرعامل و اعضای هیئت مدیره",
         LoanDocumentType.FinancialAndCreditContracts => "قراردادهای مالی و اعتباری",
-        LoanDocumentType.FinancialStatements => "صورت‌های مالی",
+        LoanDocumentType.FinancialStatements => "صورت‌های مالی سال گذشته",
+        LoanDocumentType.ThreeYearActualFinancialStatements => "صورت‌های مالی واقعی سه ساله",
         LoanDocumentType.BankAccountTurnover => "گردش/معدل حساب‌های بانکی",
         LoanDocumentType.MainLoanRequestForm => "فرم درخواست اصلی / نامه درخواست",
-        LoanDocumentType.ProposedFinancingContract => "قرارداد پیشنهادی تأمین مالی",
+        LoanDocumentType.ProposedFinancingContract => "قرارداد پیشنهادی مرتبط با درخواست تأمین مالی",
         LoanDocumentType.EmployeeInsuranceReceipt => "آخرین رسید بیمه کارکنان",
-        LoanDocumentType.ActivityLicenses => "تصویر مجوزهای فعالیت",
-        LoanDocumentType.CreditInquiryResult => "نتیجه استعلام اعتبارسنجی",
+        LoanDocumentType.ActivityLicenses => "مجوزهای فعالیت (پروانه بهره‌برداری، گواهی دانش‌بنیان و سایر مصوبات مرتبط)",
+        LoanDocumentType.CreditInquiryResult => "آخرین نتیجه استعلام اعتبارسنجی شرکت",
+        LoanDocumentType.CreditRatingReport => "گزارش رتبه‌بندی اعتباری از سامانه اعتبارسنجی",
         LoanDocumentType.RawContract => "قرارداد خام",
         LoanDocumentType.InstallmentScheduleExport => "خروجی جدول اقساط",
         LoanDocumentType.SignedContract => "قرارداد امضاشده",
@@ -55,6 +61,9 @@ public static class LoanDocumentRequirements
         LoanDocumentType.SignedAttachment6 => "پیوست امضاشده ۶",
         LoanDocumentType.FinalContract => "قرارداد نهایی",
         LoanDocumentType.PaymentReceipt => "رسید پرداخت",
+        LoanDocumentType.SignedApprovalFormFirstPage => "فرم تصویب امضاشده — صفحه اول",
+        LoanDocumentType.CreditCommitteeMinutes => "صورتجلسه کمیته اعتباری",
+        LoanDocumentType.SiteVisitReport => "گزارش بازدید از محل",
         LoanDocumentType.Other => "سایر",
         _ => type.ToString()
     };

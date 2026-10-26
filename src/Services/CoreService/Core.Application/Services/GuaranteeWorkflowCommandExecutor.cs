@@ -220,11 +220,12 @@ public sealed class GuaranteeWorkflowCommandExecutor(
                 break;
 
             case GuaranteeWorkflowAction.UploadIssuanceDocuments:
-                foreach (var required in GuaranteeDocumentRequirements.RequiredForIssuance)
-                {
-                    if (!caseEntity.Documents.Any(x => !x.IsDeleted && x.DocumentType == required))
-                        return Result.Fail(Error.Conflict(ApiMessages.GuaranteeIssuanceDocumentsIncomplete));
-                }
+                var missingIssuance = GuaranteeDocumentRequirements.RequiredForIssuance
+                    .Where(required => !caseEntity.Documents.Any(x => !x.IsDeleted && x.DocumentType == required))
+                    .ToList();
+                if (missingIssuance.Count > 0)
+                    return Result.Fail(Error.Conflict(
+                        GuaranteeDocumentRequirements.FormatDataEntryDocumentsIncompleteMessage(missingIssuance)));
                 break;
         }
 
