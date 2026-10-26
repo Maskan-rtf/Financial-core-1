@@ -73,6 +73,9 @@ public sealed class GuaranteeCaseAppService(
         for (var sequence = 1; sequence <= CaseNumberFormat.MaxDailySequenceAttempts; sequence++)
         {
             var caseNumber = await caseNumberGenerator.GenerateGuaranteeCaseAsync(ct, sequence);
+            if (await unitOfWork.GuaranteeCases.ExistsCaseNumberAsync(caseNumber, ct))
+                continue;
+
             var entity = new GuaranteeCase(caseNumber, auth.Value!, request.ApplicantType);
 
             if (linkedCompany is not null)
@@ -98,7 +101,7 @@ public sealed class GuaranteeCaseAppService(
             }
             catch (DbUpdateException)
             {
-                // Unique constraint on CaseNumber could collide; retry with next daily sequence.
+                unitOfWork.GuaranteeCases.ClearChangeTracker();
             }
         }
 

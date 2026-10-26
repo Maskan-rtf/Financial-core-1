@@ -57,7 +57,8 @@ public sealed class WaitForCaseCommandActivity : Elsa.Workflows.Activity
         if (fromInput != Guid.Empty)
             return fromInput;
 
-        if (context.WorkflowExecutionContext.Input.TryGetValue("CaseId", out var raw) && TryCoerceGuid(raw, out var coerced))
+        var input = context.WorkflowExecutionContext.Input;
+        if (input is not null && input.TryGetValue("CaseId", out var raw) && TryCoerceGuid(raw, out var coerced))
             return coerced;
 
         if (Guid.TryParse(context.WorkflowExecutionContext.CorrelationId, out var fromCorrelation) && fromCorrelation != Guid.Empty)

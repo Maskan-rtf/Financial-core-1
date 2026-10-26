@@ -72,6 +72,11 @@ public sealed class LoanCaseAppService(
         for (var sequence = 1; sequence <= CaseNumberFormat.MaxDailySequenceAttempts; sequence++)
         {
             var caseNumber = await caseNumberGenerator.GenerateLoanCaseAsync(ct, sequence);
+            // A failed insert stays tracked. The next process save would flush that duplicate
+            // number again and surface as a 500 instead of trying the next sequence.
+            if (await dbContext.LoanCases.IgnoreQueryFilters().AnyAsync(x => x.CaseNumber == caseNumber, ct))
+                continue;
+
             var entity = new LoanCase(caseNumber, auth.Value!, request.ApplicantType);
 
             if (linkedCompany is not null)
@@ -96,7 +101,8 @@ public sealed class LoanCaseAppService(
             }
             catch (DbUpdateException)
             {
-                // Unique constraint on CaseNumber could collide; retry with next daily sequence.
+                if (dbContext is DbContext ef)
+                    ef.Entry(entity).State = EntityState.Detached;
             }
         }
 

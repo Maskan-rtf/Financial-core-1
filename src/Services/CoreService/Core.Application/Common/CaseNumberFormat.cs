@@ -2,7 +2,7 @@ namespace Core.Application.Common;
 
 public static class CaseNumberFormat
 {
-    public const int MaxDailySequenceAttempts = 5;
+    public const int MaxDailySequenceAttempts = 500;
 
     public static string Build(string prefix, DateTimeOffset utcNow, int dailySequence = 1)
     {

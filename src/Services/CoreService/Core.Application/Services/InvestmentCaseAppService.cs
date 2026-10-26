@@ -79,6 +79,9 @@ public sealed class InvestmentCaseAppService(
         for (var sequence = 1; sequence <= CaseNumberFormat.MaxDailySequenceAttempts; sequence++)
         {
             var caseNumber = await caseNumberGenerator.GenerateAsync(cancellationToken, sequence);
+            if (await dbContext.InvestmentCases.IgnoreQueryFilters().AnyAsync(x => x.CaseNumber == caseNumber, cancellationToken))
+                continue;
+
             var entity = new InvestmentCase(caseNumber, authResult.Value!, request.ApplicantType);
 
             if (linkedCompany is not null)
@@ -108,7 +111,8 @@ public sealed class InvestmentCaseAppService(
             }
             catch (DbUpdateException)
             {
-                // Unique constraint on CaseNumber could collide; retry with next daily sequence.
+                if (dbContext is DbContext ef)
+                    ef.Entry(entity).State = EntityState.Detached;
             }
         }
 
