@@ -29,5 +29,16 @@ public sealed class CreateUserDtoValidator : AbstractValidator<CreateUserDto>
             .Length(10).WithMessage(IdentityMessages.NationalCodeLength)
             .Matches(@"^\d{10}$").WithMessage(IdentityMessages.NationalCodeDigitsOnly)
             .When(x => !string.IsNullOrWhiteSpace(x.NationalCode));
+
+        RuleFor(x => x.Password)
+            .Must(IsAcceptablePassword).WithMessage(IdentityMessages.PasswordTooWeak)
+            .When(x => !string.IsNullOrWhiteSpace(x.Password));
+    }
+
+    internal static bool IsAcceptablePassword(string? password)
+    {
+        if (string.IsNullOrWhiteSpace(password) || password.Length < 8 || password.Length > 64)
+            return false;
+        return password.Any(char.IsLetter) && password.Any(char.IsDigit);
     }
 }

@@ -84,7 +84,14 @@ public sealed class CompanyAppService(
             c.PostalCode,
             c.OwnerUserId,
             FormatOwnerName(c.OwnerUser),
-            c.OwnerUser?.PhoneNumber)).ToArray();
+            c.OwnerUser?.PhoneNumber,
+            c.LegalType,
+            c.TechnologyType,
+            c.TechnologyDomain,
+            c.RepresentativeName,
+            c.RepresentativePhone,
+            c.CeoName,
+            c.CeoPhone)).ToArray();
 
         ApplicationLog.Completed(logger,
             "User {UserId} listed {Count} of {Total} companies",
@@ -103,19 +110,8 @@ public sealed class CompanyAppService(
 
         ApplicationLog.Started(logger, "CreateCompany", userId.ToString());
 
-        var company = new Company
-        {
-            OwnerUserId = userId,
-            Name = request.Name.Trim(),
-            EconomicCode = request.EconomicCode.Trim(),
-            RegistrationNumber = request.RegistrationNumber,
-            NationalId = request.NationalId,
-            PhoneNumber = request.PhoneNumber,
-            Address = request.Address,
-            City = request.City,
-            Province = request.Province,
-            PostalCode = request.PostalCode
-        };
+        var company = new Company { OwnerUserId = userId };
+        ApplyProfile(company, request);
 
         await unitOfWork.Companies.AddAsync(company, cancellationToken);
 
@@ -158,15 +154,7 @@ public sealed class CompanyAppService(
             return Result<CompanyDto>.Fail(Error.Forbidden(ApiMessages.CompanyAccessDenied));
         }
 
-        company.Name = request.Name.Trim();
-        company.EconomicCode = request.EconomicCode.Trim();
-        company.RegistrationNumber = request.RegistrationNumber;
-        company.NationalId = request.NationalId;
-        company.PhoneNumber = request.PhoneNumber;
-        company.Address = request.Address;
-        company.City = request.City;
-        company.Province = request.Province;
-        company.PostalCode = request.PostalCode;
+        ApplyProfile(company, request);
 
         unitOfWork.Companies.Update(company);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -258,6 +246,26 @@ public sealed class CompanyAppService(
         }
 
         return false;
+    }
+
+    private static void ApplyProfile(Company company, SaveCompanyRequest request)
+    {
+        company.Name = request.Name.Trim();
+        company.EconomicCode = string.IsNullOrWhiteSpace(request.EconomicCode) ? string.Empty : request.EconomicCode.Trim();
+        company.RegistrationNumber = request.RegistrationNumber?.Trim();
+        company.NationalId = request.NationalId?.Trim();
+        company.PhoneNumber = request.PhoneNumber?.Trim();
+        company.Address = request.Address?.Trim();
+        company.City = request.City?.Trim();
+        company.Province = request.Province?.Trim();
+        company.PostalCode = request.PostalCode?.Trim();
+        company.LegalType = request.LegalType;
+        company.TechnologyType = request.TechnologyType;
+        company.TechnologyDomain = request.TechnologyDomain;
+        company.RepresentativeName = request.RepresentativeName.Trim();
+        company.RepresentativePhone = request.RepresentativePhone.Trim();
+        company.CeoName = request.CeoName.Trim();
+        company.CeoPhone = request.CeoPhone.Trim();
     }
 
     private static string? FormatOwnerName(User? owner)

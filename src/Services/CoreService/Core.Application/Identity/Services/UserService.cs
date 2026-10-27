@@ -34,6 +34,10 @@ public class UserService(
     IValidator<UpdateUserDto> updateUserValidator,
     IValidator<SendOtpDto> sendOtpValidator,
     IValidator<VerifyOtpDto> verifyOtpValidator,
+    IValidator<LoginWithPasswordDto> loginWithPasswordValidator,
+    IValidator<SetPasswordDto> setPasswordValidator,
+    IHasher hasher,
+    ICaptchaService captchaService,
     IOptions<OtpOptions> otpOptions,
     IOptions<AuthSessionOptions> sessionOptions,
     IAuthorizationService authorizationService,
@@ -42,9 +46,9 @@ public class UserService(
 {
     #region Authentication & Sessions
 
-    public async Task<ApiOperationResult<UserDto>> SendOtpAsync(SendOtpDto dto)
+    public async Task<ApiOperationResult<SendOtpResultDto>> SendOtpAsync(SendOtpDto dto)
     {
-        var result = new ApiOperationResult<UserDto>();
+        var result = new ApiOperationResult<SendOtpResultDto>();
         ApplicationLog.Started(logger, "SendOtp");
 
         var validation = await sendOtpValidator.ValidateAsync(dto, CancellationToken.None);
@@ -52,6 +56,13 @@ public class UserService(
         {
             ApplicationLog.Blocked(logger, "SendOtp", "validation failed");
             return result.Failed(IdentityMessages.ValidationFailed, validation.Errors.Select(e => e.ErrorMessage).ToList(), HttpStatusCode.BadRequest);
+        }
+
+        var resendAllowed = captchaService.TryConsumeResendToken(dto.ResendToken, dto.PhoneNumber);
+        if (!resendAllowed && !captchaService.TryConsume(dto.CaptchaId, dto.CaptchaCode))
+        {
+            ApplicationLog.Blocked(logger, "SendOtp", "captcha failed");
+            return result.Failed(IdentityMessages.CaptchaInvalid, HttpStatusCode.BadRequest);
         }
 
         var user = await unitOfWork.Users.GetAsync(u => u.PhoneNumber == dto.PhoneNumber, disableTracking: false);
@@ -83,7 +94,10 @@ public class UserService(
             "OTP sent to user {UserId} at phone {PhoneNumber}",
             user.Id, dto.PhoneNumber);
 
-        return result.Succeed(IdentityMessages.OtpSent);
+        return result.Succeed(IdentityMessages.OtpSent, new SendOtpResultDto
+        {
+            ResendToken = captchaService.IssueResendToken(dto.PhoneNumber)
+        });
     }
 
     public async Task<ApiOperationResult<LoginDto>> VerifyOtpAsync(VerifyOtpDto dto)
@@ -122,45 +136,108 @@ public class UserService(
             await permissionCacheService.RemoveUserPermissionsAsync(user.Id, CancellationToken.None);
         }
 
-        var sessionId = Guid.NewGuid();
-        var tokenData = tokenHelper.GenerateToken(
-            user.Id.ToString(),
-            user.PhoneNumber,
-            RoleClaimMapper.ToClaimRole(user.Role),
-            sessionId.ToString("N"));
+        return await CompleteLoginAsync(result, user, "OTP");
+    }
 
-        await TrimActiveSessionsForLimitAsync(user.Id, CancellationToken.None);
+    public Task<ApiOperationResult<CaptchaChallengeDto>> CreateCaptchaAsync()
+    {
+        var result = new ApiOperationResult<CaptchaChallengeDto>();
+        return Task.FromResult(result.Succeed(IdentityMessages.OperationSucceeded, captchaService.Create()));
+    }
 
-        await sessionCacheService.StoreSessionAsync(CreateSessionDescriptor(user.Id, sessionId), CancellationToken.None);
+    public async Task<ApiOperationResult<LoginDto>> LoginWithPasswordAsync(LoginWithPasswordDto dto)
+    {
+        var result = new ApiOperationResult<LoginDto>();
+        ApplicationLog.Started(logger, "LoginWithPassword");
 
-        user.IsPhoneVerified = true;
-        user.LastLoginAt = DateTime.UtcNow;
+        var validation = await loginWithPasswordValidator.ValidateAsync(dto, CancellationToken.None);
+        if (!validation.IsValid)
+        {
+            ApplicationLog.Blocked(logger, "LoginWithPassword", "validation failed");
+            return result.Failed(IdentityMessages.ValidationFailed, validation.Errors.Select(e => e.ErrorMessage).ToList(), HttpStatusCode.BadRequest);
+        }
 
-        var refreshToken = refreshTokenService.CreateNew(
-            userId: user.Id,
-            sessionId: sessionId,
-            familyId: Guid.NewGuid(),
-            parentTokenId: null,
-            rawRefreshToken: tokenData.RefreshToken,
-            expiresAt: tokenData.RefreshTokenExpiration,
-            requestContext: requestContext);
+        if (!captchaService.TryConsume(dto.CaptchaId, dto.CaptchaCode))
+        {
+            ApplicationLog.Blocked(logger, "LoginWithPassword", "captcha failed");
+            return result.Failed(IdentityMessages.CaptchaInvalid, HttpStatusCode.BadRequest);
+        }
 
-        await unitOfWork.RefreshTokens.AddAsync(refreshToken);
-        await unitOfWork.UserSessions.AddAsync(CreateUserSession(user.Id, sessionId, refreshToken.Id));
+        if (captchaService.IsPasswordLocked(dto.PhoneNumber))
+        {
+            ApplicationLog.Blocked(logger, "LoginWithPassword", "password locked");
+            return result.Failed(IdentityMessages.PasswordLocked, HttpStatusCode.BadRequest);
+        }
+
+        var user = await unitOfWork.Users.GetAsync(u => u.PhoneNumber == dto.PhoneNumber, disableTracking: false);
+        if (user is null)
+        {
+            ApplicationLog.Blocked(logger, "LoginWithPassword", "no user registered for this phone number");
+            return result.Failed(IdentityMessages.UserNotFoundByPhone, HttpStatusCode.NotFound);
+        }
+
+        if (!user.IsActive)
+        {
+            ApplicationLog.Blocked(logger, "LoginWithPassword", "account inactive", user.Id.ToString());
+            return result.Failed(IdentityMessages.AccountInactive, HttpStatusCode.Forbidden);
+        }
+
+        if (string.IsNullOrWhiteSpace(user.PasswordHash))
+        {
+            ApplicationLog.Blocked(logger, "LoginWithPassword", "password is not set", user.Id.ToString());
+            return result.Failed(IdentityMessages.PasswordNotSet, HttpStatusCode.BadRequest);
+        }
+
+        var check = hasher.Check(user.PasswordHash, dto.Password);
+        if (!check.Verified)
+        {
+            captchaService.RegisterPasswordFailure(dto.PhoneNumber);
+            ApplicationLog.Blocked(logger, "LoginWithPassword", "invalid password", user.Id.ToString());
+            return result.Failed(IdentityMessages.InvalidPassword, HttpStatusCode.BadRequest);
+        }
+
+        if (check.NeedsUpgrade)
+            user.PasswordHash = hasher.Hash(dto.Password);
+
+        captchaService.ClearPasswordFailures(dto.PhoneNumber);
+        return await CompleteLoginAsync(result, user, "password");
+    }
+
+    public async Task<ApiOperationResult<UserDto>> SetPasswordAsync(SetPasswordDto dto, CancellationToken cancellationToken = default)
+    {
+        var result = new ApiOperationResult<UserDto>();
+        var userId = currentUser.UserId ?? Guid.Empty;
+        if (userId == Guid.Empty)
+        {
+            ApplicationLog.Blocked(logger, "SetPassword", "user is not authenticated");
+            return result.Failed(IdentityMessages.AuthenticationRequired, HttpStatusCode.Unauthorized);
+        }
+
+        var validation = await setPasswordValidator.ValidateAsync(dto, cancellationToken);
+        if (!validation.IsValid)
+        {
+            ApplicationLog.Blocked(logger, "SetPassword", "validation failed", userId.ToString());
+            return result.Failed(IdentityMessages.ValidationFailed, validation.Errors.Select(e => e.ErrorMessage).ToList(), HttpStatusCode.BadRequest);
+        }
+
+        var user = await unitOfWork.Users.GetAsync(u => u.Id == userId && !u.IsDeleted, disableTracking: false);
+        if (user is null)
+            return result.Failed(IdentityMessages.UserNotFound, HttpStatusCode.NotFound);
+
+        if (!string.IsNullOrWhiteSpace(user.PasswordHash))
+        {
+            if (string.IsNullOrWhiteSpace(dto.CurrentPassword))
+                return result.Failed(IdentityMessages.CurrentPasswordRequired, HttpStatusCode.BadRequest);
+            if (!hasher.Check(user.PasswordHash, dto.CurrentPassword).Verified)
+                return result.Failed(IdentityMessages.CurrentPasswordInvalid, HttpStatusCode.BadRequest);
+        }
+
+        user.PasswordHash = hasher.Hash(dto.Password);
         await unitOfWork.Users.UpdateAsync(user);
         await unitOfWork.SaveChangesAsync();
 
-        ApplicationLog.Completed(logger,
-            "User {UserId} logged in via OTP â€” session {SessionId}, role {Role}",
-            user.Id, sessionId, user.Role);
-
-        var response = new LoginDto
-        {
-            TokenModel = tokenData,
-            User = user.Adapt<UserDto>()
-        };
-
-        return result.Succeed(IdentityMessages.LoginSucceeded, response);
+        ApplicationLog.Completed(logger, "User {UserId} saved a password", user.Id);
+        return result.Succeed(IdentityMessages.PasswordSaved, ToUserDto(user));
     }
 
     public async Task<ApiOperationResult<LoginDto>> RefreshTokenAsync(RefreshTokenDto dto, string? accessToken)
@@ -498,6 +575,7 @@ public class UserService(
 
         var user = dto.Adapt<User>();
         user.Email = NormalizeEmail(dto.Email);
+        user.PasswordHash = string.IsNullOrWhiteSpace(dto.Password) ? null : hasher.Hash(dto.Password);
         user.CreatedAt = DateTime.UtcNow;
         user.Role = otpOptions.Value.DevBypassEnabled
             && !string.IsNullOrWhiteSpace(otpOptions.Value.SeedAdminPhone)
@@ -824,12 +902,62 @@ public class UserService(
             "User {UserId} loaded own profile",
             userId);
 
-        return result.Succeed(IdentityMessages.OperationSucceeded, user is null ? new UserDto() : user.Adapt<UserDto>());
+        return result.Succeed(IdentityMessages.OperationSucceeded, user is null ? new UserDto() : ToUserDto(user));
     }
 
     #endregion
 
     #region Private
+
+    private async Task<ApiOperationResult<LoginDto>> CompleteLoginAsync(
+        ApiOperationResult<LoginDto> result,
+        User user,
+        string method)
+    {
+        var sessionId = Guid.NewGuid();
+        var tokenData = tokenHelper.GenerateToken(
+            user.Id.ToString(),
+            user.PhoneNumber,
+            RoleClaimMapper.ToClaimRole(user.Role),
+            sessionId.ToString("N"));
+
+        await TrimActiveSessionsForLimitAsync(user.Id, CancellationToken.None);
+        await sessionCacheService.StoreSessionAsync(CreateSessionDescriptor(user.Id, sessionId), CancellationToken.None);
+
+        user.IsPhoneVerified = true;
+        user.LastLoginAt = DateTime.UtcNow;
+
+        var refreshToken = refreshTokenService.CreateNew(
+            userId: user.Id,
+            sessionId: sessionId,
+            familyId: Guid.NewGuid(),
+            parentTokenId: null,
+            rawRefreshToken: tokenData.RefreshToken,
+            expiresAt: tokenData.RefreshTokenExpiration,
+            requestContext: requestContext);
+
+        await unitOfWork.RefreshTokens.AddAsync(refreshToken);
+        await unitOfWork.UserSessions.AddAsync(CreateUserSession(user.Id, sessionId, refreshToken.Id));
+        await unitOfWork.Users.UpdateAsync(user);
+        await unitOfWork.SaveChangesAsync();
+
+        ApplicationLog.Completed(logger,
+            "User {UserId} logged in via {Method} — session {SessionId}, role {Role}",
+            user.Id, method, sessionId, user.Role);
+
+        return result.Succeed(IdentityMessages.LoginSucceeded, new LoginDto
+        {
+            TokenModel = tokenData,
+            User = ToUserDto(user)
+        });
+    }
+
+    private static UserDto ToUserDto(User user)
+    {
+        var dto = user.Adapt<UserDto>();
+        dto.HasPassword = !string.IsNullOrWhiteSpace(user.PasswordHash);
+        return dto;
+    }
 
     private static ApiOperationResult<LoginDto> BuildOtpFailure(
         ApiOperationResult<LoginDto> result,

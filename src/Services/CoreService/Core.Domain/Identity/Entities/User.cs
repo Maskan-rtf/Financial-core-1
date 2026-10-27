@@ -10,6 +10,7 @@ public class User : BaseEntity
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
     public string? NationalCode { get; set; }
+    public string? PasswordHash { get; set; }
     public UserRole Role { get; set; }
     public Guid? CompanyId { get; set; }
     public Company? Company { get; set; }

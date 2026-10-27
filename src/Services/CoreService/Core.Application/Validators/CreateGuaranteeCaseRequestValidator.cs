@@ -9,7 +9,6 @@ public sealed class CreateGuaranteeCaseRequestValidator : AbstractValidator<Crea
     public CreateGuaranteeCaseRequestValidator()
     {
         RuleFor(x => x.ApplicantType).IsInEnum();
-        RuleFor(x => x.Title).MaximumLength(256);
         RuleFor(x => x.CompanyId)
             .NotEmpty()
             .When(x => x.ApplicantType == ApplicantType.Company);

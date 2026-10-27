@@ -51,4 +51,15 @@ public static class IdentityMessages
     public const string OtpCodeRequired = "کد تایید الزامی است";
     public const string OtpCodeLength = "کد تایید باید 6 رقم باشد";
     public const string OtpCodeDigitsOnly = "کد تایید فقط باید شامل اعداد باشد";
+    public const string CaptchaInvalid = "کد امنیتی نادرست یا منقضی شده است.";
+    public const string PasswordRequired = "رمز عبور الزامی است.";
+    public const string PasswordTooWeak = "رمز عبور باید حداقل ۸ نویسه و شامل حرف و عدد باشد.";
+    public const string PasswordConfirmMismatch = "تکرار رمز عبور با رمز عبور یکسان نیست.";
+    public const string InvalidPassword = "رمز عبور نادرست است.";
+    public const string PasswordNotSet = "برای این حساب هنوز رمز عبور تنظیم نشده است. با کد یکبارمصرف وارد شوید.";
+    public const string PasswordLocked = "به دلیل چند تلاش اشتباه، ورود با رمز عبور موقتاً غیرفعال شده است.";
+    public const string CurrentPasswordRequired = "رمز عبور فعلی الزامی است.";
+    public const string CurrentPasswordInvalid = "رمز عبور فعلی نادرست است.";
+    public const string PasswordSaved = "رمز عبور ذخیره شد.";
+    public const string AccountInactive = "این حساب غیرفعال است.";
 }

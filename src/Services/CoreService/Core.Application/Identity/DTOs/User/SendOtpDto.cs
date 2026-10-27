@@ -9,6 +9,35 @@ namespace Core.Application.Identity.DTOs.User;
 public class SendOtpDto
 {
     public string PhoneNumber { get; set; } = string.Empty;
+    public string? CaptchaId { get; set; }
+    public string? CaptchaCode { get; set; }
+    public string? ResendToken { get; set; }
+}
+
+public class SendOtpResultDto
+{
+    public string ResendToken { get; set; } = string.Empty;
+}
+
+public class CaptchaChallengeDto
+{
+    public string CaptchaId { get; set; } = string.Empty;
+    public string Image { get; set; } = string.Empty;
+}
+
+public class LoginWithPasswordDto
+{
+    public string PhoneNumber { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
+    public string? CaptchaId { get; set; }
+    public string? CaptchaCode { get; set; }
+}
+
+public class SetPasswordDto
+{
+    public string Password { get; set; } = string.Empty;
+    public string ConfirmPassword { get; set; } = string.Empty;
+    public string? CurrentPassword { get; set; }
 }
 
 public class VerifyOtpDto
@@ -29,6 +58,7 @@ public class UserDto
     public int RoleNumber { get; set; }
     public bool IsActive { get; set; }
     public bool IsPhoneVerified { get; set; }
+    public bool HasPassword { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? LastLoginAt { get; set; }
 }
@@ -46,7 +76,7 @@ public class CreateUserDto
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
     public string? NationalCode { get; set; }
-   
+    public string? Password { get; set; }
 }
 
 public class UpdateUserDto

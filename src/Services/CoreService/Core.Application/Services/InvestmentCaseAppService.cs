@@ -87,8 +87,6 @@ public sealed class InvestmentCaseAppService(
             if (linkedCompany is not null)
                 entity.AssignCompany(linkedCompany.Id);
 
-            entity.SetTitle(request.Title);
-
             var processStart = await processManager.StartAsync(
                 new ProcessStartCommand(CaseModuleType.Investment, entity.Id),
                 cancellationToken);

@@ -8,7 +8,6 @@ public sealed class CreateLoanCaseRequestValidator : AbstractValidator<CreateLoa
     public CreateLoanCaseRequestValidator()
     {
         RuleFor(x => x.ApplicantType).IsInEnum();
-        RuleFor(x => x.Title).MaximumLength(256);
         RuleFor(x => x.CompanyId)
             .NotEmpty()
             .When(x => x.ApplicantType == Core.Domain.Enums.ApplicantType.Company);

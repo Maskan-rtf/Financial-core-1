@@ -82,8 +82,6 @@ public sealed class LoanCaseAppService(
             if (linkedCompany is not null)
                 entity.AssignCompany(linkedCompany.Id);
 
-            entity.SetTitle(request.Title);
-
             var processStart = await processManager.StartAsync(
                 new ProcessStartCommand(CaseModuleType.Loan, entity.Id),
                 ct);

@@ -20,6 +20,10 @@ public sealed class CompanyConfiguration : IEntityTypeConfiguration<Company>
         builder.Property(e => e.City).HasMaxLength(128);
         builder.Property(e => e.Province).HasMaxLength(128);
         builder.Property(e => e.PostalCode).HasMaxLength(32);
+        builder.Property(e => e.RepresentativeName).HasMaxLength(128);
+        builder.Property(e => e.RepresentativePhone).HasMaxLength(32);
+        builder.Property(e => e.CeoName).HasMaxLength(128);
+        builder.Property(e => e.CeoPhone).HasMaxLength(32);
 
         builder.HasQueryFilter(e => !e.IsDeleted && !e.OwnerUser.IsDeleted);
 

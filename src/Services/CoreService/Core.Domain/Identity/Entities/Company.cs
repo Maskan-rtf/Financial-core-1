@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using Core.Domain.Enums;
 
 namespace Core.Domain.Identity.Entities;
 
@@ -16,6 +17,13 @@ public sealed class Company : BaseEntity
     public string? City { get; set; }
     public string? Province { get; set; }
     public string? PostalCode { get; set; }
+    public CompanyLegalType? LegalType { get; set; }
+    public CompanyTechnologyType? TechnologyType { get; set; }
+    public TechnologyDomain? TechnologyDomain { get; set; }
+    public string? RepresentativeName { get; set; }
+    public string? RepresentativePhone { get; set; }
+    public string? CeoName { get; set; }
+    public string? CeoPhone { get; set; }
 
     public List<User> Users { get; set; } = [];
 }

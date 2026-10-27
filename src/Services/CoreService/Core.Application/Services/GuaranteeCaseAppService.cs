@@ -81,8 +81,6 @@ public sealed class GuaranteeCaseAppService(
             if (linkedCompany is not null)
                 entity.AssignCompany(linkedCompany.Id);
 
-            entity.SetTitle(request.Title);
-
             var processStart = await processManager.StartAsync(
                 new ProcessStartCommand(CaseModuleType.Guarantee, entity.Id),
                 ct);

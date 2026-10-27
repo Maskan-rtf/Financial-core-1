@@ -18,7 +18,14 @@ public sealed class CompanyDtoMapper : ICompanyDtoMapper
                 company.Address,
                 company.City,
                 company.Province,
-                company.PostalCode);
+                company.PostalCode,
+                company.LegalType,
+                company.TechnologyType,
+                company.TechnologyDomain,
+                company.RepresentativeName,
+                company.RepresentativePhone,
+                company.CeoName,
+                company.CeoPhone);
 
     public CompanyDto? MapFlat(
         Guid? companyId,

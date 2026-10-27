@@ -9,7 +9,6 @@ public sealed class CreateInvestmentCaseRequestValidator : AbstractValidator<Cre
     public CreateInvestmentCaseRequestValidator()
     {
         RuleFor(x => x.ApplicantType).IsInEnum();
-        RuleFor(x => x.Title).MaximumLength(256);
 
         When(x => x.ApplicantType == ApplicantType.Company, () =>
         {

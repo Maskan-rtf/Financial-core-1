@@ -17,6 +17,7 @@ using Core.Infrastructure.Identity.Identity;
 using Core.Infrastructure.Identity.Identity.TokenHandler;
 using Core.Infrastructure.Identity.Services;
 using Core.Infrastructure.Identity.Services.Authorization;
+using Core.Infrastructure.Identity.Services.Captcha;
 using Core.Infrastructure.Identity.Services.Hasher;
 using Core.Infrastructure.Identity.Services.Otp;
 using Core.Infrastructure.Identity.Services.Session;
@@ -43,6 +44,7 @@ public static class IdentityServiceCollectionExtensions
         builder.Services.AddScoped<ICurrentUserAccessor, HttpCurrentUserAccessor>();
 
         builder.Services.AddScoped<IUserService, UserService>();
+        builder.Services.AddSingleton<ICaptchaService, CaptchaService>();
         builder.Services.AddScoped<ISmsService, SmsService>();
         builder.Services.AddHttpClient();
 

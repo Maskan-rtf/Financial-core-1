@@ -13,6 +13,11 @@ namespace Core.API.Controllers;
 [Route("api/v{version:apiVersion}/identity/users")]
 public sealed class UserController(IUserService userService) : ApiControllerBase
 {
+    [HttpGet("captcha")]
+    [AllowAnonymous]
+    public Task<IActionResult> Captcha(CancellationToken ct)
+        => Execute(userService.CreateCaptchaAsync());
+
     [HttpPost("send-otp")]
     [AllowAnonymous]
     public Task<IActionResult> SendOtp([FromBody] SendOtpDto dto, CancellationToken ct)
@@ -22,6 +27,16 @@ public sealed class UserController(IUserService userService) : ApiControllerBase
     [AllowAnonymous]
     public Task<IActionResult> VerifyOtp([FromBody] VerifyOtpDto dto, CancellationToken ct)
         => Execute(userService.VerifyOtpAsync(dto));
+
+    [HttpPost("login-password")]
+    [AllowAnonymous]
+    public Task<IActionResult> LoginWithPassword([FromBody] LoginWithPasswordDto dto, CancellationToken ct)
+        => Execute(userService.LoginWithPasswordAsync(dto));
+
+    [HttpPost("password")]
+    [Authorize]
+    public Task<IActionResult> SetPassword([FromBody] SetPasswordDto dto, CancellationToken ct)
+        => Execute(userService.SetPasswordAsync(dto, ct));
 
     [HttpPost("refresh-token")]
     [AllowAnonymous]
