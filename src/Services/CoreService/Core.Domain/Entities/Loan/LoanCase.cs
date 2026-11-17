@@ -48,6 +48,7 @@ public sealed class LoanCase : AggregateRoot<Guid>, IAuditableEntity, ISoftDelet
 
     public List<LoanCaseDocument> Documents { get; private set; } = [];
     public List<LoanInstallment> Installments { get; private set; } = [];
+    public List<LoanDisbursementPlanItem> DisbursementPlanItems { get; private set; } = [];
     public List<LoanPayment> Payments { get; private set; } = [];
     public List<LoanCaseComment> Comments { get; private set; } = [];
     public List<LoanCaseWorkflowHistory> WorkflowHistory { get; private set; } = [];

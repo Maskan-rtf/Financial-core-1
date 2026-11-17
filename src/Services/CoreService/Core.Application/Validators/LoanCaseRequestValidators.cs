@@ -45,3 +45,17 @@ public sealed class MarkLoanInstallmentPaidRequestValidator : AbstractValidator<
         RuleFor(x => x.Notes).MaximumLength(2000);
     }
 }
+
+public sealed class UpsertLoanDisbursementPlanRequestValidator : AbstractValidator<UpsertLoanDisbursementPlanRequest>
+{
+    public UpsertLoanDisbursementPlanRequestValidator()
+    {
+        RuleFor(x => x.Items).NotNull();
+        RuleForEach(x => x.Items).ChildRules(item =>
+        {
+            item.RuleFor(x => x.StageNumber).InclusiveBetween(1, 9999);
+            item.RuleFor(x => x.Amount).GreaterThan(0);
+            item.RuleFor(x => x.Notes).MaximumLength(2000);
+        });
+    }
+}

@@ -64,6 +64,14 @@ public sealed record UpsertLoanInstallmentItemRequest(
 
 public sealed record UpsertLoanInstallmentsRequest(IReadOnlyList<UpsertLoanInstallmentItemRequest> Installments);
 
+public sealed record UpsertLoanDisbursementPlanItemRequest(
+    int StageNumber,
+    decimal Amount,
+    DateOnly? PlannedDate,
+    string? Notes);
+
+public sealed record UpsertLoanDisbursementPlanRequest(IReadOnlyList<UpsertLoanDisbursementPlanItemRequest> Items);
+
 public sealed record RegisterLoanPaymentRequest(
     decimal Amount,
     DateOnly PaymentDate,

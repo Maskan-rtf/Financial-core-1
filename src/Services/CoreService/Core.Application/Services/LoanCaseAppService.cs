@@ -366,6 +366,85 @@ public sealed class LoanCaseAppService(
         return Result.Ok();
     }
 
+    public async Task<Result<IEnumerable<LoanDisbursementPlanItemDto>>> ListDisbursementPlanAsync(
+        Guid caseId,
+        CancellationToken ct)
+    {
+        var auth = RequireUser();
+        if (auth.IsFailure) return Result<IEnumerable<LoanDisbursementPlanItemDto>>.Fail(auth.Error!);
+
+        var entity = await unitOfWork.LoanCases.GetScopedAsync(
+            caseId, auth.Value!, authorizationService.IsInternalUser, ct);
+
+        if (entity is null)
+            return Result<IEnumerable<LoanDisbursementPlanItemDto>>.Fail(Error.NotFound(ApiMessages.LoanCaseNotFound));
+
+        var items = await dbContext.LoanDisbursementPlanItems.AsNoTracking()
+            .Where(x => x.CaseId == caseId)
+            .OrderBy(x => x.StageNumber)
+            .Select(x => new LoanDisbursementPlanItemDto(
+                x.Id,
+                x.StageNumber,
+                x.Amount,
+                x.PlannedDate,
+                x.Notes))
+            .ToListAsync(ct);
+
+        return Result<IEnumerable<LoanDisbursementPlanItemDto>>.Ok(items);
+    }
+
+    public async Task<Result> UpsertDisbursementPlanAsync(
+        Guid caseId,
+        UpsertLoanDisbursementPlanRequest request,
+        CancellationToken ct)
+    {
+        var auth = RequireUser();
+        if (auth.IsFailure) return Result.Fail(auth.Error!);
+
+        var canManage =
+            authorizationService.HasPermission(LoanPermissions.ManageApprovalDetail)
+            || authorizationService.HasPermission(LoanPermissions.ManageInstallments);
+        if (!canManage)
+            return Result.Fail(Error.Forbidden(ApiMessages.NotAllowed));
+
+        var entity = await unitOfWork.LoanCases.GetScopedForTransitionAsync(
+            caseId, auth.Value!, isInternalUser: true, ct);
+
+        if (entity is null)
+            return Result.Fail(Error.NotFound(ApiMessages.LoanCaseNotFound));
+
+        if (entity.CurrentStatus is not (
+            LoanCaseStatus.PendingCreditReview or
+            LoanCaseStatus.RevisionRequestedByCredit or
+            LoanCaseStatus.PendingLegalRawContract))
+        {
+            return Result.Fail(Error.Conflict(ApiMessages.LoanDisbursementPlanNotEditable));
+        }
+
+        var items = request.Items ?? [];
+        var stageNumbers = items.Select(x => x.StageNumber).ToList();
+        if (stageNumbers.Count != stageNumbers.Distinct().Count())
+            return Result.Fail(Error.Validation("شماره مراحل برنامه پرداخت تکراری است."));
+
+        var existing = await dbContext.LoanDisbursementPlanItems.Where(x => x.CaseId == caseId).ToListAsync(ct);
+        dbContext.LoanDisbursementPlanItems.RemoveRange(existing);
+
+        var next = items
+            .OrderBy(x => x.StageNumber)
+            .Select(x => new LoanDisbursementPlanItem(
+                caseId,
+                x.StageNumber,
+                x.Amount,
+                x.PlannedDate,
+                x.Notes))
+            .ToList();
+
+        await dbContext.LoanDisbursementPlanItems.AddRangeAsync(next, ct);
+        await dbContext.LoanCases.TouchUpdatedAtAsync(caseId, clock.UtcNow, ct);
+        await unitOfWork.SaveChangesAsync(ct);
+        return Result.Ok();
+    }
+
     public Task<Result> CompleteLegalSetupAsync(Guid caseId, CancellationToken ct)
         => ApplyTransitionAsync(caseId, LoanWorkflowAction.SubmitInstallments, null, ct);
 

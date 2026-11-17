@@ -21,6 +21,8 @@ public interface ILoanCaseAppService
     Task<Result> CeoApproveInitialAsync(Guid caseId, string? comment, CancellationToken ct);
     Task<Result> CeoRejectInitialAsync(Guid caseId, string reason, CancellationToken ct);
     Task<Result> UpsertInstallmentsAsync(Guid caseId, UpsertLoanInstallmentsRequest request, CancellationToken ct);
+    Task<Result<IEnumerable<LoanDisbursementPlanItemDto>>> ListDisbursementPlanAsync(Guid caseId, CancellationToken ct);
+    Task<Result> UpsertDisbursementPlanAsync(Guid caseId, UpsertLoanDisbursementPlanRequest request, CancellationToken ct);
     Task<Result> CompleteLegalSetupAsync(Guid caseId, CancellationToken ct);
     Task<Result> SubmitSignedPackageAsync(Guid caseId, CancellationToken ct);
     Task<Result> ApproveLegalReviewAsync(Guid caseId, string? comment, string? internalComment, CancellationToken ct);

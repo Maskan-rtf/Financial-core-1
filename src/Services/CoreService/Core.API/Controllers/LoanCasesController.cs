@@ -136,6 +136,22 @@ public sealed class LoanCasesController(ILoanCaseAppService service) : ApiContro
         return Respond(result, LoanSuccessMessages.InstallmentsRetrieved);
     }
 
+    [HttpGet("{id:guid}/disbursement-plan")]
+    [Authorize]
+    public async Task<IActionResult> ListDisbursementPlan(Guid id, CancellationToken ct)
+    {
+        var result = await service.ListDisbursementPlanAsync(id, ct);
+        return Respond(result, LoanSuccessMessages.DisbursementPlanRetrieved);
+    }
+
+    [HttpPut("{id:guid}/disbursement-plan")]
+    [Authorize(Policy = "InternalOnly")]
+    public async Task<IActionResult> UpsertDisbursementPlan(Guid id, [FromBody] UpsertLoanDisbursementPlanRequest request, CancellationToken ct)
+    {
+        var result = await service.UpsertDisbursementPlanAsync(id, request, ct);
+        return Respond(result, LoanSuccessMessages.DisbursementPlanUpdated);
+    }
+
     [HttpPost("{id:guid}/legal/setup-complete")]
     [Authorize(Policy = "InternalOnly")]
     public async Task<IActionResult> CompleteLegalSetup(Guid id, CancellationToken ct)

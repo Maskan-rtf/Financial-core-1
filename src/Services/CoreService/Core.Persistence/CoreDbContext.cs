@@ -47,6 +47,7 @@ public sealed class CoreDbContext : DbContextBase, ICoreDbContext
     public DbSet<LoanApprovalDetail> LoanApprovalDetails => Set<LoanApprovalDetail>();
     public DbSet<LoanCaseDocument> LoanCaseDocuments => Set<LoanCaseDocument>();
     public DbSet<LoanInstallment> LoanInstallments => Set<LoanInstallment>();
+    public DbSet<LoanDisbursementPlanItem> LoanDisbursementPlanItems => Set<LoanDisbursementPlanItem>();
     public DbSet<LoanPayment> LoanPayments => Set<LoanPayment>();
     public DbSet<LoanCaseComment> LoanCaseComments => Set<LoanCaseComment>();
     public DbSet<LoanCaseWorkflowHistory> LoanCaseWorkflowHistories => Set<LoanCaseWorkflowHistory>();

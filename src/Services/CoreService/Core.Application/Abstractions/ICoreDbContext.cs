@@ -37,6 +37,7 @@ public interface ICoreDbContext
     DbSet<LoanApprovalDetail> LoanApprovalDetails { get; }
     DbSet<LoanCaseDocument> LoanCaseDocuments { get; }
     DbSet<LoanInstallment> LoanInstallments { get; }
+    DbSet<LoanDisbursementPlanItem> LoanDisbursementPlanItems { get; }
     DbSet<LoanPayment> LoanPayments { get; }
     DbSet<LoanCaseComment> LoanCaseComments { get; }
     DbSet<LoanCaseWorkflowHistory> LoanCaseWorkflowHistories { get; }

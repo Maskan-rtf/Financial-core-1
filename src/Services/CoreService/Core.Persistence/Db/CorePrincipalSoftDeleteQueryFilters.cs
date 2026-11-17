@@ -33,6 +33,7 @@ internal static class CorePrincipalSoftDeleteQueryFilters
         modelBuilder.ApplyFilterForSoftDeletePrincipal<LoanCaseComment, LoanCase>(e => e.Case);
         modelBuilder.ApplyFilterForSoftDeletePrincipal<LoanCaseWorkflowHistory, LoanCase>(e => e.Case);
         modelBuilder.ApplyFilterForSoftDeletePrincipal<LoanInstallment, LoanCase>(e => e.Case);
+        modelBuilder.ApplyFilterForSoftDeletePrincipal<LoanDisbursementPlanItem, LoanCase>(e => e.Case);
         modelBuilder.ApplyFilterForSoftDeletePrincipal<LoanPayment, LoanCase>(e => e.Case);
     }
 }

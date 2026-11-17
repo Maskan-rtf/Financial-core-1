@@ -113,6 +113,13 @@ public sealed record LoanInstallmentDto(
     bool IsPaid,
     DateTimeOffset? PaidAt);
 
+public sealed record LoanDisbursementPlanItemDto(
+    Guid Id,
+    int StageNumber,
+    decimal Amount,
+    DateOnly? PlannedDate,
+    string? Notes);
+
 public sealed record LoanPaymentDto(
     Guid Id,
     decimal Amount,

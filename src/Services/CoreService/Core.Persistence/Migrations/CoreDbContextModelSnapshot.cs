@@ -522,6 +522,13 @@ namespace Core.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("AttachmentDocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AttachmentFileName")
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)");
+
                     b.Property<Guid>("CaseId")
                         .HasColumnType("uuid");
 
@@ -1649,6 +1656,13 @@ namespace Core.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("AttachmentDocumentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AttachmentFileName")
+                        .HasMaxLength(260)
+                        .HasColumnType("character varying(260)");
+
                     b.Property<Guid>("CaseId")
                         .HasColumnType("uuid");
 
@@ -1889,6 +1903,45 @@ namespace Core.Persistence.Migrations
                     b.HasIndex("InstallmentDate", "IsPaid", "IsGracePeriod");
 
                     b.ToTable("loan_installments", "Loan");
+                });
+
+            modelBuilder.Entity("Core.Domain.Entities.Loan.LoanDisbursementPlanItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("CaseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("timezone('utc', now())");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateOnly?>("PlannedDate")
+                        .HasColumnType("date");
+
+                    b.Property<int>("StageNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CaseId", "StageNumber")
+                        .IsUnique();
+
+                    b.ToTable("loan_disbursement_plan_items", "Loan");
                 });
 
             modelBuilder.Entity("Core.Domain.Entities.Loan.LoanPayment", b =>
@@ -2631,6 +2684,17 @@ namespace Core.Persistence.Migrations
                     b.Navigation("Case");
                 });
 
+            modelBuilder.Entity("Core.Domain.Entities.Loan.LoanDisbursementPlanItem", b =>
+                {
+                    b.HasOne("Core.Domain.Entities.Loan.LoanCase", "Case")
+                        .WithMany("DisbursementPlanItems")
+                        .HasForeignKey("CaseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Case");
+                });
+
             modelBuilder.Entity("Core.Domain.Entities.Loan.LoanPayment", b =>
                 {
                     b.HasOne("Core.Domain.Entities.Loan.LoanCase", "Case")
@@ -2719,6 +2783,8 @@ namespace Core.Persistence.Migrations
                     b.Navigation("ApprovalDetail");
 
                     b.Navigation("Comments");
+
+                    b.Navigation("DisbursementPlanItems");
 
                     b.Navigation("Documents");
 

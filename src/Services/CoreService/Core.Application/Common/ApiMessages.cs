@@ -117,6 +117,7 @@ public static class ApiMessages
     public const string LoanFinalContractMissing = "قرارداد نهایی بارگذاری نشده است.";
     public const string LoanApprovalDetailNotEditable = "در وضعیت فعلی امکان ویرایش فرم تصویب وجود ندارد.";
     public const string LoanInstallmentsNotEditable = "در وضعیت فعلی امکان ویرایش اقساط وجود ندارد.";
+    public const string LoanDisbursementPlanNotEditable = "در وضعیت فعلی امکان ویرایش برنامه پرداخت تسهیلات وجود ندارد.";
     public const string LoanRepaymentIncomplete = "همه اقساط هنوز پرداخت نشده‌اند.";
 
     public const string InvalidCaseModule = "ماژول پرونده نامعتبر است.";
