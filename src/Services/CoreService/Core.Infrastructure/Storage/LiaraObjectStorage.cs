@@ -79,6 +79,37 @@ public sealed class LiaraObjectStorage : ILiaraObjectStorage
         }, cancellationToken);
     }
 
+    public async Task EnsureBrowserCorsAsync(IEnumerable<string> allowedOrigins, CancellationToken cancellationToken)
+    {
+        var origins = allowedOrigins
+            .Select(x => (x ?? string.Empty).Trim().TrimEnd('/'))
+            .Where(x => x.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (origins.Count == 0)
+            return;
+
+        await _s3Client.PutCORSConfigurationAsync(new PutCORSConfigurationRequest
+        {
+            BucketName = _bucketName,
+            Configuration = new CORSConfiguration
+            {
+                Rules =
+                [
+                    new CORSRule
+                    {
+                        AllowedOrigins = origins,
+                        AllowedMethods = ["GET", "PUT", "POST", "HEAD", "DELETE"],
+                        AllowedHeaders = ["*"],
+                        ExposeHeaders = ["ETag", "x-amz-request-id", "x-amz-version-id"],
+                        MaxAgeSeconds = 3600
+                    }
+                ]
+            }
+        }, cancellationToken);
+    }
+
     public Task<(string Url, DateTimeOffset ExpiresAtUtc)> PresignGetAsync(string key, TimeSpan expiresIn, CancellationToken cancellationToken)
     {
         var expiresAt = _clock.UtcNow.Add(expiresIn);

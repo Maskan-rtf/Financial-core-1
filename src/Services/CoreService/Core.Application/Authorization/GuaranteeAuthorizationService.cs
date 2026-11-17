@@ -16,6 +16,7 @@ public sealed class GuaranteeAuthorizationService(IUserContext userContext) : IG
         GuaranteePermissions.ViewInternalComments,
         GuaranteePermissions.CreateInternalComment,
         GuaranteePermissions.ManageApprovalForm,
+        GuaranteePermissions.UploadDocuments,
         GuaranteePermissions.DownloadDocuments
     ];
 

@@ -16,6 +16,7 @@ public sealed class LoanAuthorizationService(IUserContext userContext) : ILoanAu
         LoanPermissions.ViewInternalComments,
         LoanPermissions.CreateInternalComment,
         LoanPermissions.ManageApprovalDetail,
+        LoanPermissions.UploadDocuments,
         LoanPermissions.DownloadDocuments
     ];
 

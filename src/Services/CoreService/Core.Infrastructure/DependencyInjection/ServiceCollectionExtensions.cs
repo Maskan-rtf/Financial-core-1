@@ -53,6 +53,7 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<ILiaraObjectStorage, LiaraObjectStorage>();
         services.AddScoped<IDocumentStorage, LiaraDocumentStorage>();
+        services.AddHostedService<LiaraStorageCorsBootstrapHostedService>();
 
         services.Configure<SmsOptions>(configuration.GetSection("Sms"));
         services.Configure<WorkflowSmsOptions>(configuration.GetSection(WorkflowSmsOptions.SectionName));

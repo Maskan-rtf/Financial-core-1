@@ -91,9 +91,8 @@ public sealed class LoanWorkflowCommandExecutor(
                     return Result.Fail(Error.Conflict(LoanDocumentRequirements.FormatDataEntryDocumentsIncompleteMessage(missingDocs)));
                 break;
 
+            // Credit review only checks the application; the approval form is filled in the next stage.
             case LoanWorkflowAction.Approve when caseEntity.CurrentStatus == LoanCaseStatus.PendingCreditReview:
-                if (!LoanApprovalDetailCompleteness.IsComplete(caseEntity.ApprovalDetail))
-                    return Result.Fail(Error.Conflict(ApiMessages.LoanApprovalDetailIncomplete));
                 break;
 
             case LoanWorkflowAction.SubmitInstallments:
