@@ -10,6 +10,7 @@ public interface IUserService
     Task<ApiOperationResult<LoginDto>> VerifyOtpAsync(VerifyOtpDto dto);
     Task<ApiOperationResult<LoginDto>> LoginWithPasswordAsync(LoginWithPasswordDto dto);
     Task<ApiOperationResult<UserDto>> SetPasswordAsync(SetPasswordDto dto, CancellationToken cancellationToken = default);
+    Task<ApiOperationResult<UserDto>> AdminSetPasswordAsync(Guid id, AdminSetPasswordDto dto, CancellationToken cancellationToken = default);
     Task<ApiOperationResult<LoginDto>> RefreshTokenAsync(RefreshTokenDto dto, string? accessToken);
     Task<ApiOperationResult<UserDto>> LogoutCurrentSessionAsync(CancellationToken cancellationToken = default);
     Task<ApiOperationResult<UserDto>> RevokeSessionAsync(RevokeSessionDto dto, CancellationToken cancellationToken = default);

@@ -1,3 +1,4 @@
+using System.IO;
 using BuildingBlocks.Application.Errors;
 using BuildingBlocks.Application.Results;
 using BuildingBlocks.Domain.Abstractions;
@@ -5,6 +6,7 @@ using Core.Application.Abstractions;
 using Core.Application.Common;
 using Core.Application.Logging;
 using Core.Application.Requests;
+using Core.Application.Responses;
 using Core.Domain.Identity;
 using Core.Domain.Identity.Entities;
 using MapsterMapper;
@@ -19,12 +21,17 @@ public interface ICompanyAppService
     Task<Result<CompanyDto>> CreateAsync(SaveCompanyRequest request, CancellationToken cancellationToken);
     Task<Result<CompanyDto>> UpdateAsync(Guid companyId, SaveCompanyRequest request, CancellationToken cancellationToken);
     Task<Result> DeleteAsync(Guid companyId, CancellationToken cancellationToken);
+    Task<Result<PresignUploadResponse>> PresignLogoUploadAsync(Guid companyId, PresignCompanyLogoRequest request, CancellationToken cancellationToken);
+    Task<Result<CompanyDto>> ConfirmLogoUploadAsync(Guid companyId, ConfirmCompanyLogoRequest request, CancellationToken cancellationToken);
+    Task<Result<PresignDownloadResponse>> PresignLogoDownloadAsync(Guid companyId, CancellationToken cancellationToken);
+    Task<Result<DocumentDownloadFileResult>> DownloadLogoFileAsync(Guid companyId, CancellationToken cancellationToken);
 }
 
 public sealed class CompanyAppService(
     ICoreUnitOfWork unitOfWork,
     ICurrentUserAccessor currentUser,
     IUserContext userContext,
+    IDocumentStorage documentStorage,
     IMapper mapper,
     ILogger<CompanyAppService> logger) : ICompanyAppService
 {
@@ -58,9 +65,9 @@ public sealed class CompanyAppService(
             return Result<PagedResult<CompanyAdminDto>>.Fail(Error.Unauthorized(ApiMessages.AuthenticationRequired));
         }
 
-        if (!await CanManageAllCompaniesAsync(userId, cancellationToken))
+        if (!await CanListAllCompaniesAsync(userId, cancellationToken))
         {
-            ApplicationLog.Blocked(logger, "GetAllCompanies", "user lacks privilege", userId.ToString());
+            ApplicationLog.Blocked(logger, "GetAllCompanies", "applicant cannot list all companies", userId.ToString());
             return Result<PagedResult<CompanyAdminDto>>.Fail(Error.Forbidden(ApiMessages.CompanyAccessDenied));
         }
 
@@ -91,7 +98,15 @@ public sealed class CompanyAppService(
             c.RepresentativeName,
             c.RepresentativePhone,
             c.CeoName,
-            c.CeoPhone)).ToArray();
+            c.CeoPhone,
+            c.RegistrationDate,
+            c.RegistrationPlace,
+            c.InitialCapitalMillions,
+            c.CurrentCapitalMillions,
+            c.ActivitySubject,
+            c.Website,
+            c.CompanyEmail,
+            !string.IsNullOrWhiteSpace(c.LogoS3Key))).ToArray();
 
         ApplicationLog.Completed(logger,
             "User {UserId} listed {Count} of {Total} companies",
@@ -209,6 +224,108 @@ public sealed class CompanyAppService(
         return Result.Ok();
     }
 
+    public async Task<Result<PresignUploadResponse>> PresignLogoUploadAsync(
+        Guid companyId,
+        PresignCompanyLogoRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+            return Result<PresignUploadResponse>.Fail(Error.Unauthorized(ApiMessages.AuthenticationRequired));
+
+        var company = await unitOfWork.Companies.GetByIdAsync(companyId, asNoTracking: true, cancellationToken);
+        if (company is null)
+            return Result<PresignUploadResponse>.Fail(Error.NotFound(ApiMessages.CompanyNotFound));
+
+        if (company.OwnerUserId != userId && !await CanManageAllCompaniesAsync(userId, cancellationToken))
+            return Result<PresignUploadResponse>.Fail(Error.Forbidden(ApiMessages.CompanyAccessDenied));
+
+        var ext = GetSafeImageExtension(request.FileName, request.MimeType);
+        if (ext is null)
+            return Result<PresignUploadResponse>.Fail(Error.Validation(ApiMessages.FileTypeNotAllowed));
+
+        var s3Key = $"companies/{companyId}/logo/{Guid.NewGuid():N}{ext}";
+        var (url, expiresAt) = await documentStorage.PresignUploadAsync(s3Key, request.MimeType, TimeSpan.FromMinutes(15), cancellationToken);
+
+        return Result<PresignUploadResponse>.Ok(new PresignUploadResponse(s3Key, url, expiresAt, 1));
+    }
+
+    public async Task<Result<CompanyDto>> ConfirmLogoUploadAsync(
+        Guid companyId,
+        ConfirmCompanyLogoRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+            return Result<CompanyDto>.Fail(Error.Unauthorized(ApiMessages.AuthenticationRequired));
+
+        if (string.IsNullOrWhiteSpace(request.S3Key))
+            return Result<CompanyDto>.Fail(Error.Validation(ApiMessages.InvalidDocumentKey));
+
+        var company = await unitOfWork.Companies.GetByIdAsync(companyId, asNoTracking: false, cancellationToken);
+        if (company is null)
+            return Result<CompanyDto>.Fail(Error.NotFound(ApiMessages.CompanyNotFound));
+
+        if (company.OwnerUserId != userId && !await CanManageAllCompaniesAsync(userId, cancellationToken))
+            return Result<CompanyDto>.Fail(Error.Forbidden(ApiMessages.CompanyAccessDenied));
+
+        var expectedPrefix = $"companies/{companyId}/logo/";
+        if (!request.S3Key.StartsWith(expectedPrefix, StringComparison.Ordinal))
+            return Result<CompanyDto>.Fail(Error.Validation(ApiMessages.InvalidDocumentKey));
+
+        if (!await documentStorage.ExistsAsync(request.S3Key, cancellationToken))
+            return Result<CompanyDto>.Fail(Error.NotFound(ApiMessages.DocumentNotFound));
+
+        company.LogoS3Key = request.S3Key.Trim();
+        unitOfWork.Companies.Update(company);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return Result<CompanyDto>.Ok(mapper.Map<CompanyDto>(company));
+    }
+
+    public async Task<Result<PresignDownloadResponse>> PresignLogoDownloadAsync(Guid companyId, CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+            return Result<PresignDownloadResponse>.Fail(Error.Unauthorized(ApiMessages.AuthenticationRequired));
+
+        var company = await unitOfWork.Companies.GetByIdAsync(companyId, asNoTracking: true, cancellationToken);
+        if (company is null)
+            return Result<PresignDownloadResponse>.Fail(Error.NotFound(ApiMessages.CompanyNotFound));
+
+        if (company.OwnerUserId != userId && !await CanManageAllCompaniesAsync(userId, cancellationToken))
+            return Result<PresignDownloadResponse>.Fail(Error.Forbidden(ApiMessages.CompanyAccessDenied));
+
+        if (string.IsNullOrWhiteSpace(company.LogoS3Key))
+            return Result<PresignDownloadResponse>.Fail(Error.NotFound(ApiMessages.DocumentNotFound));
+
+        var (url, expiresAt) = await documentStorage.PresignDownloadAsync(company.LogoS3Key, TimeSpan.FromMinutes(10), cancellationToken);
+        var fileName = Path.GetFileName(company.LogoS3Key);
+        return Result<PresignDownloadResponse>.Ok(new PresignDownloadResponse(url, expiresAt, fileName));
+    }
+
+    public async Task<Result<DocumentDownloadFileResult>> DownloadLogoFileAsync(Guid companyId, CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+            return Result<DocumentDownloadFileResult>.Fail(Error.Unauthorized(ApiMessages.AuthenticationRequired));
+
+        var company = await unitOfWork.Companies.GetByIdAsync(companyId, asNoTracking: true, cancellationToken);
+        if (company is null)
+            return Result<DocumentDownloadFileResult>.Fail(Error.NotFound(ApiMessages.CompanyNotFound));
+
+        if (company.OwnerUserId != userId && !await CanManageAllCompaniesAsync(userId, cancellationToken))
+            return Result<DocumentDownloadFileResult>.Fail(Error.Forbidden(ApiMessages.CompanyAccessDenied));
+
+        if (string.IsNullOrWhiteSpace(company.LogoS3Key))
+            return Result<DocumentDownloadFileResult>.Fail(Error.NotFound(ApiMessages.DocumentNotFound));
+
+        var metadata = await documentStorage.GetMetadataAsync(company.LogoS3Key, cancellationToken);
+        var contentType = metadata?.ContentType;
+        if (string.IsNullOrWhiteSpace(contentType))
+            contentType = "application/octet-stream";
+
+        var stream = await documentStorage.OpenReadAsync(company.LogoS3Key, cancellationToken);
+        var fileName = Path.GetFileName(company.LogoS3Key);
+        return Result<DocumentDownloadFileResult>.Ok(new DocumentDownloadFileResult(stream, contentType, fileName));
+    }
+
     #endregion
 
     #region Private
@@ -217,6 +334,29 @@ public sealed class CompanyAppService(
     {
         userId = currentUser.UserId ?? Guid.Empty;
         return userId != Guid.Empty;
+    }
+
+    private async Task<bool> CanListAllCompaniesAsync(Guid userId, CancellationToken _)
+    {
+        if (HasNonApplicantRole())
+            return true;
+
+        var user = await unitOfWork.Users.GetByIdAsync(userId);
+        return user is not null && user.Role != UserRole.Applicant;
+    }
+
+    private bool HasNonApplicantRole()
+    {
+        foreach (var role in userContext.Roles)
+        {
+            var normalized = UserRoleClaims.Normalize(role);
+            if (normalized.Equals("CEO", StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (UserRoleClaims.TryParse(normalized, out var parsed) && parsed != UserRole.Applicant)
+                return true;
+        }
+
+        return false;
     }
 
     private async Task<bool> CanManageAllCompaniesAsync(Guid userId, CancellationToken cancellationToken)
@@ -266,6 +406,34 @@ public sealed class CompanyAppService(
         company.RepresentativePhone = request.RepresentativePhone.Trim();
         company.CeoName = request.CeoName.Trim();
         company.CeoPhone = request.CeoPhone.Trim();
+        company.RegistrationDate = request.RegistrationDate;
+        company.RegistrationPlace = string.IsNullOrWhiteSpace(request.RegistrationPlace) ? null : request.RegistrationPlace.Trim();
+        company.InitialCapitalMillions = request.InitialCapitalMillions;
+        company.CurrentCapitalMillions = request.CurrentCapitalMillions;
+        company.ActivitySubject = string.IsNullOrWhiteSpace(request.ActivitySubject) ? null : request.ActivitySubject.Trim();
+        company.Website = string.IsNullOrWhiteSpace(request.Website) ? null : request.Website.Trim();
+        company.CompanyEmail = string.IsNullOrWhiteSpace(request.CompanyEmail) ? null : request.CompanyEmail.Trim();
+    }
+
+    private static string? GetSafeImageExtension(string fileName, string mimeType)
+    {
+        var ext = Path.GetExtension(fileName);
+        if (string.IsNullOrWhiteSpace(ext))
+        {
+            ext = mimeType.ToLowerInvariant() switch
+            {
+                "image/jpeg" => ".jpg",
+                "image/png" => ".png",
+                "image/webp" => ".webp",
+                "image/gif" => ".gif",
+                _ => null
+            };
+        }
+
+        if (ext is null) return null;
+
+        ext = ext.ToLowerInvariant();
+        return ext is ".jpg" or ".jpeg" or ".png" or ".webp" or ".gif" ? ext : null;
     }
 
     private static string? FormatOwnerName(User? owner)

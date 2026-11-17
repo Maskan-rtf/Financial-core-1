@@ -17,16 +17,16 @@ public interface ILoanCaseAppService
     Task<Result> SubmitApplicationAsync(Guid caseId, string? comment, CancellationToken ct);
     Task<Result> UpdateApprovalDetailAsync(Guid caseId, UpdateLoanApprovalDetailRequest request, CancellationToken ct);
     Task<Result> ApproveCreditReviewAsync(Guid caseId, string? comment, string? internalComment, CancellationToken ct);
-    Task<Result> RequestCreditRevisionAsync(Guid caseId, string message, CancellationToken ct);
+    Task<Result> RequestCreditRevisionAsync(Guid caseId, string message, CancellationToken ct, Guid? attachmentDocumentId = null);
     Task<Result> CeoApproveInitialAsync(Guid caseId, string? comment, CancellationToken ct);
     Task<Result> CeoRejectInitialAsync(Guid caseId, string reason, CancellationToken ct);
     Task<Result> UpsertInstallmentsAsync(Guid caseId, UpsertLoanInstallmentsRequest request, CancellationToken ct);
     Task<Result> CompleteLegalSetupAsync(Guid caseId, CancellationToken ct);
     Task<Result> SubmitSignedPackageAsync(Guid caseId, CancellationToken ct);
     Task<Result> ApproveLegalReviewAsync(Guid caseId, string? comment, string? internalComment, CancellationToken ct);
-    Task<Result> RequestLegalRevisionAsync(Guid caseId, string message, CancellationToken ct);
+    Task<Result> RequestLegalRevisionAsync(Guid caseId, string message, CancellationToken ct, Guid? attachmentDocumentId = null);
     Task<Result> ApproveFinancialReviewAsync(Guid caseId, string? comment, string? internalComment, CancellationToken ct);
-    Task<Result> RequestFinancialRevisionAsync(Guid caseId, string message, CancellationToken ct);
+    Task<Result> RequestFinancialRevisionAsync(Guid caseId, string message, CancellationToken ct, Guid? attachmentDocumentId = null);
     Task<Result> ConfirmFinalContractUploadedAsync(Guid caseId, CancellationToken ct);
     Task<Result> CeoApproveFinalAsync(Guid caseId, string? comment, CancellationToken ct);
     Task<Result> CeoRejectFinalAsync(Guid caseId, string reason, CancellationToken ct);
@@ -38,6 +38,7 @@ public interface ILoanCaseAppService
     Task<Result<PresignLoanUploadResponse>> PresignDocumentUploadAsync(Guid caseId, PresignLoanUploadRequest request, CancellationToken ct);
     Task<Result<LoanCaseDocumentDto>> ConfirmDocumentUploadedAsync(Guid caseId, string s3Key, string? originalFileName, CancellationToken ct);
     Task<Result<IEnumerable<LoanCaseDocumentDto>>> ListDocumentsAsync(Guid caseId, CancellationToken ct);
+    Task<Result> DeleteDocumentAsync(Guid caseId, Guid documentId, CancellationToken ct);
     Task<Result<DocumentDownloadFileResult>> DownloadDocumentFileAsync(Guid caseId, Guid documentId, CancellationToken ct);
     Task<Result<IEnumerable<LoanCaseCommentDto>>> ListCommentsAsync(Guid caseId, bool includeInternal, CancellationToken ct);
 }

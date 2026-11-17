@@ -48,6 +48,15 @@ public sealed class LoanCaseComment : Entity<Guid>, IAuditableEntity
     public LoanCaseStatus? WorkflowStatusAtCreation { get; private set; }
 
     public Guid? ParentId { get; private set; }
+    public Guid? AttachmentDocumentId { get; private set; }
+    public string? AttachmentFileName { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
     public DateTimeOffset? UpdatedAt { get; private set; }
+
+    public void AttachDocument(Guid documentId, string fileName)
+    {
+        AttachmentDocumentId = documentId;
+        AttachmentFileName = string.IsNullOrWhiteSpace(fileName) ? null : fileName.Trim();
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
 }

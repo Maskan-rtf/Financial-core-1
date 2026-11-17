@@ -38,6 +38,11 @@ public sealed class UserController(IUserService userService) : ApiControllerBase
     public Task<IActionResult> SetPassword([FromBody] SetPasswordDto dto, CancellationToken ct)
         => Execute(userService.SetPasswordAsync(dto, ct));
 
+    [HttpPost("{id:guid}/password")]
+    [Authorize(Policy = "AdminOnly")]
+    public Task<IActionResult> AdminSetPassword(Guid id, [FromBody] AdminSetPasswordDto dto, CancellationToken ct)
+        => Execute(userService.AdminSetPasswordAsync(id, dto, ct));
+
     [HttpPost("refresh-token")]
     [AllowAnonymous]
     public Task<IActionResult> RefreshToken([FromBody] RefreshTokenDto dto, CancellationToken ct)

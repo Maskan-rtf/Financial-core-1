@@ -8,12 +8,16 @@ public static class GuaranteeDocumentRequirements
     /// <summary>Same set the applicant form marks required, before type-specific extras.</summary>
     public static readonly GuaranteeDocumentType[] RequiredForDataEntrySubmit =
     [
-        GuaranteeDocumentType.CaseFormationFeeReceipt,
         GuaranteeDocumentType.EstablishmentGazette,
         GuaranteeDocumentType.CeoBoardIdCards,
         GuaranteeDocumentType.FinancialStatements3Years,
         GuaranteeDocumentType.ActivityLicenses,
-        GuaranteeDocumentType.CreditInquiryResult
+        GuaranteeDocumentType.CreditInquiryResult,
+        GuaranteeDocumentType.CreditInformationForm,
+        GuaranteeDocumentType.BankAccountTurnover,
+        GuaranteeDocumentType.CollateralDocuments,
+        GuaranteeDocumentType.QuarterlySalesTaxReports,
+        GuaranteeDocumentType.EmployeeInsuranceList
     ];
 
     public static IEnumerable<GuaranteeDocumentType> GetRequiredForDataEntrySubmit(GuaranteeType? guaranteeType)
@@ -55,9 +59,11 @@ public static class GuaranteeDocumentRequirements
         GuaranteeDocumentType.TenderAnnouncement => "تصویر آگهی مناقصه/مزایده",
         GuaranteeDocumentType.BaseContractImage => "تصویر قرارداد پایه",
         GuaranteeDocumentType.CaseFormationAttachmentForm => "فرم پیوست جهت تشکیل پرونده",
-        GuaranteeDocumentType.CompanyIntroductionDocs => "اسناد معرفی شرکت",
+        GuaranteeDocumentType.CompanyIntroductionDocs => "اسناد معرفی شرکت (کاتالوگ، چارت سازمانی و ...)",
         GuaranteeDocumentType.LeaseOrOwnershipDeed => "قرارداد اجاره یا سند مالکیت محل شرکت",
         GuaranteeDocumentType.FeasibilityReport => "گزارش امکان‌سنجی فنی و اقتصادی",
+        GuaranteeDocumentType.ProjectProposal => "پروپوزال طرح درخواستی",
+        GuaranteeDocumentType.RevisionRequestAttachment => "پیوست درخواست اصلاح",
         GuaranteeDocumentType.SalesContractsScan => "اسکن قراردادهای فروش و تاییدیه‌ها",
         GuaranteeDocumentType.CreditInquiryResult => "نتیجه استعلام به‌روز شرکت و مدیران از سامانه شرکت اعتبارسنجی ایران",
         GuaranteeDocumentType.DraftContract => "پیش‌قرارداد (قرارداد خام)",
@@ -79,6 +85,10 @@ public static class GuaranteeDocumentRequirements
         GuaranteeDocumentType.CreditCommitteeMinutes => "صورتجلسه کمیته اعتباری",
         GuaranteeDocumentType.SiteVisitReport => "گزارش بازدید از محل",
         GuaranteeDocumentType.GuaranteeDeliveryReceipt => "رسید تحویل ضمانت‌نامه",
+        GuaranteeDocumentType.AssetOwnershipDocuments => "تصویر اسناد دارایی شرکت، مدیران و ضامنین",
+        GuaranteeDocumentType.CollateralDocuments => "مستندات وثایق قابل ارائه",
+        GuaranteeDocumentType.QuarterlySalesTaxReports => "گزارش‌های فروش فصلی سال جاری از سامانه مالیاتی",
+        GuaranteeDocumentType.EmployeeInsuranceList => "آخرین لیست بیمه کارکنان",
         GuaranteeDocumentType.Other => "سایر",
         _ => type.ToString()
     };

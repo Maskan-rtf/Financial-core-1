@@ -22,11 +22,11 @@ public interface IGuaranteeCaseAppService
     Task<Result> ApproveAmendmentAsync(Guid caseId, string? comment, string? internalComment, CancellationToken ct);
     Task<Result> ApproveCancellationAsync(Guid caseId, ApproveGuaranteeCancellationRequest request, CancellationToken ct);
     Task<Result> RejectAmendmentAsync(Guid caseId, string reason, CancellationToken ct);
-    Task<Result> RequestAmendmentRevisionAsync(Guid caseId, string message, CancellationToken ct);
+    Task<Result> RequestAmendmentRevisionAsync(Guid caseId, string message, CancellationToken ct, Guid? attachmentDocumentId = null);
     Task<Result> BeginDataEntryAsync(Guid caseId, CancellationToken ct);
     Task<Result> SubmitApplicationAsync(Guid caseId, string? comment, CancellationToken ct);
     Task<Result> ApproveCreditReviewAsync(Guid caseId, string? comment, string? internalComment, CancellationToken ct);
-    Task<Result> RequestCreditRevisionAsync(Guid caseId, string message, CancellationToken ct);
+    Task<Result> RequestCreditRevisionAsync(Guid caseId, string message, CancellationToken ct, Guid? attachmentDocumentId = null);
     Task<Result<GuaranteeFundCreditLimitDto>> GetFundCreditLimitAsync(CancellationToken ct);
 
     Task<Result<GuaranteeFundCreditLimitDto>> SetFundCreditLimitAsync(
@@ -51,7 +51,7 @@ public interface IGuaranteeCaseAppService
     Task<Result> ConfirmDraftContractUploadedAsync(Guid caseId, CancellationToken ct);
     Task<Result> SubmitSignedPackageAsync(Guid caseId, CancellationToken ct);
     Task<Result> ApproveAttachmentsAsync(Guid caseId, string? comment, string? internalComment, CancellationToken ct);
-    Task<Result> RequestAttachmentRevisionAsync(Guid caseId, string message, CancellationToken ct);
+    Task<Result> RequestAttachmentRevisionAsync(Guid caseId, string message, CancellationToken ct, Guid? attachmentDocumentId = null);
     Task<Result> ConfirmFinalContractUploadedAsync(Guid caseId, CancellationToken ct);
     Task<Result> CeoApproveFinalAsync(Guid caseId, string? comment, CancellationToken ct);
     Task<Result> CeoRejectOrCancelFinalAsync(Guid caseId, string reason, bool cancel, CancellationToken ct);
@@ -59,6 +59,7 @@ public interface IGuaranteeCaseAppService
     Task<Result<PresignGuaranteeUploadResponse>> PresignDocumentUploadAsync(Guid caseId, PresignGuaranteeUploadRequest request, CancellationToken ct);
     Task<Result<GuaranteeCaseDocumentDto>> ConfirmDocumentUploadedAsync(Guid caseId, string s3Key, string? originalFileName, CancellationToken ct);
     Task<Result<IEnumerable<GuaranteeCaseDocumentDto>>> ListDocumentsAsync(Guid caseId, CancellationToken ct);
+    Task<Result> DeleteDocumentAsync(Guid caseId, Guid documentId, CancellationToken ct);
     Task<Result<DocumentDownloadFileResult>> DownloadDocumentFileAsync(Guid caseId, Guid documentId, CancellationToken ct);
     Task<Result<IEnumerable<GuaranteeCaseCommentDto>>> ListCommentsAsync(Guid caseId, bool includeInternal, CancellationToken ct);
 }

@@ -10,9 +10,11 @@ using Elsa.Workflows.Models;
 
 namespace Core.Workflow.Workflows;
 
-public sealed class InvestmentCaseWorkflow : WorkflowBase
+public sealed class InvestmentCaseWorkflow : WorkflowBase, ICodeFirstWorkflow
 {
     public const string DefinitionId = $"{nameof(Core)}.{nameof(Workflow)}.{nameof(Workflows)}.{nameof(InvestmentCaseWorkflow)}";
+
+    public void PopulateBuilder(IWorkflowBuilder builder) => Build(builder);
 
     protected override void Build(IWorkflowBuilder builder)
     {

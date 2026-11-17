@@ -316,8 +316,8 @@ public sealed class LoanCaseAppService(
     public Task<Result> ApproveCreditReviewAsync(Guid caseId, string? comment, string? internalComment, CancellationToken ct)
         => ApplyTransitionAsync(caseId, LoanWorkflowAction.Approve, comment, ct, internalComment);
 
-    public Task<Result> RequestCreditRevisionAsync(Guid caseId, string message, CancellationToken ct)
-        => ApplyTransitionAsync(caseId, LoanWorkflowAction.RequestRevision, message, ct);
+    public Task<Result> RequestCreditRevisionAsync(Guid caseId, string message, CancellationToken ct, Guid? attachmentDocumentId = null)
+        => ApplyRevisionTransitionAsync(caseId, message, attachmentDocumentId, ct);
 
     public Task<Result> CeoApproveInitialAsync(Guid caseId, string? comment, CancellationToken ct)
         => ApplyTransitionAsync(caseId, LoanWorkflowAction.Approve, comment, ct);
@@ -375,14 +375,14 @@ public sealed class LoanCaseAppService(
     public Task<Result> ApproveLegalReviewAsync(Guid caseId, string? comment, string? internalComment, CancellationToken ct)
         => ApplyTransitionAsync(caseId, LoanWorkflowAction.Approve, comment, ct, internalComment);
 
-    public Task<Result> RequestLegalRevisionAsync(Guid caseId, string message, CancellationToken ct)
-        => ApplyTransitionAsync(caseId, LoanWorkflowAction.RequestRevision, message, ct);
+    public Task<Result> RequestLegalRevisionAsync(Guid caseId, string message, CancellationToken ct, Guid? attachmentDocumentId = null)
+        => ApplyRevisionTransitionAsync(caseId, message, attachmentDocumentId, ct);
 
     public Task<Result> ApproveFinancialReviewAsync(Guid caseId, string? comment, string? internalComment, CancellationToken ct)
         => ApplyTransitionAsync(caseId, LoanWorkflowAction.Approve, comment, ct, internalComment);
 
-    public Task<Result> RequestFinancialRevisionAsync(Guid caseId, string message, CancellationToken ct)
-        => ApplyTransitionAsync(caseId, LoanWorkflowAction.RequestRevision, message, ct);
+    public Task<Result> RequestFinancialRevisionAsync(Guid caseId, string message, CancellationToken ct, Guid? attachmentDocumentId = null)
+        => ApplyRevisionTransitionAsync(caseId, message, attachmentDocumentId, ct);
 
     public Task<Result> ConfirmFinalContractUploadedAsync(Guid caseId, CancellationToken ct)
         => ApplyTransitionAsync(caseId, LoanWorkflowAction.UploadFinalContract, null, ct);
@@ -574,6 +574,18 @@ public sealed class LoanCaseAppService(
         if (entity is null)
             return Result<PresignLoanUploadResponse>.Fail(Error.NotFound(ApiMessages.LoanCaseNotFound));
 
+        if (CaseArchiveUploadRules.IsLoanFilingDocument(request.DocumentType))
+        {
+            var archiveCheck = CaseArchiveUploadRules.ValidateArchiveUpload(request.FileName, request.FileSize);
+            if (archiveCheck.IsFailure)
+                return Result<PresignLoanUploadResponse>.Fail(archiveCheck.Error!);
+        }
+        else if (request.FileSize > CaseArchiveUploadRules.MaxBytes)
+        {
+            return Result<PresignLoanUploadResponse>.Fail(
+                Error.Validation("حجم فایل نباید بیشتر از ۵۰ مگابایت باشد."));
+        }
+
         var version = entity.Documents
             .Where(x => !x.IsDeleted && x.DocumentType == request.DocumentType)
             .Select(x => x.Version)
@@ -656,6 +668,26 @@ public sealed class LoanCaseAppService(
             documents.Select(d => dtoMapper.MapDocument(
                 d,
                 userDisplayLookup.ResolveFullName(userLookup, d.UploadedByUserId))));
+    }
+
+    public async Task<Result> DeleteDocumentAsync(Guid caseId, Guid documentId, CancellationToken ct)
+    {
+        var auth = RequireUser();
+        if (auth.IsFailure) return Result.Fail(auth.Error!);
+
+        var entity = await unitOfWork.LoanCases.GetScopedWithDocumentsAsync(
+            caseId, auth.Value!, authorizationService.IsInternalUser, ct);
+
+        if (entity is null)
+            return Result.Fail(Error.NotFound(ApiMessages.LoanCaseNotFound));
+
+        var document = entity.Documents.FirstOrDefault(x => x.Id == documentId && !x.IsDeleted);
+        if (document is null)
+            return Result.Fail(Error.NotFound(ApiMessages.DocumentNotFound));
+
+        document.SoftDelete();
+        await unitOfWork.SaveChangesAsync(ct);
+        return Result.Ok();
     }
 
     public async Task<Result<DocumentDownloadFileResult>> DownloadDocumentFileAsync(
@@ -747,6 +779,45 @@ public sealed class LoanCaseAppService(
     {
         if (docType == LoanDocumentType.FinalContract)
             await ApplyTransitionAsync(caseId, LoanWorkflowAction.UploadFinalContract, null, ct);
+    }
+
+    private async Task<Result> ApplyRevisionTransitionAsync(
+        Guid caseId,
+        string message,
+        Guid? attachmentDocumentId,
+        CancellationToken ct)
+    {
+        var result = await ApplyTransitionAsync(caseId, LoanWorkflowAction.RequestRevision, message, ct);
+        if (result.IsFailure || attachmentDocumentId is null || attachmentDocumentId == Guid.Empty)
+            return result;
+
+        return await AttachRevisionDocumentAsync(caseId, attachmentDocumentId.Value, ct);
+    }
+
+    private async Task<Result> AttachRevisionDocumentAsync(Guid caseId, Guid documentId, CancellationToken ct)
+    {
+        var auth = RequireUser();
+        if (auth.IsFailure) return Result.Fail(auth.Error!);
+
+        var entity = await unitOfWork.LoanCases.GetScopedAsync(
+            caseId, auth.Value!, authorizationService.IsInternalUser, ct);
+        if (entity is null)
+            return Result.Fail(Error.NotFound(ApiMessages.LoanCaseNotFound));
+
+        var document = entity.Documents.FirstOrDefault(d => d.Id == documentId && !d.IsDeleted);
+        if (document is null)
+            return Result.Fail(Error.NotFound(ApiMessages.DocumentNotFound));
+
+        var comment = entity.Comments
+            .Where(c => c.IsRevisionRequest)
+            .OrderByDescending(c => c.CreatedAt)
+            .FirstOrDefault();
+        if (comment is null)
+            return Result.Ok();
+
+        comment.AttachDocument(document.Id, document.FileName);
+        await unitOfWork.SaveChangesAsync(ct);
+        return Result.Ok();
     }
 
     private async Task<Result> ApplyTransitionAsync(

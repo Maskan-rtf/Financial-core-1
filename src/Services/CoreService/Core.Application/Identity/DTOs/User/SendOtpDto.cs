@@ -40,6 +40,12 @@ public class SetPasswordDto
     public string? CurrentPassword { get; set; }
 }
 
+public class AdminSetPasswordDto
+{
+    public string Password { get; set; } = string.Empty;
+    public string ConfirmPassword { get; set; } = string.Empty;
+}
+
 public class VerifyOtpDto
 {
     public string PhoneNumber { get; set; } = string.Empty;

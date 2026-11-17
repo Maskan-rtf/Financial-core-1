@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Core.Application.Abstractions;
+using Core.Workflow.Hosting;
 using Core.Workflow.Orchestration;
 using Core.Workflow.Workflows;
 
@@ -23,8 +24,16 @@ public static class ServiceCollectionExtensions
                 var connectionString = configuration.GetConnectionString("Postgres")
                     ?? throw new InvalidOperationException(SystemMessages.PostgresConnectionMissing);
 
-                elsa.UseWorkflowManagement(management => management.UseEntityFrameworkCore(ef => ef.UsePostgreSql(connectionString)));
-                elsa.UseWorkflowRuntime(runtime => runtime.UseEntityFrameworkCore(ef => ef.UsePostgreSql(connectionString)));
+                elsa.UseWorkflowManagement(management => management.UseEntityFrameworkCore(ef =>
+                {
+                    ef.UsePostgreSql(connectionString);
+                    ef.RunMigrations = false;
+                }));
+                elsa.UseWorkflowRuntime(runtime => runtime.UseEntityFrameworkCore(ef =>
+                {
+                    ef.UsePostgreSql(connectionString);
+                    ef.RunMigrations = false;
+                }));
             }
 
             elsa.UseWorkflowsApi();
@@ -41,6 +50,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IInvestmentWorkflowActionProvider, InvestmentWorkflowActionProvider>();
         services.AddScoped<IGuaranteeWorkflowActionProvider, GuaranteeWorkflowActionProvider>();
         services.AddScoped<ILoanWorkflowActionProvider, LoanWorkflowActionProvider>();
+        services.AddHostedService<ElsaWorkflowDefinitionSeeder>();
         return services;
     }
 }

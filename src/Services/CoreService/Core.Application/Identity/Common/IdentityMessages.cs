@@ -53,7 +53,7 @@ public static class IdentityMessages
     public const string OtpCodeDigitsOnly = "کد تایید فقط باید شامل اعداد باشد";
     public const string CaptchaInvalid = "کد امنیتی نادرست یا منقضی شده است.";
     public const string PasswordRequired = "رمز عبور الزامی است.";
-    public const string PasswordTooWeak = "رمز عبور باید حداقل ۸ نویسه و شامل حرف و عدد باشد.";
+    public const string PasswordTooWeak = "رمز عبور باید حداقل ۸ کاراکتر و شامل حرف و عدد باشد.";
     public const string PasswordConfirmMismatch = "تکرار رمز عبور با رمز عبور یکسان نیست.";
     public const string InvalidPassword = "رمز عبور نادرست است.";
     public const string PasswordNotSet = "برای این حساب هنوز رمز عبور تنظیم نشده است. با کد یکبارمصرف وارد شوید.";

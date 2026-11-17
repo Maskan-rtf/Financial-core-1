@@ -348,7 +348,9 @@ public sealed class LoanCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) : ILoa
                 comment.ParentId,
                 comment.CreatedAt,
                 senderFullName,
-                comment.WorkflowStatusAtCreation),
+                comment.WorkflowStatusAtCreation,
+                comment.AttachmentDocumentId,
+                comment.AttachmentFileName),
             workflowHistory);
 
     public LoanCaseCommentDto MapComment(
@@ -368,7 +370,9 @@ public sealed class LoanCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) : ILoa
             projection.ParentId,
             projection.CreatedAt,
             workflowStatus,
-            workflowStatusLabel);
+            workflowStatusLabel,
+            projection.AttachmentDocumentId,
+            projection.AttachmentFileName);
     }
 
     private static (LoanCaseStatus? Status, string? Label) ResolveLoanWorkflowStatus(

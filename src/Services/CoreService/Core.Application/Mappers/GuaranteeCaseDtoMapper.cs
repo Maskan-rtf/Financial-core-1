@@ -407,7 +407,9 @@ public sealed class GuaranteeCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) :
                 comment.IsInternal,
                 comment.CreatedAt,
                 senderFullName,
-                comment.WorkflowStatusAtCreation),
+                comment.WorkflowStatusAtCreation,
+                comment.AttachmentDocumentId,
+                comment.AttachmentFileName),
             workflowHistory);
 
     public GuaranteeCaseCommentDto MapComment(
@@ -426,7 +428,9 @@ public sealed class GuaranteeCaseDtoMapper(ICompanyDtoMapper companyDtoMapper) :
             projection.IsInternal,
             projection.CreatedAt,
             workflowStatus,
-            workflowStatusLabel);
+            workflowStatusLabel,
+            projection.AttachmentDocumentId,
+            projection.AttachmentFileName);
     }
 
     private static (GuaranteeCaseStatus? Status, string? Label) ResolveGuaranteeWorkflowStatus(

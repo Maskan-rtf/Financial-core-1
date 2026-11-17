@@ -151,6 +151,8 @@ public sealed record LoanCaseCommentDto(
     Guid? ParentId,
     DateTimeOffset CreatedAt,
     LoanCaseStatus? WorkflowStatusAtCreation = null,
-    string? WorkflowStatusLabel = null);
+    string? WorkflowStatusLabel = null,
+    Guid? AttachmentDocumentId = null,
+    string? AttachmentFileName = null);
 
 public sealed record PresignLoanUploadResponse(string S3Key, string Url, DateTimeOffset ExpiresAt, int Version);

@@ -3,6 +3,7 @@ using BuildingBlocks.Application.Results;
 using Core.Application.Abstractions;
 using Core.Application.Common;
 using Core.Domain.Enums;
+using Core.Workflow.Common;
 using Core.Workflow.Workflows;
 using Elsa.Workflows.Models;
 using Elsa.Workflows.Runtime.Filters;
@@ -45,6 +46,15 @@ public sealed class ElsaWorkflowRuntime(
             return string.IsNullOrWhiteSpace(instanceId)
                 ? Result<WorkflowStartResult>.Fail(Error.Validation(ApiMessages.InvalidCaseModule))
                 : Result<WorkflowStartResult>.Ok(new WorkflowStartResult(instanceId));
+        }
+        catch (InvalidOperationException ex) when (ex.Message == WorkflowMessages.DefinitionNotFound)
+        {
+            logger.LogWarning(
+                ex,
+                "Elsa workflow definition missing for module {Module} case {CaseId}; creating case without Elsa instance",
+                command.Module,
+                command.CaseId);
+            return Result<WorkflowStartResult>.Ok(new WorkflowStartResult(command.CaseId.ToString("D")));
         }
         catch (Exception ex)
         {

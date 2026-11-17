@@ -30,5 +30,11 @@ public enum LoanDocumentType
     SiteVisitReport = 27,
     ThreeYearActualFinancialStatements = 30,
     CreditRatingReport = 31,
+    AssetOwnershipDocuments = 32,
+    CollateralDocuments = 33,
+    QuarterlySalesTaxReports = 34,
+    CompanyIntroductionDocs = 35,
+    ProjectProposal = 36,
+    RevisionRequestAttachment = 37,
     Other = 99
 }

@@ -18,7 +18,18 @@ public sealed record SaveCompanyRequest(
     string RepresentativeName,
     string RepresentativePhone,
     string CeoName,
-    string CeoPhone);
+    string CeoPhone,
+    DateOnly? RegistrationDate = null,
+    string? RegistrationPlace = null,
+    decimal? InitialCapitalMillions = null,
+    decimal? CurrentCapitalMillions = null,
+    string? ActivitySubject = null,
+    string? Website = null,
+    string? CompanyEmail = null);
+
+public sealed record PresignCompanyLogoRequest(string FileName, string MimeType);
+
+public sealed record ConfirmCompanyLogoRequest(string S3Key);
 
 public sealed record CompanyDto(
     Guid Id,
@@ -37,7 +48,15 @@ public sealed record CompanyDto(
     string? RepresentativeName = null,
     string? RepresentativePhone = null,
     string? CeoName = null,
-    string? CeoPhone = null);
+    string? CeoPhone = null,
+    DateOnly? RegistrationDate = null,
+    string? RegistrationPlace = null,
+    decimal? InitialCapitalMillions = null,
+    decimal? CurrentCapitalMillions = null,
+    string? ActivitySubject = null,
+    string? Website = null,
+    string? CompanyEmail = null,
+    bool HasLogo = false);
 
 public sealed record CompanyAdminDto(
     Guid Id,
@@ -59,4 +78,12 @@ public sealed record CompanyAdminDto(
     string? RepresentativeName = null,
     string? RepresentativePhone = null,
     string? CeoName = null,
-    string? CeoPhone = null);
+    string? CeoPhone = null,
+    DateOnly? RegistrationDate = null,
+    string? RegistrationPlace = null,
+    decimal? InitialCapitalMillions = null,
+    decimal? CurrentCapitalMillions = null,
+    string? ActivitySubject = null,
+    string? Website = null,
+    string? CompanyEmail = null,
+    bool HasLogo = false);

@@ -23,5 +23,11 @@ public sealed class SaveCompanyRequestValidator : AbstractValidator<SaveCompanyR
         RuleFor(x => x.RepresentativePhone).NotEmpty().MaximumLength(32);
         RuleFor(x => x.CeoName).NotEmpty().MaximumLength(128);
         RuleFor(x => x.CeoPhone).NotEmpty().MaximumLength(32);
+        RuleFor(x => x.RegistrationPlace).MaximumLength(256);
+        RuleFor(x => x.InitialCapitalMillions).GreaterThanOrEqualTo(0).When(x => x.InitialCapitalMillions.HasValue);
+        RuleFor(x => x.CurrentCapitalMillions).GreaterThanOrEqualTo(0).When(x => x.CurrentCapitalMillions.HasValue);
+        RuleFor(x => x.ActivitySubject).MaximumLength(2048);
+        RuleFor(x => x.Website).MaximumLength(512);
+        RuleFor(x => x.CompanyEmail).MaximumLength(256).EmailAddress().When(x => !string.IsNullOrWhiteSpace(x.CompanyEmail));
     }
 }

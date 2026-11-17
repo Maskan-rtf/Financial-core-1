@@ -38,5 +38,11 @@ public enum GuaranteeDocumentType
     CreditCommitteeMinutes = 35,
     SiteVisitReport = 36,
     GuaranteeDeliveryReceipt = 37,
+    AssetOwnershipDocuments = 38,
+    CollateralDocuments = 39,
+    QuarterlySalesTaxReports = 40,
+    EmployeeInsuranceList = 41,
+    ProjectProposal = 42,
+    RevisionRequestAttachment = 43,
     Other = 99
 }

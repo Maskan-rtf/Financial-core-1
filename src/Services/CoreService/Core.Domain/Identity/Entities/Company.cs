@@ -24,6 +24,14 @@ public sealed class Company : BaseEntity
     public string? RepresentativePhone { get; set; }
     public string? CeoName { get; set; }
     public string? CeoPhone { get; set; }
+    public DateOnly? RegistrationDate { get; set; }
+    public string? RegistrationPlace { get; set; }
+    public decimal? InitialCapitalMillions { get; set; }
+    public decimal? CurrentCapitalMillions { get; set; }
+    public string? ActivitySubject { get; set; }
+    public string? Website { get; set; }
+    public string? CompanyEmail { get; set; }
+    public string? LogoS3Key { get; set; }
 
     public List<User> Users { get; set; } = [];
 }

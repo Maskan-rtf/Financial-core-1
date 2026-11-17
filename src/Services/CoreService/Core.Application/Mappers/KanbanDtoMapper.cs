@@ -109,7 +109,11 @@ public sealed class KanbanDtoMapper : IKanbanDtoMapper
             CaseKanbanRules.GetStatusTitle(projection.CurrentStatus),
             projection.StartupTitle,
             projection.CreatedAt,
-            CaseKanbanRules.GetPendingActionLabel(projection.CurrentStatus, role));
+            CaseKanbanRules.GetPendingActionLabel(projection.CurrentStatus, role),
+            projection.CompanyName,
+            projection.ApplicantFullName,
+            projection.ApplicantType,
+            projection.UpdatedAt);
 
     public KanbanCaseSummaryDto MapGuaranteeWatchCard(GuaranteeKanbanCaseProjection projection, string role)
         => new(
@@ -123,7 +127,11 @@ public sealed class KanbanDtoMapper : IKanbanDtoMapper
             GuaranteeKanbanRules.GetStatusTitle(projection.CurrentStatus, projection.AmendmentType),
             projection.RepresentativeName,
             projection.CreatedAt,
-            GuaranteeKanbanRules.GetPendingActionLabel(projection.CurrentStatus, role));
+            GuaranteeKanbanRules.GetPendingActionLabel(projection.CurrentStatus, role),
+            projection.CompanyName,
+            projection.ApplicantFullName,
+            projection.ApplicantType,
+            projection.UpdatedAt);
 
     public KanbanCaseSummaryDto MapRenewalWatchCard(GuaranteeRenewalKanbanProjection projection)
         => new(
@@ -149,9 +157,13 @@ public sealed class KanbanDtoMapper : IKanbanDtoMapper
             (int)projection.CurrentStatus,
             LoanKanbanRules.GetPhaseTitle(projection.CurrentPhase),
             LoanKanbanRules.GetStatusTitle(projection.CurrentStatus),
-            projection.CompanyName ?? projection.RequestedAmount?.ToString("N0"),
+            projection.RequestedAmount?.ToString("N0"),
             projection.CreatedAt,
-            LoanKanbanRules.GetPendingActionLabel(projection.CurrentStatus, role));
+            LoanKanbanRules.GetPendingActionLabel(projection.CurrentStatus, role),
+            projection.CompanyName,
+            projection.ApplicantFullName,
+            projection.ApplicantType,
+            projection.UpdatedAt);
 
     private static string GetRenewalStatusTitle(GuaranteeRenewalStatus status) => status switch
     {

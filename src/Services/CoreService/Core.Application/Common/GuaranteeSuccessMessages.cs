@@ -29,6 +29,7 @@ public static class GuaranteeSuccessMessages
     public const string DocumentUploaded = "فایل بارگذاری شد.";
     public const string DocumentConfirmed = "فایل ثبت شد.";
     public const string DocumentsRetrieved = "مدارک دریافت شد.";
+    public const string DocumentDeleted = "مدرک حذف شد.";
     public const string CommentsRetrieved = "نظرات دریافت شد.";
     public const string CommentAdded = "نظر ثبت شد.";
     public const string CaseTitleUpdated = "عنوان پرونده به‌روزرسانی شد.";

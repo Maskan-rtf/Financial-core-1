@@ -13,4 +13,6 @@ public sealed record LoanCaseCommentListProjection(
     Guid? ParentId,
     DateTimeOffset CreatedAt,
     string? SenderFullName,
-    LoanCaseStatus? WorkflowStatusAtCreation);
+    LoanCaseStatus? WorkflowStatusAtCreation,
+    Guid? AttachmentDocumentId = null,
+    string? AttachmentFileName = null);

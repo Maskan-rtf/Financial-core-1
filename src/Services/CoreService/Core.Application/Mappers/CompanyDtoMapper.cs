@@ -25,7 +25,15 @@ public sealed class CompanyDtoMapper : ICompanyDtoMapper
                 company.RepresentativeName,
                 company.RepresentativePhone,
                 company.CeoName,
-                company.CeoPhone);
+                company.CeoPhone,
+                company.RegistrationDate,
+                company.RegistrationPlace,
+                company.InitialCapitalMillions,
+                company.CurrentCapitalMillions,
+                company.ActivitySubject,
+                company.Website,
+                company.CompanyEmail,
+                !string.IsNullOrWhiteSpace(company.LogoS3Key));
 
     public CompanyDto? MapFlat(
         Guid? companyId,

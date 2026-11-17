@@ -373,8 +373,8 @@ public sealed class GuaranteeCaseAppService(
     public Task<Result> RejectAmendmentAsync(Guid caseId, string reason, CancellationToken ct)
         => RejectCurrentAmendmentAsync(caseId, reason, ct);
 
-    public Task<Result> RequestAmendmentRevisionAsync(Guid caseId, string message, CancellationToken ct)
-        => ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.RequestRevision, message, ct);
+    public Task<Result> RequestAmendmentRevisionAsync(Guid caseId, string message, CancellationToken ct, Guid? attachmentDocumentId = null)
+        => ApplyRevisionTransitionAsync(caseId, message, attachmentDocumentId, ct);
 
     private async Task<Result<GuaranteeCase>> GetScopedCaseAsync(Guid caseId, CancellationToken ct)
     {
@@ -660,8 +660,8 @@ public sealed class GuaranteeCaseAppService(
         CancellationToken ct)
         => ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.Approve, comment, ct, internalComment);
 
-    public Task<Result> RequestCreditRevisionAsync(Guid caseId, string message, CancellationToken ct)
-        => ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.RequestRevision, message, ct);
+    public Task<Result> RequestCreditRevisionAsync(Guid caseId, string message, CancellationToken ct, Guid? attachmentDocumentId = null)
+        => ApplyRevisionTransitionAsync(caseId, message, attachmentDocumentId, ct);
 
     public Task<Result> UpdateApprovalFormAsync(Guid caseId, UpdateGuaranteeApprovalFormRequest request,
         CancellationToken ct)
@@ -712,8 +712,8 @@ public sealed class GuaranteeCaseAppService(
         CancellationToken ct)
         => ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.ApproveAttachments, comment, ct, internalComment);
 
-    public Task<Result> RequestAttachmentRevisionAsync(Guid caseId, string message, CancellationToken ct)
-        => ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.RequestRevision, message, ct);
+    public Task<Result> RequestAttachmentRevisionAsync(Guid caseId, string message, CancellationToken ct, Guid? attachmentDocumentId = null)
+        => ApplyRevisionTransitionAsync(caseId, message, attachmentDocumentId, ct);
 
     public Task<Result> ConfirmFinalContractUploadedAsync(Guid caseId, CancellationToken ct)
         => ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.UploadFinalContract, null, ct);
@@ -749,6 +749,18 @@ public sealed class GuaranteeCaseAppService(
 
         if (entity is null)
             return Result<PresignGuaranteeUploadResponse>.Fail(Error.NotFound(ApiMessages.GuaranteeCaseNotFound));
+
+        if (CaseArchiveUploadRules.IsGuaranteeFilingDocument(request.DocumentType))
+        {
+            var archiveCheck = CaseArchiveUploadRules.ValidateArchiveUpload(request.FileName, request.FileSize);
+            if (archiveCheck.IsFailure)
+                return Result<PresignGuaranteeUploadResponse>.Fail(archiveCheck.Error!);
+        }
+        else if (request.FileSize > CaseArchiveUploadRules.MaxBytes)
+        {
+            return Result<PresignGuaranteeUploadResponse>.Fail(
+                Error.Validation("حجم فایل نباید بیشتر از ۵۰ مگابایت باشد."));
+        }
 
         var version = entity.Documents
             .Where(x => !x.IsDeleted && x.DocumentType == request.DocumentType)
@@ -835,6 +847,26 @@ public sealed class GuaranteeCaseAppService(
 
         return Result<IEnumerable<GuaranteeCaseDocumentDto>>.Ok(
             entity.Documents.Where(x => !x.IsDeleted).Select(dtoMapper.MapDocument));
+    }
+
+    public async Task<Result> DeleteDocumentAsync(Guid caseId, Guid documentId, CancellationToken ct)
+    {
+        var auth = RequireUser();
+        if (auth.IsFailure) return Result.Fail(auth.Error!);
+
+        var entity = await unitOfWork.GuaranteeCases.GetScopedWithDocumentsAsync(
+            caseId, auth.Value!, authorizationService.IsInternalUser, ct);
+
+        if (entity is null)
+            return Result.Fail(Error.NotFound(ApiMessages.GuaranteeCaseNotFound));
+
+        var document = entity.Documents.FirstOrDefault(x => x.Id == documentId && !x.IsDeleted);
+        if (document is null)
+            return Result.Fail(Error.NotFound(ApiMessages.DocumentNotFound));
+
+        document.SoftDelete();
+        await unitOfWork.SaveChangesAsync(ct);
+        return Result.Ok();
     }
 
     public async Task<Result<DocumentDownloadFileResult>> DownloadDocumentFileAsync(
@@ -1233,6 +1265,45 @@ public sealed class GuaranteeCaseAppService(
             await ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.UploadDraftContract, null, ct);
         else if (docType == GuaranteeDocumentType.FinalContract)
             await ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.UploadFinalContract, null, ct);
+    }
+
+    private async Task<Result> ApplyRevisionTransitionAsync(
+        Guid caseId,
+        string message,
+        Guid? attachmentDocumentId,
+        CancellationToken ct)
+    {
+        var result = await ApplyTransitionAsync(caseId, GuaranteeWorkflowAction.RequestRevision, message, ct);
+        if (result.IsFailure || attachmentDocumentId is null || attachmentDocumentId == Guid.Empty)
+            return result;
+
+        return await AttachRevisionDocumentAsync(caseId, attachmentDocumentId.Value, ct);
+    }
+
+    private async Task<Result> AttachRevisionDocumentAsync(Guid caseId, Guid documentId, CancellationToken ct)
+    {
+        var auth = RequireUser();
+        if (auth.IsFailure) return Result.Fail(auth.Error!);
+
+        var entity = await unitOfWork.GuaranteeCases.GetScopedAsync(
+            caseId, auth.Value!, authorizationService.IsInternalUser, ct);
+        if (entity is null)
+            return Result.Fail(Error.NotFound(ApiMessages.GuaranteeCaseNotFound));
+
+        var document = entity.Documents.FirstOrDefault(d => d.Id == documentId && !d.IsDeleted);
+        if (document is null)
+            return Result.Fail(Error.NotFound(ApiMessages.DocumentNotFound));
+
+        var comment = entity.Comments
+            .Where(c => c.IsRevisionRequest)
+            .OrderByDescending(c => c.CreatedAt)
+            .FirstOrDefault();
+        if (comment is null)
+            return Result.Ok();
+
+        comment.AttachDocument(document.Id, document.FileName);
+        await unitOfWork.SaveChangesAsync(ct);
+        return Result.Ok();
     }
 
     private async Task<Result> ApplyTransitionAsync(

@@ -11,7 +11,8 @@ public sealed class ApplicationMapsterConfig : IRegister
 {
     public void Register(TypeAdapterConfig config)
     {
-        config.NewConfig<Company, CompanyDto>();
+        config.NewConfig<Company, CompanyDto>()
+            .Map(dest => dest.HasLogo, src => !string.IsNullOrWhiteSpace(src.LogoS3Key));
 
         config.NewConfig<InvestmentCaseDocument, CaseDocumentApplicantDto>();
         config.NewConfig<InvestmentCaseDocument, CaseDocumentInternalDto>();

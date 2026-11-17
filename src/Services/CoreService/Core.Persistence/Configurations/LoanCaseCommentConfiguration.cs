@@ -15,6 +15,7 @@ public sealed class LoanCaseCommentConfiguration : IEntityTypeConfiguration<Loan
         builder.Property(x => x.SenderUserId).HasMaxLength(64).IsRequired();
         builder.Property(x => x.SenderRole).HasMaxLength(64);
         builder.Property(x => x.Message).HasMaxLength(4000).IsRequired();
+        builder.Property(x => x.AttachmentFileName).HasMaxLength(260);
         builder.Property(x => x.Phase).HasConversion<int>().IsRequired();
         builder.Property(x => x.WorkflowStatusAtCreation).HasConversion<int?>();
 

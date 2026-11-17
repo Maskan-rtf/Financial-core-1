@@ -36,6 +36,7 @@ public class UserService(
     IValidator<VerifyOtpDto> verifyOtpValidator,
     IValidator<LoginWithPasswordDto> loginWithPasswordValidator,
     IValidator<SetPasswordDto> setPasswordValidator,
+    IValidator<AdminSetPasswordDto> adminSetPasswordValidator,
     IHasher hasher,
     ICaptchaService captchaService,
     IOptions<OtpOptions> otpOptions,
@@ -237,6 +238,49 @@ public class UserService(
         await unitOfWork.SaveChangesAsync();
 
         ApplicationLog.Completed(logger, "User {UserId} saved a password", user.Id);
+        return result.Succeed(IdentityMessages.PasswordSaved, ToUserDto(user));
+    }
+
+    public async Task<ApiOperationResult<UserDto>> AdminSetPasswordAsync(
+        Guid id,
+        AdminSetPasswordDto dto,
+        CancellationToken cancellationToken = default)
+    {
+        var result = new ApiOperationResult<UserDto>();
+        var requesterId = currentUser.UserId ?? Guid.Empty;
+
+        var adminDenied = await RequireAdminAsync<UserDto>(cancellationToken);
+        if (adminDenied is not null)
+        {
+            ApplicationLog.Blocked(logger, "AdminSetPassword", "admin access denied", requesterId == Guid.Empty ? null : requesterId.ToString());
+            return adminDenied;
+        }
+
+        var validation = await adminSetPasswordValidator.ValidateAsync(dto, cancellationToken);
+        if (!validation.IsValid)
+        {
+            ApplicationLog.Blocked(logger, "AdminSetPassword", "validation failed", requesterId.ToString());
+            return result.Failed(IdentityMessages.ValidationFailed, validation.Errors.Select(e => e.ErrorMessage).ToList(), HttpStatusCode.BadRequest);
+        }
+
+        var user = await unitOfWork.Users.GetAsync(u => u.Id == id && !u.IsDeleted, disableTracking: false);
+        if (user is null)
+        {
+            ApplicationLog.Blocked(logger, "AdminSetPassword", "target user not found", requesterId.ToString());
+            return result.Failed(IdentityMessages.UserNotFound, HttpStatusCode.NotFound);
+        }
+
+        user.PasswordHash = hasher.Hash(dto.Password);
+        await unitOfWork.Users.UpdateAsync(user);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        captchaService.ClearPasswordFailures(user.PhoneNumber);
+        var revokedCount = await RevokeAllSessionsForUserInternalAsync(user.Id, "admin_password_reset", cancellationToken);
+
+        ApplicationLog.Completed(logger,
+            "User {RequesterId} set password for user {TargetUserId} and revoked {SessionCount} session(s)",
+            requesterId, id, revokedCount);
+
         return result.Succeed(IdentityMessages.PasswordSaved, ToUserDto(user));
     }
 

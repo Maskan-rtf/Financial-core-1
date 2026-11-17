@@ -182,7 +182,9 @@ public sealed record GuaranteeCaseCommentDto(
     bool IsInternal,
     DateTimeOffset CreatedAt,
     GuaranteeCaseStatus? WorkflowStatusAtCreation = null,
-    string? WorkflowStatusLabel = null);
+    string? WorkflowStatusLabel = null,
+    Guid? AttachmentDocumentId = null,
+    string? AttachmentFileName = null);
 
 public sealed record GuaranteeWorkflowHistoryDto(
     Guid Id,

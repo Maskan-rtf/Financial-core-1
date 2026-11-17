@@ -12,4 +12,6 @@ public sealed record GuaranteeCaseCommentListProjection(
     bool IsInternal,
     DateTimeOffset CreatedAt,
     string? SenderFullName,
-    GuaranteeCaseStatus? WorkflowStatusAtCreation);
+    GuaranteeCaseStatus? WorkflowStatusAtCreation,
+    Guid? AttachmentDocumentId = null,
+    string? AttachmentFileName = null);

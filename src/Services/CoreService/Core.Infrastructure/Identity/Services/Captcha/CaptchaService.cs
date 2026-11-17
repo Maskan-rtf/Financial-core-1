@@ -11,7 +11,7 @@ public sealed class CaptchaService(IMemoryCache cache) : ICaptchaService
     private static readonly char[] Alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".ToCharArray();
     private const int CodeLength = 5;
     private static readonly TimeSpan CaptchaTtl = TimeSpan.FromMinutes(2);
-    private static readonly TimeSpan ResendTtl = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan ResendTtl = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan LockTtl = TimeSpan.FromMinutes(10);
     private const int MaxPasswordFailures = 5;
 

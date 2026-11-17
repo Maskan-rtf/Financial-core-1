@@ -100,7 +100,7 @@ public sealed class LoanCasesController(ILoanCaseAppService service) : ApiContro
     [Authorize(Policy = "InternalOnly")]
     public async Task<IActionResult> RequestCreditRevision(Guid id, [FromBody] SemanticRevisionRequest request, CancellationToken ct)
     {
-        var result = await service.RequestCreditRevisionAsync(id, request.Message, ct);
+        var result = await service.RequestCreditRevisionAsync(id, request.Message, ct, request.AttachmentDocumentId);
         return Respond(result, LoanSuccessMessages.CreditRevisionRequested, HttpStatusCode.Accepted);
     }
 
@@ -164,7 +164,7 @@ public sealed class LoanCasesController(ILoanCaseAppService service) : ApiContro
     [Authorize(Policy = "InternalOnly")]
     public async Task<IActionResult> RequestLegalRevision(Guid id, [FromBody] SemanticRevisionRequest request, CancellationToken ct)
     {
-        var result = await service.RequestLegalRevisionAsync(id, request.Message, ct);
+        var result = await service.RequestLegalRevisionAsync(id, request.Message, ct, request.AttachmentDocumentId);
         return Respond(result, LoanSuccessMessages.LegalRevisionRequested, HttpStatusCode.Accepted);
     }
 
@@ -180,7 +180,7 @@ public sealed class LoanCasesController(ILoanCaseAppService service) : ApiContro
     [Authorize(Policy = "InternalOnly")]
     public async Task<IActionResult> RequestFinancialRevision(Guid id, [FromBody] SemanticRevisionRequest request, CancellationToken ct)
     {
-        var result = await service.RequestFinancialRevisionAsync(id, request.Message, ct);
+        var result = await service.RequestFinancialRevisionAsync(id, request.Message, ct, request.AttachmentDocumentId);
         return Respond(result, LoanSuccessMessages.FinancialRevisionRequested, HttpStatusCode.Accepted);
     }
 
@@ -258,6 +258,14 @@ public sealed class LoanCasesController(ILoanCaseAppService service) : ApiContro
     {
         var result = await service.ConfirmDocumentUploadedAsync(id, s3Key, originalFileName, ct);
         return Respond(result, GuaranteeSuccessMessages.DocumentConfirmed);
+    }
+
+    [HttpDelete("{id:guid}/documents/{documentId:guid}")]
+    [Authorize]
+    public async Task<IActionResult> DeleteDocument(Guid id, Guid documentId, CancellationToken ct)
+    {
+        var result = await service.DeleteDocumentAsync(id, documentId, ct);
+        return Respond(result, LoanSuccessMessages.DocumentDeleted);
     }
 
     [HttpGet("{id:guid}/documents")]

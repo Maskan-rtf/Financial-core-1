@@ -8,18 +8,17 @@ public static class LoanDocumentRequirements
     /// <summary>Same set the applicant form marks required in loan data entry.</summary>
     public static readonly LoanDocumentType[] RequiredForDataEntrySubmit =
     [
-        LoanDocumentType.FundRequiredDocsAndCompanySpecs,
+        LoanDocumentType.SupplementaryAttachmentForm,
         LoanDocumentType.EstablishmentGazette,
         LoanDocumentType.CeoBoardIdCards,
-        LoanDocumentType.FinancialAndCreditContracts,
-        LoanDocumentType.FinancialStatements,
         LoanDocumentType.ThreeYearActualFinancialStatements,
         LoanDocumentType.BankAccountTurnover,
         LoanDocumentType.EmployeeInsuranceReceipt,
         LoanDocumentType.ProposedFinancingContract,
         LoanDocumentType.ActivityLicenses,
         LoanDocumentType.CreditInquiryResult,
-        LoanDocumentType.CreditRatingReport
+        LoanDocumentType.CollateralDocuments,
+        LoanDocumentType.QuarterlySalesTaxReports
     ];
 
     public static IReadOnlyList<LoanDocumentType> GetMissingForDataEntrySubmit(IEnumerable<LoanCaseDocument> documents)
@@ -36,7 +35,7 @@ public static class LoanDocumentRequirements
 
     public static string ToPersianLabel(LoanDocumentType type) => type switch
     {
-        LoanDocumentType.SupplementaryAttachmentForm => "فرم پیوست الحاقی",
+        LoanDocumentType.SupplementaryAttachmentForm => "فرم رضایت‌نامه دریافت اطلاعات اعتباری",
         LoanDocumentType.FundRequiredDocsAndCompanySpecs => "اسناد مورد نیاز صندوق و مشخصات شرکت",
         LoanDocumentType.EstablishmentGazette => "آگهی تأسیس و آخرین روزنامه رسمی",
         LoanDocumentType.CeoBoardIdCards => "کارت ملی و شناسنامه مدیرعامل و اعضای هیئت مدیره",
@@ -50,6 +49,12 @@ public static class LoanDocumentRequirements
         LoanDocumentType.ActivityLicenses => "مجوزهای فعالیت (پروانه بهره‌برداری، گواهی دانش‌بنیان و سایر مصوبات مرتبط)",
         LoanDocumentType.CreditInquiryResult => "آخرین نتیجه استعلام اعتبارسنجی شرکت",
         LoanDocumentType.CreditRatingReport => "گزارش رتبه‌بندی اعتباری از سامانه اعتبارسنجی",
+        LoanDocumentType.AssetOwnershipDocuments => "تصویر اسناد دارایی شرکت، مدیران و ضامنین",
+        LoanDocumentType.CollateralDocuments => "مستندات وثایق قابل ارائه",
+        LoanDocumentType.QuarterlySalesTaxReports => "گزارش‌های فروش فصلی سال جاری از سامانه مالیاتی",
+        LoanDocumentType.CompanyIntroductionDocs => "اسناد معرفی شرکت (کاتالوگ، چارت سازمانی و ...)",
+        LoanDocumentType.ProjectProposal => "پروپوزال طرح درخواستی",
+        LoanDocumentType.RevisionRequestAttachment => "پیوست درخواست اصلاح",
         LoanDocumentType.RawContract => "قرارداد خام",
         LoanDocumentType.InstallmentScheduleExport => "خروجی جدول اقساط",
         LoanDocumentType.SignedContract => "قرارداد امضاشده",

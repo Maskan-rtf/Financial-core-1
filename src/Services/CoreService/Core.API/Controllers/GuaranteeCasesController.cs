@@ -157,7 +157,7 @@ public sealed class GuaranteeCasesController(IGuaranteeCaseAppService service) :
     [Authorize(Policy = "InternalOnly")]
     public async Task<IActionResult> RequestAmendmentRevision(Guid id, [FromBody] SemanticRevisionRequest request, CancellationToken ct)
     {
-        var result = await service.RequestAmendmentRevisionAsync(id, request.Message, ct);
+        var result = await service.RequestAmendmentRevisionAsync(id, request.Message, ct, request.AttachmentDocumentId);
         return Respond(result, GuaranteeAmendmentMessages.SuccessRevisionRequested, HttpStatusCode.Accepted);
     }
 
@@ -206,7 +206,7 @@ public sealed class GuaranteeCasesController(IGuaranteeCaseAppService service) :
     [Authorize(Policy = "InternalOnly")]
     public async Task<IActionResult> RequestCreditRevision(Guid id, [FromBody] SemanticRevisionRequest request, CancellationToken ct)
     {
-        var result = await service.RequestCreditRevisionAsync(id, request.Message, ct);
+        var result = await service.RequestCreditRevisionAsync(id, request.Message, ct, request.AttachmentDocumentId);
         return Respond(result, GuaranteeSuccessMessages.CreditRevisionRequested, HttpStatusCode.Accepted);
     }
 
@@ -305,7 +305,7 @@ public sealed class GuaranteeCasesController(IGuaranteeCaseAppService service) :
     [Authorize(Policy = "InternalOnly")]
     public async Task<IActionResult> RequestAttachmentRevision(Guid id, [FromBody] SemanticRevisionRequest request, CancellationToken ct)
     {
-        var result = await service.RequestAttachmentRevisionAsync(id, request.Message, ct);
+        var result = await service.RequestAttachmentRevisionAsync(id, request.Message, ct, request.AttachmentDocumentId);
         return Respond(result, GuaranteeSuccessMessages.AttachmentRevisionRequested, HttpStatusCode.Accepted);
     }
 
@@ -363,6 +363,14 @@ public sealed class GuaranteeCasesController(IGuaranteeCaseAppService service) :
     {
         var result = await service.ConfirmDocumentUploadedAsync(id, s3Key, originalFileName, ct);
         return Respond(result, GuaranteeSuccessMessages.DocumentConfirmed);
+    }
+
+    [HttpDelete("{id:guid}/documents/{documentId:guid}")]
+    [Authorize]
+    public async Task<IActionResult> DeleteDocument(Guid id, Guid documentId, CancellationToken ct)
+    {
+        var result = await service.DeleteDocumentAsync(id, documentId, ct);
+        return Respond(result, GuaranteeSuccessMessages.DocumentDeleted);
     }
 
     [HttpGet("{id:guid}/documents")]

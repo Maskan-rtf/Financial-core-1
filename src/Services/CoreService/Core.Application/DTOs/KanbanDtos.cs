@@ -31,4 +31,8 @@ public sealed record KanbanCaseSummaryDto(
     string StatusTitle,
     string? StartupTitle,
     DateTimeOffset CreatedAt,
-    string PendingActionLabel);
+    string PendingActionLabel,
+    string? CompanyName = null,
+    string? ApplicantFullName = null,
+    ApplicantType? ApplicantType = null,
+    DateTimeOffset? UpdatedAt = null);
